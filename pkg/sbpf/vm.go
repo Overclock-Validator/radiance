@@ -9,7 +9,7 @@ import (
 type VM interface {
 	VMContext() any
 
-	Translate(addr uint64, size uint32, write bool) ([]byte, error)
+	Translate(addr uint64, size uint64, write bool) ([]byte, error)
 
 	Read(addr uint64, p []byte) error
 	Read8(addr uint64) (uint8, error)
@@ -60,12 +60,12 @@ var (
 
 type ExcBadAccess struct {
 	Addr   uint64
-	Size   uint32
+	Size   uint64
 	Write  bool
 	Reason string
 }
 
-func NewExcBadAccess(addr uint64, size uint32, write bool, reason string) ExcBadAccess {
+func NewExcBadAccess(addr uint64, size uint64, write bool, reason string) ExcBadAccess {
 	return ExcBadAccess{
 		Addr:   addr,
 		Size:   size,

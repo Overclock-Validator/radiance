@@ -442,7 +442,7 @@ func (ip *Interpreter) VMContext() any {
 	return ip.vmContext
 }
 
-func (ip *Interpreter) translateInternal(addr uint64, size uint32, write bool) (unsafe.Pointer, error) {
+func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (unsafe.Pointer, error) {
 	// TODO exhaustive testing against rbpf
 	// TODO review generated asm for performance
 
@@ -458,7 +458,7 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint32, write bool) (
 		return unsafe.Pointer(&ip.ro[lo]), nil
 	case VaddrStack >> 32:
 		mem := ip.stack.GetFrame(uint32(addr))
-		if uint32(len(mem)) < size {
+		if uint64(len(mem)) < size {
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds stack access")
 		}
 		return unsafe.Pointer(&mem[0]), nil
@@ -477,7 +477,7 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint32, write bool) (
 	}
 }
 
-func (ip *Interpreter) Translate(addr uint64, size uint32, write bool) ([]byte, error) {
+func (ip *Interpreter) Translate(addr uint64, size uint64, write bool) ([]byte, error) {
 	ptr, err := ip.translateInternal(addr, size, write)
 	if err != nil {
 		return nil, err
@@ -488,7 +488,7 @@ func (ip *Interpreter) Translate(addr uint64, size uint32, write bool) ([]byte, 
 }
 
 func (ip *Interpreter) Read(addr uint64, p []byte) error {
-	ptr, err := ip.translateInternal(addr, uint32(len(p)), false)
+	ptr, err := ip.translateInternal(addr, uint64(len(p)), false)
 	if err != nil {
 		return err
 	}
@@ -532,7 +532,7 @@ func (ip *Interpreter) Read64(addr uint64) (uint64, error) {
 }
 
 func (ip *Interpreter) Write(addr uint64, p []byte) error {
-	ptr, err := ip.translateInternal(addr, uint32(len(p)), true)
+	ptr, err := ip.translateInternal(addr, uint64(len(p)), true)
 	if err != nil {
 		return err
 	}

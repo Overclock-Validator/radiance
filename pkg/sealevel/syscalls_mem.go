@@ -73,11 +73,11 @@ func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64, cuIn int)
 		return
 	}
 
-	slice1, err := vm.Translate(addr1, uint32(n), false)
+	slice1, err := vm.Translate(addr1, n, false)
 	if err != nil {
 		return
 	}
-	slice2, err := vm.Translate(addr2, uint32(n), false)
+	slice2, err := vm.Translate(addr2, n, false)
 	if err != nil {
 		return
 	}
