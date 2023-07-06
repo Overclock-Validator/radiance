@@ -354,6 +354,46 @@ func TestInterpreter_Memcmp_Does_Not_Match(t *testing.T) {
 	})
 }
 
+// The TestInterpreter_Memset_Check_Correct function tests that the memset
+// syscall works as expected by calling the syscall to fill a 16-byte buffer
+// with 'x' (0x78) characters. A call to the memcmp syscall is used to check
+// that the buffer was filled with 16 'x's as expected.
+func TestInterpreter_Memset_Check_Correct(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "memset_check_correct.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("sol_log_", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+	syscalls.Register("my_memset", SyscallMemset)
+	syscalls.Register("my_memcmp", SyscallMemcmp)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &Execution{Log: &log},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.NoError(t, err)
+
+	assert.Equal(t, log.Logs, []string{
+		"Program log: Memory chunks matched as 16-byte 'x' strings",
+	})
+}
+
 type executeCase struct {
 	Name    string
 	Program string

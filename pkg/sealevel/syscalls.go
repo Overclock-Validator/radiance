@@ -17,6 +17,7 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_memcpy_", SyscallMemcpy)
 	reg.Register("sol_memmove_", SyscallMemmove)
 	reg.Register("sol_memcmp_", SyscallMemcmp)
+	reg.Register("sol_memset_", SyscallMemset)
 	return reg
 }
 

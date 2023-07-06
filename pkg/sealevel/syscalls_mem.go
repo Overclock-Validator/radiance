@@ -96,3 +96,24 @@ func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64, cuIn int)
 }
 
 var SyscallMemcmp = sbpf.SyscallFunc4(SyscallMemcmpImpl)
+
+// SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
+func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+	cuOut = MemOpConsume(cuIn, n)
+	if cuOut < 0 {
+		return
+	}
+
+	mem, err := vm.Translate(dst, n, true)
+	if err != nil {
+		return
+	}
+
+	for i := uint64(0); i < n; i++ {
+		mem[i] = byte(c)
+	}
+
+	return
+}
+
+var SyscallMemset = sbpf.SyscallFunc3(SyscallMemsetImpl)
