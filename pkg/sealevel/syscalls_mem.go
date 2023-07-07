@@ -1,18 +1,12 @@
 package sealevel
 
 import (
-	"errors"
-
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
 
-var (
-	ErrCopyOverlapping = errors.New("Overlapping copy")
-)
-
 func MemOpConsume(cuIn int, n uint64) int {
-	perBytesCost := n / CuCpiBytesPerUnit
+	perBytesCost := n / CUCpiBytesPerUnit
 	return cu.ConsumeLowerBound(cuIn, CUMemOpBaseCost, int(perBytesCost))
 }
 

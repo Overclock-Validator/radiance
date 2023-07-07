@@ -18,6 +18,7 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_memmove_", SyscallMemmove)
 	reg.Register("sol_memcmp_", SyscallMemcmp)
 	reg.Register("sol_memset_", SyscallMemset)
+	reg.Register("sol_sha256", SyscallSha256)
 	return reg
 }
 
