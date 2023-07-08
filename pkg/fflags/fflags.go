@@ -56,12 +56,27 @@ func (s *Features) set(idx uint, v uint) {
 	if bucket >= len(s.buckets) {
 		s.buckets = append(s.buckets, make([]uint32, bucket-len(s.buckets)+1)...)
 	}
-	s.buckets[bucket] |= 1 << (idx % 32)
+	if v == 1 {
+		s.buckets[bucket] |= 1 << idx
+	} else if v == 0 {
+		s.buckets[bucket] &= ^(1 << idx)
+	} else {
+		panic("invalid bit value; valid values are 0 and 1")
+	}
 }
 
 // HasFeature returns true if the given feature flag is set.
+// Panics on invalid handle, or if the expected bucket for the given feature
+// has not yet been created via enablement using WithFeature or disablement
+// using WithoutFeature.
 func (s *Features) HasFeature(flag Feature) bool {
-	return s.buckets[uint(flag)/32]&(1<<(uint(flag)%32)) != 0
+	bucket := uint(flag) / 32
+	if flag == 0 || flag > seq {
+		panic("invalid feature flag handle")
+	} else if int(bucket) >= len(s.buckets) {
+		panic("no bucket for feature: missing WithFeature or WithoutFeature")
+	}
+	return s.buckets[bucket]&(1<<(uint(flag))) != 0
 }
 
 // WithFeature modifies s to include the given feature flag.
@@ -73,7 +88,7 @@ func (s *Features) WithFeature(flag Feature) *Features {
 
 // WithoutFeature modifies s to exclude the given feature flag.
 // Returns s to support chaining-style syntax. Panics on invalid handle.
-func (s *Features) WithoutFeature(flag uint) *Features {
+func (s *Features) WithoutFeature(flag Feature) *Features {
 	s.set(uint(flag), 0)
 	return s
 }
