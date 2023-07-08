@@ -56,7 +56,7 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
-			cuOut = cu.ConsumeLowerBound(cuIn, int(cost), 0)
+			cuOut = cu.ConsumeLowerBound(cuOut, int(cost), 0)
 			if cuOut < 0 {
 				return
 			}
