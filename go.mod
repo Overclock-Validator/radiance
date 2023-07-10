@@ -29,6 +29,12 @@ require (
 )
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
+	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
+)
+
+require (
 	filippo.io/edwards25519 v1.0.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
@@ -36,6 +42,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/ethereum/go-ethereum v1.12.0
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/gagliardetto/treeout v0.1.4 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
