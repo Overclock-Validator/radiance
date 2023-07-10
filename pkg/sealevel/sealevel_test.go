@@ -435,6 +435,47 @@ func TestInterpreter_Sha256(t *testing.T) {
 	})
 }
 
+// The TestInterpreter_Blake3 function tests that the sol_blake3 syscall
+// works as expected by running a program that calls the blake3 syscall
+// twice with two different chunks of data, and checks that the hashes
+// returned are as expected.
+func TestInterpreter_Blake3(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "blake3.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("sol_log_", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+	syscalls.Register("my_blake3", SyscallBlake3)
+	syscalls.Register("my_memcmp", SyscallMemcmp)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &Execution{Log: &log},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.NoError(t, err)
+
+	assert.Equal(t, log.Logs, []string{
+		"Program log: 1: hash returned matched",
+		"Program log: 2: hash returned matched",
+	})
+}
+
 type executeCase struct {
 	Name    string
 	Program string
