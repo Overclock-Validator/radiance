@@ -10,14 +10,6 @@ func MemOpConsume(cuIn int, n uint64) int {
 	return cu.ConsumeLowerBound(cuIn, CUMemOpBaseCost, int(perBytesCost))
 }
 
-func isNonOverlapping(src, dst, n uint64) bool {
-	if src > dst {
-		return src-dst >= n
-	} else {
-		return dst-src >= n
-	}
-}
-
 func memmoveImplInternal(vm sbpf.VM, dst, src, n uint64) (err error) {
 	srcBuf := make([]byte, n)
 	err = vm.Read(src, srcBuf)
@@ -38,7 +30,7 @@ func SyscallMemcpyImpl(vm sbpf.VM, dst, src, n uint64, cuIn int) (r0 uint64, cuO
 
 	// memcpy when src and dst are overlapping results in undefined behaviour,
 	// hence check if there is an overlap and return early with an error if so.
-	if !isNonOverlapping(src, dst, n) {
+	if !isNonOverlapping(src, n, dst, n) {
 		return r0, cuOut, ErrCopyOverlapping
 	}
 

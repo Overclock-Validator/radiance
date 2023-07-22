@@ -517,6 +517,93 @@ func TestInterpreter_Keccak256(t *testing.T) {
 	})
 }
 
+// The TestInterpreter_CreateProgramAddress function tests the
+// sol_create_program_address syscall. Two testcases are used,
+// each with two input seeds, and both calls to the create_program_address
+// must turn up the expected address for the test to pass.
+func TestInterpreter_CreateProgramAddress(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "create_program_address.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("sol_log_", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+	syscalls.Register("my_create_program_address", SyscallCreateProgramAddress)
+	syscalls.Register("my_memcmp", SyscallMemcmp)
+	syscalls.Register("sol_panic_", SyscallPanic)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &Execution{Log: &log},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.NoError(t, err)
+
+	assert.Equal(t, log.Logs, []string{
+		"Program log: 1: address returned was the expected address",
+		"Program log: 2: address returned was the expected address",
+	})
+}
+
+// The TestInterpreter_TryFindProgramAddress function tests the
+// sol_try_find_program_address syscall. The testcase uses some seeds
+// to derive an address via sol_try_find_program_address, and then checks
+// that the same value is derived by calling sol_create_program_address
+// with those same seeds (original seeds + bump seed returned by
+// sol_try_find_program_address)
+func TestInterpreter_TryFindProgramAddress(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "try_find_program_address.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("sol_log_", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+	syscalls.Register("my_create_program_address", SyscallCreateProgramAddress)
+	syscalls.Register("my_try_find_program_address", SyscallTryFindProgramAddress)
+	syscalls.Register("my_memcmp", SyscallMemcmp)
+	syscalls.Register("sol_panic_", SyscallPanic)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &Execution{Log: &log},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.NoError(t, err)
+
+	assert.Equal(t, log.Logs, []string{
+		"Program log: try_find_program_address success",
+		"Program log: address returned by try_find_program_address matches create_program_address with equivalent seeds",
+	})
+}
+
 type executeCase struct {
 	Name    string
 	Program string

@@ -22,6 +22,8 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_blake3", SyscallBlake3)
 	reg.Register("sol_keccak256", SyscallKeccak256)
 	reg.Register("sol_panic_", SyscallPanic)
+	reg.Register("sol_create_program_address", SyscallCreateProgramAddress)
+	reg.Register("sol_try_find_program_address", SyscallTryFindProgramAddress)
 	return reg
 }
 
