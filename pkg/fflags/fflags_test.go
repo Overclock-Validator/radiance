@@ -12,16 +12,15 @@ import (
 // as expected.
 func TestFflags_WithFeature_And_WithoutFeature(t *testing.T) {
 	var SomeFeature = Register(solana.MustAddress("16FMCmgLzCNNz6eTwGanbyN2ZxvTBSLuQ6DZhgeMshg"), "SomeFeature")
-	var f Features
 
-	f.WithFeature(SomeFeature)
-	assert.Equal(t, f.HasFeature(SomeFeature), true)
+	WithFeature(SomeFeature)
+	assert.Equal(t, HasFeature(SomeFeature), true)
 
-	f.WithoutFeature(SomeFeature)
-	assert.Equal(t, f.HasFeature(SomeFeature), false)
+	WithoutFeature(SomeFeature)
+	assert.Equal(t, HasFeature(SomeFeature), false)
 
-	f.WithFeature(SomeFeature)
-	assert.Equal(t, f.HasFeature(SomeFeature), true)
+	WithFeature(SomeFeature)
+	assert.Equal(t, HasFeature(SomeFeature), true)
 }
 
 // The TestFflags_ExpectPanicForUninitializedFeatureFlag function tests for
@@ -34,9 +33,8 @@ func TestFflags_WithFeature_And_WithoutFeature(t *testing.T) {
 // a particular feature is enabled or disabled at any given time.
 func TestFflags_ExpectPanicForUninitializedFeatureFlag(t *testing.T) {
 	var SomeFeature = Register(solana.MustAddress("16FMCmgLzCNNz6eTwGanbyN2ZxvTBSLuQ6DZhgeMshg"), "SomeFeature")
-	var f Features
 	defer func() { _ = recover() }()
-	_ = f.HasFeature(SomeFeature)
+	_ = HasFeature(SomeFeature)
 	t.Errorf("error - should have panicked due to feature flag not being either enabled via WithFeature() or disabled via WithoutFeature()")
 }
 
@@ -44,8 +42,7 @@ func TestFflags_ExpectPanicForUninitializedFeatureFlag(t *testing.T) {
 // HasFeature() panicking on an invalid feature flag. The expected
 // result in this test is a panic.
 func TestFflags_ExpectPanicForInvalidFeatureFlag(t *testing.T) {
-	var f Features
 	defer func() { _ = recover() }()
-	_ = f.HasFeature(1000)
+	_ = HasFeature(1000)
 	t.Errorf("error - should have panicked due to invalid feature flag")
 }
