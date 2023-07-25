@@ -3,11 +3,14 @@ package sbpf
 import (
 	"errors"
 	"fmt"
+
+	"go.firedancer.io/radiance/pkg/runtime"
 )
 
 // VM is the virtual machine abstraction, implemented by each executor.
 type VM interface {
 	VMContext() any
+	GlobalCtx() *runtime.GlobalCtx
 
 	Translate(addr uint64, size uint64, write bool) ([]byte, error)
 

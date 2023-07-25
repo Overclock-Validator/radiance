@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/bits"
 	"unsafe"
+
+	"go.firedancer.io/radiance/pkg/runtime"
 )
 
 // Interpreter implements the SBF core in pure Go.
@@ -22,6 +24,7 @@ type Interpreter struct {
 	syscalls  map[uint32]Syscall
 	funcs     map[uint32]int64
 	vmContext any
+	globalCtx *runtime.GlobalCtx
 	trace     TraceSink
 }
 
@@ -33,7 +36,7 @@ type TraceSink interface {
 //
 // The caller must create a new interpreter object for every new execution.
 // In other words, Run may only be called once per interpreter.
-func NewInterpreter(p *Program, opts *VMOpts) *Interpreter {
+func NewInterpreter(globalCtx *runtime.GlobalCtx, p *Program, opts *VMOpts) *Interpreter {
 	return &Interpreter{
 		textVA:    p.TextVA,
 		text:      p.Text,
@@ -46,6 +49,7 @@ func NewInterpreter(p *Program, opts *VMOpts) *Interpreter {
 		syscalls:  opts.Syscalls,
 		funcs:     p.Funcs,
 		vmContext: opts.Context,
+		globalCtx: globalCtx,
 		trace:     opts.Tracer,
 	}
 }
@@ -440,6 +444,10 @@ func (ip *Interpreter) getSlot(pc int64) Slot {
 
 func (ip *Interpreter) VMContext() any {
 	return ip.vmContext
+}
+
+func (ip *Interpreter) GlobalCtx() *runtime.GlobalCtx {
+	return ip.globalCtx
 }
 
 func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (unsafe.Pointer, error) {

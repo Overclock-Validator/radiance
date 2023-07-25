@@ -34,7 +34,7 @@ func TestExecute_Memo(t *testing.T) {
 
 	require.NoError(t, program.Verify())
 
-	interpreter := sbpf.NewInterpreter(program, opts)
+	interpreter := sbpf.NewInterpreter(nil, program, opts)
 	require.NotNil(t, interpreter)
 
 	err = interpreter.Run()
@@ -64,7 +64,7 @@ func TestInterpreter_Noop(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -104,7 +104,7 @@ func TestInterpreter_Memcpy_Strings_Match(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -143,7 +143,7 @@ func TestInterpreter_Memcpy_Do_Not_Match(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -181,7 +181,7 @@ func TestInterpreter_Memmove_Strings_Match(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -220,7 +220,7 @@ func TestInterpreter_Memmove_Do_Not_Match(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -257,7 +257,7 @@ func TestInterpreter_Memcpy_Overlapping(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -295,7 +295,7 @@ func TestInterpreter_Memcmp_Matches(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -336,7 +336,7 @@ func TestInterpreter_Memcmp_Does_Not_Match(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -377,7 +377,7 @@ func TestInterpreter_Memset_Check_Correct(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -417,7 +417,7 @@ func TestInterpreter_Sha256(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -458,7 +458,7 @@ func TestInterpreter_Blake3(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -499,7 +499,7 @@ func TestInterpreter_Keccak256(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -541,7 +541,7 @@ func TestInterpreter_CreateProgramAddress(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -586,7 +586,7 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 
 	var log LogRecorder
 
-	interpreter := sbpf.NewInterpreter(program, &sbpf.VMOpts{
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
 		HeapSize: 32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
@@ -602,6 +602,44 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 		"Program log: try_find_program_address success",
 		"Program log: address returned by try_find_program_address matches create_program_address with equivalent seeds",
 	})
+}
+
+// The TestInterpreter_TryFindProgramAddress function tests the
+// sol_try_find_program_address syscall. The testcase uses some seeds
+// to derive an address via sol_try_find_program_address, and then checks
+// that the same value is derived by calling sol_create_program_address
+// with those same seeds (original seeds + bump seed returned by
+// sol_try_find_program_address)
+func TestInterpreter_TestPanic(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "panic.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("sol_log_", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+	syscalls.Register("my_panic", SyscallPanic)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &Execution{Log: &log},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.Error(t, err)
+	assert.Equal(t, err.Error(), "exception at 16: SBF program Panicked in some_file_1234.c at 1337:10")
 }
 
 type executeCase struct {
@@ -626,7 +664,7 @@ func (e *executeCase) run(t *testing.T) {
 	opts := tx.newVMOpts(&e.Params)
 	opts.Tracer = testLogger{t}
 
-	interpreter := sbpf.NewInterpreter(program, opts)
+	interpreter := sbpf.NewInterpreter(nil, program, opts)
 	require.NotNil(t, interpreter)
 
 	err = interpreter.Run()

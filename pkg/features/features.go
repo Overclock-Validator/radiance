@@ -1,12 +1,37 @@
 package features
 
-import (
-	"go.firedancer.io/radiance/pkg/fflags"
-	"go.firedancer.io/radiance/pkg/solana"
-)
+import "fmt"
 
-var StopTruncatingStringsInSyscalls = fflags.Register(solana.MustAddress("16FMCmgLzCNNz6eTwGanbyN2ZxvTBSLuQ6DZhgeMshg"), "StopTruncatingStringsInSyscalls")
+type Features map[FeatureGate]bool
 
-func init() {
-	fflags.WithoutFeature(StopTruncatingStringsInSyscalls)
+func NewFeaturesDefault() Features {
+	return Features{}
+}
+
+func (f Features) EnableFeature(gate FeatureGate) Features {
+	f[gate] = true
+	return f
+}
+
+func (f Features) DisableFeature(gate FeatureGate) Features {
+	f[gate] = false
+	return f
+}
+
+func (f Features) IsActive(gate FeatureGate) bool {
+	if enabled, found := f[gate]; found {
+		return enabled
+	} else {
+		return false
+	}
+}
+
+func (f Features) AllEnabled() []string {
+	enabledFeatureStrs := make([]string, 0)
+	for feat, enabled := range f {
+		if enabled {
+			enabledFeatureStrs = append(enabledFeatureStrs, fmt.Sprintf("feature %s (%s) enabled", feat.Name, feat.Address.String()))
+		}
+	}
+	return enabledFeatureStrs
 }
