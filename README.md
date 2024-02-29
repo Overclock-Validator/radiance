@@ -1,10 +1,5 @@
-# radiance ☀️
+# mithril ☀️
 
-Assortment of Solana protocol modules written in Go.
+A verifying node for the Solana blockchain, implemented in Go. Forked from Radiance, which was written by Richard Patel.
 
-⚠️ **No guarantees, no support.**
-Check back later unless you're ready to read and understand the code. ⚠️
-
-[![Go Reference](https://pkg.go.dev/badge/go.firedancer.io/radiance.svg)](https://pkg.go.dev/go.firedancer.io/radiance)
-
-[Installation Guide](./INSTALL.md)
+Under active development.
