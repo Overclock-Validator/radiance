@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"unsafe"
 
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
@@ -190,3 +191,58 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 }
 
 var SyscallBlake3 = sbpf.SyscallFunc3(SyscallBlake3Impl)
+
+// SyscallSecp256k1Recover is an implementation of the sol_secp256k1_recover syscall
+func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, CuSecP256k1RecoverCost)
+	if err != nil {
+		return
+	}
+
+	hash, err := vm.Translate(hashAddr, 32, false)
+	if err != nil {
+		return
+	}
+
+	signature, err := vm.Translate(signatureAddr, 64, false)
+	if err != nil {
+		return
+	}
+
+	recoverResult, err := vm.Translate(resultAddr, 64, true)
+	if err != nil {
+		return
+	}
+
+	// the Labs validator calls `libsecp256k1::Message::parse_slice` and returns the error
+	// `Secp256k1RecoverError::InvalidHash` if the parse fails, but we don't need to do that
+	// because all the `parse_slice` function checks for is len(hash) == 32, which is always
+	// the case.
+
+	// check for invalid recovery ID
+	if recoveryIdVal >= 4 {
+		r0 = 2 // Secp256k1RecoverError::InvalidHash
+		return
+	}
+
+	// the Labs validator now calls `libsecp256k1::Signature::parse_standard_slice` and returns
+	// the error `Secp256k1RecoverError::InvalidSignature` if the parse fails. However, this function
+	// actually just checks that the input slice is valid, i.e. len (sig) == 64. This is always
+	// the case.
+
+	sigAndRecoveryId := make([]byte, 65)
+	copy(sigAndRecoveryId, signature)
+	sigAndRecoveryId[64] = byte(recoveryIdVal)
+
+	recoveredPubKey, err := secp256k1.RecoverPubkey(hash, sigAndRecoveryId)
+	if err != nil {
+		r0 = 3 // Secp256k1RecoverError::InvalidSignature
+		return
+	}
+
+	copy(recoverResult, recoveredPubKey)
+	r0 = 0
+	return
+}
+
+var SyscallSecp256k1Recover = sbpf.SyscallFunc4(SyscallSecp256k1RecoverImpl)
