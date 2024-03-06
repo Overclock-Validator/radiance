@@ -6,14 +6,16 @@ import (
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
-type TxContext struct{}
-
-type Execution struct {
-	Log Logger
+func executionCtx(vm sbpf.VM) *ExecutionCtx {
+	return vm.VMContext().(*ExecutionCtx)
 }
 
-func (t *TxContext) newVMOpts(params *Params) *sbpf.VMOpts {
-	execution := &Execution{
+func transactionCtx(vm sbpf.VM) *TransactionCtx {
+	return &vm.VMContext().(*ExecutionCtx).transactionContext
+}
+
+func (t *TransactionCtx) newVMOpts(params *Params) *sbpf.VMOpts {
+	execution := &ExecutionCtx{
 		Log: new(LogRecorder),
 	}
 	var buf bytes.Buffer

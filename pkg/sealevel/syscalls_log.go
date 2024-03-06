@@ -25,7 +25,7 @@ func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64, cuIn int) (r0 uint64, cuOut 
 	if err = vm.Read(ptr, buf); err != nil {
 		return
 	}
-	syscallCtx(vm).Log.Log("Program log: " + string(buf))
+	executionCtx(vm).Log.Log("Program log: " + string(buf))
 	return
 }
 
@@ -38,7 +38,7 @@ func SyscallLog64Impl(vm sbpf.VM, r1, r2, r3, r4, r5 uint64, cuIn int) (r0 uint6
 	}
 
 	msg := fmt.Sprintf("Program log: %#x, %#x, %#x, %#x, %#x\n", r1, r2, r3, r4, r5)
-	syscallCtx(vm).Log.Log(msg)
+	executionCtx(vm).Log.Log(msg)
 	return
 }
 
@@ -51,7 +51,7 @@ func SyscallLogCUsImpl(vm sbpf.VM, cuIn int) (r0 uint64, cuOut int, err error) {
 	}
 
 	msg := fmt.Sprintf("Program consumption: %d units remaining", cuIn)
-	syscallCtx(vm).Log.Log(msg)
+	executionCtx(vm).Log.Log(msg)
 	return
 }
 
@@ -69,7 +69,7 @@ func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64, cuIn int) (r0 uint64, c
 		return
 	}
 
-	syscallCtx(vm).Log.Log("Program log: " + pubkey.String())
+	executionCtx(vm).Log.Log("Program log: " + pubkey.String())
 	return
 }
 
@@ -121,7 +121,7 @@ func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64, cuIn int) (r0 uint6
 		return
 	}
 
-	syscallCtx(vm).Log.Log("Program log: " + msg)
+	executionCtx(vm).Log.Log("Program log: " + msg)
 
 	r0 = 0
 	return
