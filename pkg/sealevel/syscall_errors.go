@@ -8,4 +8,5 @@ var (
 	InvalidLength         = errors.New("InvalidLength")
 	InvalidString         = errors.New("InvalidString")
 	MaxSeedLengthExceeded = errors.New("MaxSeedLengthExceeded")
+	ReturnDataTooLarge    = errors.New("ReturnDataTooLarge")
 )

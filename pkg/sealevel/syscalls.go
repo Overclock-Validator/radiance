@@ -33,6 +33,7 @@ func Syscalls() sbpf.SyscallRegistry {
 
 	reg.Register("sol_get_stack_height", SyscallGetStackHeight)
 	reg.Register("sol_get_return_data", SyscallGetReturnData)
+	reg.Register("sol_set_return_data", SyscallSetReturnData)
 
 	// non-"feature gated" syscalls still yet to implement:
 	// 		sol_set_return_data
