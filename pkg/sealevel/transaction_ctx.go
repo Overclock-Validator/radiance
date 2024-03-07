@@ -19,3 +19,7 @@ func (txCtx TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {
 func (txCtx TransactionCtx) InstructionCtxStackHeight() uint64 {
 	return uint64(len(txCtx.instructionStack))
 }
+
+func (txCtx TransactionCtx) GetReturnData() (solana.PublicKey, []byte) {
+	return txCtx.returnData.programId, txCtx.returnData.data
+}

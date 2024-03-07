@@ -32,14 +32,14 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_try_find_program_address", SyscallTryFindProgramAddress)
 
 	reg.Register("sol_get_stack_height", SyscallGetStackHeight)
+	reg.Register("sol_get_return_data", SyscallGetReturnData)
 
 	// non-"feature gated" syscalls still yet to implement:
+	// 		sol_set_return_data
 	// 		sol_get_clock_sysvar
 	// 		sol_get_epoch_schedule_sysvar
 	// 		sol_get_rent_sysvar
 	// 		sol_get_processed_sibling_instruction
-	// 		sol_set_return_data
-	// 		sol_get_return_data
 	// 		sol_invoke_signed_c
 	// 		sol_invoke_signed_rust
 
