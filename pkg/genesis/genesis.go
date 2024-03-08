@@ -3,6 +3,7 @@ package genesis
 import (
 	"time"
 
+	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/runtime"
 )
 
@@ -23,7 +24,7 @@ type Genesis struct {
 
 type AccountEntry struct {
 	Pubkey [32]byte
-	runtime.Account
+	accounts.Account
 }
 
 type BuiltinProgram struct {
@@ -31,7 +32,7 @@ type BuiltinProgram struct {
 	Pubkey [32]byte
 }
 
-func (g *Genesis) FillAccounts(state runtime.Accounts) {
+func (g *Genesis) FillAccounts(state accounts.Accounts) {
 	for _, acc := range g.Accounts {
 		state.SetAccount(&acc.Pubkey, &acc.Account)
 	}

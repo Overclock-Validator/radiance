@@ -3,14 +3,6 @@ package runtime
 
 import "time"
 
-type Account struct {
-	Lamports   uint64
-	Data       []byte
-	Owner      [32]byte
-	Executable bool
-	RentEpoch  uint64
-}
-
 type PohParams struct {
 	TickDuration     time.Duration
 	HasTickCount     bool
@@ -48,28 +40,4 @@ type RentParams struct {
 	LamportsPerByteYear uint64
 	ExemptionThreshold  float64
 	BurnPercent         uint8
-}
-
-type Accounts interface {
-	GetAccount(pubkey *[32]byte) (*Account, error)
-	SetAccount(pubkey *[32]byte, acc *Account) error
-}
-
-type MemAccounts struct {
-	Map map[[32]byte]*Account
-}
-
-func NewMemAccounts() MemAccounts {
-	return MemAccounts{
-		Map: make(map[[32]byte]*Account),
-	}
-}
-
-func (m MemAccounts) GetAccount(pubkey *[32]byte) (*Account, error) {
-	return m.Map[*pubkey], nil
-}
-
-func (m MemAccounts) SetAccount(pubkey *[32]byte, acc *Account) error {
-	m.Map[*pubkey] = acc
-	return nil
 }

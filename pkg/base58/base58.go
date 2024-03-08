@@ -11,6 +11,7 @@ package base58
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 var ErrEncode = errors.New("base58 encoding error")
@@ -272,6 +273,25 @@ func Decode32(out *[32]byte, encoded []byte) (ok bool) {
 	}
 
 	return true
+}
+
+func DecodeFromString(addr string) ([32]byte, error) {
+	in := []byte(addr)
+	var out [32]byte
+	ok := Decode32(&out, in)
+	if !ok {
+		return out, fmt.Errorf("failed to decode base58 from string")
+	}
+
+	return out, nil
+}
+
+func MustDecodeFromString(addr string) [32]byte {
+	out, err := DecodeFromString(addr)
+	if err != nil {
+		panic(err.Error())
+	}
+	return out
 }
 
 func Encode(buf []byte) string {

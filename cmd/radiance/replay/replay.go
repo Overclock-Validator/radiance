@@ -8,11 +8,11 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/spf13/cobra"
+	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/blockstore"
 	"go.firedancer.io/radiance/pkg/genesis"
 	"go.firedancer.io/radiance/pkg/merkletree"
 	"go.firedancer.io/radiance/pkg/poh"
-	"go.firedancer.io/radiance/pkg/runtime"
 	"k8s.io/klog/v2"
 )
 
@@ -52,7 +52,7 @@ func run(c *cobra.Command, _ []string) {
 
 	// Load initial accounts into memory.
 	// Obviously, an in-memory database won't cut it for later stages of replay.
-	accounts := runtime.NewMemAccounts()
+	accounts := accounts.NewMemAccounts()
 	genesisConfig.FillAccounts(accounts)
 
 	// Open blockstore database.

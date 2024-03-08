@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"fmt"
-	"io"
 	"math"
 	"time"
 
@@ -11,43 +10,6 @@ import (
 
 // Dumping ground for handwritten serialization boilerplate.
 // To be removed when switching over to serde-generate.
-
-func (a *Account) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
-	a.Lamports, err = decoder.ReadUint64(bin.LE)
-	if err != nil {
-		return err
-	}
-	var dataLen uint64
-	dataLen, err = decoder.ReadUint64(bin.LE)
-	if err != nil {
-		return err
-	}
-	if dataLen > uint64(decoder.Remaining()) {
-		return io.ErrUnexpectedEOF
-	}
-	a.Data, err = decoder.ReadNBytes(int(dataLen))
-	if err != nil {
-		return err
-	}
-	if err = decoder.Decode(&a.Owner); err != nil {
-		return err
-	}
-	a.Executable, err = decoder.ReadBool()
-	if err != nil {
-		return err
-	}
-	a.RentEpoch, err = decoder.ReadUint64(bin.LE)
-	return
-}
-
-func (a *Account) MarshalWihEncoder(encoder *bin.Encoder) error {
-	_ = encoder.WriteUint64(a.Lamports, bin.LE)
-	_ = encoder.WriteUint64(uint64(len(a.Data)), bin.LE)
-	_ = encoder.WriteBytes(a.Data, false)
-	_ = encoder.WriteBytes(a.Owner[:], false)
-	_ = encoder.WriteBool(a.Executable)
-	return encoder.WriteUint64(a.RentEpoch, bin.LE)
-}
 
 func (a *PohParams) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
 	var tickDuration serdeDuration

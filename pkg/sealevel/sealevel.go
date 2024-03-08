@@ -3,6 +3,7 @@ package sealevel
 import (
 	"bytes"
 
+	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
@@ -12,6 +13,10 @@ func executionCtx(vm sbpf.VM) *ExecutionCtx {
 
 func transactionCtx(vm sbpf.VM) *TransactionCtx {
 	return &vm.VMContext().(*ExecutionCtx).transactionContext
+}
+
+func getAccounts(vm sbpf.VM) *accounts.Accounts {
+	return vm.VMContext().(*ExecutionCtx).globalCtx.Accounts
 }
 
 func (t *TransactionCtx) newVMOpts(params *Params) *sbpf.VMOpts {
