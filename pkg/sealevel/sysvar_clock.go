@@ -10,9 +10,10 @@ import (
 )
 
 const SysvarClockAddrStr = "SysvarC1ock11111111111111111111111111111111"
-const SysvarClockStructLen = 40
 
 var SysvarClockAddr = base58.MustDecodeFromString(SysvarClockAddrStr)
+
+const SysvarClockStructLen = 40
 
 type SysvarClock struct {
 	Slot                uint64
@@ -68,12 +69,10 @@ func ReadClockSysvar(accts *accounts.Accounts) SysvarClock {
 		panic("failed to read clock sysvar account")
 	}
 
-	var dec bin.Decoder
-	dec.SetEncoding(bin.EncodingBin)
-	dec.Reset(clockAccount.Data)
+	dec := bin.NewBinDecoder(clockAccount.Data)
 
 	var clock SysvarClock
-	clock.MustUnmarshalWithDecoder(&dec)
+	clock.MustUnmarshalWithDecoder(dec)
 	return clock
 }
 

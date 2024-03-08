@@ -34,3 +34,29 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cu
 }
 
 var SyscallGetClockSysvar = sbpf.SyscallFunc1(SyscallGetClockSysvarImpl)
+
+// SyscallGetRentSysvarImpl is an implementation of the sol_get_rent_sysvar syscall
+func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+
+	cost := CUSyscallBaseCost + SysvarRentStructLen
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	if err != nil {
+		return
+	}
+
+	clockDst, err := vm.Translate(addr, SysvarRentStructLen, true)
+	if err != nil {
+		return
+	}
+
+	rent := ReadRentSysvar(getAccounts(vm))
+
+	binary.LittleEndian.PutUint64(clockDst[:8], rent.LamportsPerUint8Year)
+	binary.LittleEndian.PutUint64(clockDst[8:16], uint64(rent.ExemptionThreshold))
+	clockDst[16] = rent.BurnPercent
+
+	r0 = 0
+	return
+}
+
+var SyscallGetRentSysvar = sbpf.SyscallFunc1(SyscallGetRentSysvarImpl)
