@@ -10,6 +10,7 @@ import (
 )
 
 const SysvarClockAddrStr = "SysvarC1ock11111111111111111111111111111111"
+const SysvarClockStructLen = 40
 
 var SysvarClockAddr = base58.MustDecodeFromString(SysvarClockAddrStr)
 

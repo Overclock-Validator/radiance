@@ -35,8 +35,9 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_get_return_data", SyscallGetReturnData)
 	reg.Register("sol_set_return_data", SyscallSetReturnData)
 
+	reg.Register("sol_get_clock_sysvar", SyscallGetClockSysvar)
+
 	// non-"feature gated" syscalls still yet to implement:
-	// 		sol_get_clock_sysvar
 	// 		sol_get_epoch_schedule_sysvar
 	// 		sol_get_rent_sysvar
 	// 		sol_get_processed_sibling_instruction
