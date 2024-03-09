@@ -44,19 +44,53 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuO
 		return
 	}
 
-	clockDst, err := vm.Translate(addr, SysvarRentStructLen, true)
+	rentDst, err := vm.Translate(addr, SysvarRentStructLen, true)
 	if err != nil {
 		return
 	}
 
 	rent := ReadRentSysvar(getAccounts(vm))
 
-	binary.LittleEndian.PutUint64(clockDst[:8], rent.LamportsPerUint8Year)
-	binary.LittleEndian.PutUint64(clockDst[8:16], uint64(rent.ExemptionThreshold))
-	clockDst[16] = rent.BurnPercent
+	binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
+	binary.LittleEndian.PutUint64(rentDst[8:16], uint64(rent.ExemptionThreshold))
+	rentDst[16] = rent.BurnPercent
 
 	r0 = 0
 	return
 }
 
 var SyscallGetRentSysvar = sbpf.SyscallFunc1(SyscallGetRentSysvarImpl)
+
+// SyscallGetEpochScheduleSysvarImpl is an implementation of the sol_get_epoch_schedule_sysvar syscall
+func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+
+	cost := CUSyscallBaseCost + SysvarEpochScheduleStructLen
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	if err != nil {
+		return
+	}
+
+	epochScheduleDst, err := vm.Translate(addr, SysvarEpochScheduleStructLen, true)
+	if err != nil {
+		return
+	}
+
+	epochSchedule := ReadEpochScheduleSysvar(getAccounts(vm))
+
+	binary.LittleEndian.PutUint64(epochScheduleDst[:8], epochSchedule.SlotsPerEpoch)
+	binary.LittleEndian.PutUint64(epochScheduleDst[8:16], uint64(epochSchedule.LeaderScheduleSlotOffset))
+
+	if epochSchedule.Warmup {
+		epochScheduleDst[16] = 1
+	} else {
+		epochScheduleDst[16] = 0
+	}
+
+	binary.LittleEndian.PutUint64(epochScheduleDst[17:25], epochSchedule.FirstNormalEpoch)
+	binary.LittleEndian.PutUint64(epochScheduleDst[25:33], epochSchedule.FirstNormalSlot)
+
+	r0 = 0
+	return
+}
+
+var SyscallGetEpochScheduleSysvar = sbpf.SyscallFunc1(SyscallGetEpochScheduleSysvarImpl)
