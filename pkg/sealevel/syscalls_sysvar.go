@@ -94,3 +94,53 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 ui
 }
 
 var SyscallGetEpochScheduleSysvar = sbpf.SyscallFunc1(SyscallGetEpochScheduleSysvarImpl)
+
+// SyscallGetEpochRewardsSysvarImpl is an implementation of the sol_get_epoch_rewards_sysvar syscall
+func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+
+	cost := CUSyscallBaseCost + SysvarEpochRewardsStructLen
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	if err != nil {
+		return
+	}
+
+	epochRewardsDst, err := vm.Translate(addr, SysvarEpochRewardsStructLen, true)
+	if err != nil {
+		return
+	}
+
+	epochRewards := ReadEpochRewardsSysvar(getAccounts(vm))
+
+	binary.LittleEndian.PutUint64(epochRewardsDst[:8], epochRewards.TotalRewards)
+	binary.LittleEndian.PutUint64(epochRewardsDst[8:16], epochRewards.DistributedRewards)
+	binary.LittleEndian.PutUint64(epochRewardsDst[8:16], epochRewards.DistributionCompleteBlockHeight)
+
+	r0 = 0
+	return
+}
+
+var SyscallGetEpochRewardsSysvar = sbpf.SyscallFunc1(SyscallGetEpochRewardsSysvarImpl)
+
+// SyscallGetLastRestartSlotSysvarImpl is an implementation of the sol_get_last_restart_slot_sysvar syscall
+func SyscallGetLastRestartSlotSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+
+	cost := CUSyscallBaseCost + SysvarLastRestartSlotStructLen
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	if err != nil {
+		return
+	}
+
+	lastRestartSlotDst, err := vm.Translate(addr, SysvarLastRestartSlotStructLen, true)
+	if err != nil {
+		return
+	}
+
+	lrs := ReadLastRestartSlotSysvar(getAccounts(vm))
+
+	binary.LittleEndian.PutUint64(lastRestartSlotDst[:8], lrs.LastRestartSlot)
+
+	r0 = 0
+	return
+}
+
+var SyscallGetLastRestartSlotSysvar = sbpf.SyscallFunc1(SyscallGetLastRestartSlotSysvarImpl)

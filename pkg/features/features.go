@@ -30,7 +30,7 @@ func (f Features) AllEnabled() []string {
 	enabledFeatureStrs := make([]string, 0)
 	for feat, enabled := range f {
 		if enabled {
-			enabledFeatureStrs = append(enabledFeatureStrs, fmt.Sprintf("feature %s (%s) enabled", feat.Name, feat.Address.String()))
+			enabledFeatureStrs = append(enabledFeatureStrs, fmt.Sprintf("feature %s (%s) enabled", feat.Name, feat.Address))
 		}
 	}
 	return enabledFeatureStrs

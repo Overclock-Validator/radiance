@@ -1,13 +1,12 @@
 package sealevel
 
 import (
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
-var registry = Syscalls()
-
 // Syscalls creates a registry of all Sealevel syscalls.
-func Syscalls() sbpf.SyscallRegistry {
+func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 	reg := sbpf.NewSyscallRegistry()
 	reg.Register("abort", SyscallAbort)
 	reg.Register("sol_panic_", SyscallPanic)
@@ -39,14 +38,20 @@ func Syscalls() sbpf.SyscallRegistry {
 	reg.Register("sol_get_rent_sysvar", SyscallGetRentSysvar)
 	reg.Register("sol_get_epoch_schedule_sysvar", SyscallGetEpochScheduleSysvar)
 
+	if f.IsActive(features.EnablePartitionedEpochReward) {
+		reg.Register("sol_get_epoch_rewards_sysvar", SyscallGetEpochRewardsSysvar)
+	}
+
+	if f.IsActive(features.LastRestartSlotSysvar) {
+		reg.Register("sol_get_last_restart_slot_sysvar", SyscallGetLastRestartSlotSysvar)
+	}
+
 	// non-"feature gated" syscalls still yet to implement:
 	// 		sol_get_processed_sibling_instruction
 	// 		sol_invoke_signed_c
 	// 		sol_invoke_signed_rust
 
 	// feature gated syscalls yet to implement:
-	//		sol_get_last_restart_slot (disabled)
-	//		sol_get_epoch_rewards_sysvar (disabled)
 	//		sol_curve_validate_point (disabled)
 	//		sol_curve_group_op (disabled)
 	//		sol_curve_multiscalar_mul (disabled)

@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/features"
 )
 
 // Params is the data passed to programs via the Sealevel VM input segment.
@@ -14,6 +15,7 @@ type Params struct {
 	Accounts  []AccountParam
 	Data      []byte // per-instruction data
 	ProgramID solana.PublicKey
+	Features  features.Features
 }
 
 // ReallocSpace is the allowed length by which an account is allowed to grow.
