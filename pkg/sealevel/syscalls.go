@@ -44,5 +44,19 @@ func Syscalls() sbpf.SyscallRegistry {
 	// 		sol_invoke_signed_c
 	// 		sol_invoke_signed_rust
 
+	// feature gated syscalls yet to implement:
+	//		sol_get_last_restart_slot (disabled)
+	//		sol_get_epoch_rewards_sysvar (disabled)
+	//		sol_curve_validate_point (disabled)
+	//		sol_curve_group_op (disabled)
+	//		sol_curve_multiscalar_mul (disabled)
+	//		sol_alt_bn128_group_op (disabled)
+	//		sol_big_mod_exp (disabled)
+	//		sol_poseidon (disabled)
+	//		sol_remaining_compute_units (disabled)
+	//		sol_alt_bn128_compression (disabled)
+	//		sol_get_fees_sysvar (deprecated & now disabled via feature gate JAN1trEUEtZjgXYzNBYHU9DYd7GnThhXfFP7SzPXkPsG)
+	//		sol_alloc_free_ (deprecated & now disabled via feature gate 79HWsX9rpnnJBPcdNURVqygpMAfxdrAirzAGAVmf92im)
+
 	return reg
 }
