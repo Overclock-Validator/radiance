@@ -36,12 +36,12 @@ func (sr *SysvarLastRestartSlot) MustUnmarshalWithDecoder(decoder *bin.Decoder) 
 }
 
 func ReadLastRestartSlotSysvar(accts *accounts.Accounts) SysvarLastRestartSlot {
-	rentAcct, err := (*accts).GetAccount(&SysvarRentAddr)
+	lrsAcct, err := (*accts).GetAccount(&SysvarRentAddr)
 	if err != nil {
 		panic("failed to read rent sysvar account")
 	}
 
-	dec := bin.NewBinDecoder(rentAcct.Data)
+	dec := bin.NewBinDecoder(lrsAcct.Data)
 
 	var lrs SysvarLastRestartSlot
 	lrs.MustUnmarshalWithDecoder(dec)
