@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarSlotHashesAddrStr = "SysvarS1otHashes111111111111111111111111111"
@@ -68,7 +68,39 @@ func ReadSlotHashesSysvar(accts *accounts.Accounts) SysvarSlotHashes {
 	return slotHashes
 }
 
-// TODO: implement logic for writing the SlotHashes sysvar and for creating a default
-func UpdateSlotHashesSysvar(globalCtx *global.GlobalCtx, newFees *SysvarFees) {
+func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes) {
 
+	slotHashesSysvarAcct, err := (*accts).GetAccount(&SysvarSlotHashesAddr)
+	if err != nil {
+		panic("failed to read EpochRewards sysvar account")
+	}
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	numSlotHashes := len(slotHashes)
+
+	err = enc.WriteUint64(uint64(numSlotHashes), bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize len of SlotHashes for SlotHashes sysvar: %w", err)
+		panic(err)
+	}
+
+	for count := 0; count < numSlotHashes; count++ {
+		err = enc.WriteUint64(slotHashes[count].Slot, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Slot for SlotHashes sysvar: %w", err)
+			panic(err)
+		}
+
+		enc.WriteBytes(slotHashes[count].Hash[:], false)
+	}
+
+	copy(slotHashesSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarSlotHashesAddr, slotHashesSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed to write newly serialized SlotHashes sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
