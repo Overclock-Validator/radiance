@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarRentAddrStr = "SysvarRent111111111111111111111111111111111"
@@ -64,7 +64,39 @@ func ReadRentSysvar(accts *accounts.Accounts) SysvarRent {
 	return rent
 }
 
-// TODO: implement logic for writing the rent sysvar and for creating a default
-func UpdateRentSysvar(globalCtx *global.GlobalCtx, newRent *SysvarRent) {
+func WriteRentSysvar(accts *accounts.Accounts, rent SysvarRent) {
 
+	rentSysvarAcct, err := (*accts).GetAccount(&SysvarRentAddr)
+	if err != nil {
+		panic("failed to read Rent sysvar account")
+	}
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(rent.LamportsPerUint8Year, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize LamportsPerUint8Year for Rent sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteFloat64(rent.ExemptionThreshold, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize ExemptionThreshold for Rent sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteByte(rent.BurnPercent)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize BurnPercent for Rent sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(rentSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarRentAddr, rentSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized Rent sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
