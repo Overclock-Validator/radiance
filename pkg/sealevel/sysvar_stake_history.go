@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarStakeHistoryAddrStr = "SysvarStakeHistory1111111111111111111111111"
@@ -84,7 +84,55 @@ func ReadStakeHistorySysvar(accts *accounts.Accounts) SysvarStakeHistory {
 	return stakeHistory
 }
 
-// TODO: implement logic for writing the StakeHistory sysvar and for creating a default
-func UpdateStakeHistorySysvar(globalCtx *global.GlobalCtx, newStakeHistory *SysvarStakeHistory) {
+func WriteStakeHistorySysvar(accts *accounts.Accounts, stakeHistory SysvarStakeHistory) {
 
+	stakeHistSysvarAcct, err := (*accts).GetAccount(&SysvarStakeHistoryAddr)
+	if err != nil {
+		panic("failed to read StakeHistory sysvar account")
+	}
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	lenStakeHistory := len(stakeHistory)
+
+	err = enc.WriteUint64(uint64(lenStakeHistory), bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize len of StakeHistory for StakeHistory sysvar: %w", err)
+		panic(err)
+	}
+
+	for count := 0; count < lenStakeHistory; count++ {
+		err = enc.WriteUint64(stakeHistory[count].Epoch, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Epoch for StakeHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteUint64(stakeHistory[count].Entry.Effective, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Effective for StakeHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteUint64(stakeHistory[count].Entry.Activating, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Activating for StakeHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteUint64(stakeHistory[count].Entry.Deactivating, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Deactivating for StakeHistory sysvar: %w", err)
+			panic(err)
+		}
+	}
+
+	copy(stakeHistSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarStakeHistoryAddr, stakeHistSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed to write newly serialized StakeHistory sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
