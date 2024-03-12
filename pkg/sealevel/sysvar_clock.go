@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarClockAddrStr = "SysvarC1ock11111111111111111111111111111111"
@@ -76,13 +76,48 @@ func ReadClockSysvar(accts *accounts.Accounts) SysvarClock {
 	return clock
 }
 
-func UpdateClockSysvar(globalCtx *global.GlobalCtx) {
-	clock := ReadClockSysvar(globalCtx.Accounts)
+func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 
-	// TODO: update clock sysvar logic
+	clockAccount, err := (*accts).GetAccount(&SysvarClockAddr)
 
-	if globalCtx.Bank.Slot != 0 {
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(clock.Slot, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize Slot for clock sysvar: %w", err)
+		panic(err)
 	}
 
-	fmt.Printf("updating clock sysvar at slot %d\n", clock.Slot)
+	err = enc.WriteUint64(uint64(clock.EpochStartTimestamp), bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize EpochStartTimestamp for clock sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(clock.Epoch, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize Epoch for clock sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(clock.LeaderScheduleEpoch, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize LeaderScheduleEpoch for clock sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(uint64(clock.UnixTimestamp), bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize UnixTimestamp for clock sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(clockAccount.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarClockAddr, clockAccount)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized clock sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
