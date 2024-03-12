@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarLastRestartSlotAddrStr = "SysvarLastRestartS1ot1111111111111111111111"
@@ -36,9 +36,9 @@ func (sr *SysvarLastRestartSlot) MustUnmarshalWithDecoder(decoder *bin.Decoder) 
 }
 
 func ReadLastRestartSlotSysvar(accts *accounts.Accounts) SysvarLastRestartSlot {
-	lrsAcct, err := (*accts).GetAccount(&SysvarRentAddr)
+	lrsAcct, err := (*accts).GetAccount(&SysvarLastRestartSlotAddr)
 	if err != nil {
-		panic("failed to read rent sysvar account")
+		panic("failed to read LastRestartSlot sysvar account")
 	}
 
 	dec := bin.NewBinDecoder(lrsAcct.Data)
@@ -49,7 +49,24 @@ func ReadLastRestartSlotSysvar(accts *accounts.Accounts) SysvarLastRestartSlot {
 	return lrs
 }
 
-// TODO: implement logic for writing the LastRestartSlot sysvar and for creating a default
-func UpdateLastRestartSlotSysvar(globalCtx *global.GlobalCtx, newLastRestartSlot *SysvarLastRestartSlot) {
+func WriteLastRestartSlotSysvar(accts *accounts.Accounts, lastRestartSlot SysvarLastRestartSlot) {
 
+	lrsSysvarAcct, err := (*accts).GetAccount(&SysvarLastRestartSlotAddr)
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(lastRestartSlot.LastRestartSlot, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize LastRestartSlot for LastRestartSlot sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(lrsSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarLastRestartSlotAddr, lrsSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized LastRestartSlot sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
