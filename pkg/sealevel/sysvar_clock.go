@@ -89,7 +89,7 @@ func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 		panic(err)
 	}
 
-	err = enc.WriteUint64(uint64(clock.EpochStartTimestamp), bin.LE)
+	err = enc.WriteInt64(clock.EpochStartTimestamp, bin.LE)
 	if err != nil {
 		err = fmt.Errorf("failed to serialize EpochStartTimestamp for clock sysvar: %w", err)
 		panic(err)
@@ -107,7 +107,7 @@ func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 		panic(err)
 	}
 
-	err = enc.WriteUint64(uint64(clock.UnixTimestamp), bin.LE)
+	err = enc.WriteInt64(clock.UnixTimestamp, bin.LE)
 	if err != nil {
 		err = fmt.Errorf("failed to serialize UnixTimestamp for clock sysvar: %w", err)
 		panic(err)

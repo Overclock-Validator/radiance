@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarEpochScheduleAddrStr = "SysvarEpochSchedu1e111111111111111111111111"
@@ -78,7 +78,48 @@ func ReadEpochScheduleSysvar(accts *accounts.Accounts) SysvarEpochSchedule {
 	return epochSchedule
 }
 
-// TODO: implement logic for writing the epoch schedule sysvar and for creating a default
-func UpdateEpochScheduleSysvar(globalCtx *global.GlobalCtx, newEpochSchedule *SysvarEpochSchedule) {
+func WriteEpochScheduleSysvar(accts *accounts.Accounts, epochSchedule SysvarEpochSchedule) {
 
+	epochScheduleSysvarAcct, err := (*accts).GetAccount(&SysvarEpochScheduleAddr)
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(epochSchedule.SlotsPerEpoch, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize SlotsPerEpoch for EpochSchedule sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(epochSchedule.LeaderScheduleSlotOffset, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize LeaderScheduleSlotOffset for EpochSchedule sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteBool(epochSchedule.Warmup)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize Warmup for EpochSchedule sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(epochSchedule.FirstNormalEpoch, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize FirstNormalEpoch for EpochSchedule sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(epochSchedule.FirstNormalSlot, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize FirstNormalSlot for EpochSchedule sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(epochScheduleSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarEpochScheduleAddr, epochScheduleSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized EpochSchedule sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
