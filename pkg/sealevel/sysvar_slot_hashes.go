@@ -47,8 +47,8 @@ func (sh *SysvarSlotHashes) UnmarshalWithDecoder(decoder *bin.Decoder) (err erro
 	return
 }
 
-func (sf *SysvarSlotHashes) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
-	err := sf.UnmarshalWithDecoder(decoder)
+func (sh *SysvarSlotHashes) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
+	err := sh.UnmarshalWithDecoder(decoder)
 	if err != nil {
 		panic(err.Error())
 	}
