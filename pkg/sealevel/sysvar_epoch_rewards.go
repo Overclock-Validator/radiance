@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarEpochRewardsAddrStr = "SysvarEpochRewards1111111111111111111111111"
@@ -63,7 +63,39 @@ func ReadEpochRewardsSysvar(accts *accounts.Accounts) SysvarEpochRewards {
 	return epochRewards
 }
 
-// TODO: implement logic for writing the epoch rewards sysvar and for creating a default
-func UpdateEpochRewardsSysvar(globalCtx *global.GlobalCtx, newEpochSchedule *SysvarEpochRewards) {
+func WriteEpochRewardsSysvar(accts *accounts.Accounts, epochRewards SysvarEpochRewards) {
 
+	epochRewardsSysvarAcct, err := (*accts).GetAccount(&SysvarEpochRewardsAddr)
+	if err != nil {
+		panic("failed to read EpochRewards sysvar account")
+	}
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(epochRewards.TotalRewards, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize TotalRewards for EpochRewards sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(epochRewards.DistributedRewards, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize DistributedRewards for EpochRewards sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(epochRewards.DistributionCompleteBlockHeight, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize DistributionCompleteBlockHeight for EpochRewards sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(epochRewardsSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarEpochRewardsAddr, epochRewardsSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized EpochRewards sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }

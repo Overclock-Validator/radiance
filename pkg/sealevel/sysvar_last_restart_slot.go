@@ -52,6 +52,9 @@ func ReadLastRestartSlotSysvar(accts *accounts.Accounts) SysvarLastRestartSlot {
 func WriteLastRestartSlotSysvar(accts *accounts.Accounts, lastRestartSlot SysvarLastRestartSlot) {
 
 	lrsSysvarAcct, err := (*accts).GetAccount(&SysvarLastRestartSlotAddr)
+	if err != nil {
+		panic("failed to read LastRestartSlot sysvar account")
+	}
 
 	data := new(bytes.Buffer)
 	enc := bin.NewBinEncoder(data)

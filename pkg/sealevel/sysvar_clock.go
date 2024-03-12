@@ -79,6 +79,9 @@ func ReadClockSysvar(accts *accounts.Accounts) SysvarClock {
 func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 
 	clockAccount, err := (*accts).GetAccount(&SysvarClockAddr)
+	if err != nil {
+		panic("failed to read Clock sysvar account")
+	}
 
 	data := new(bytes.Buffer)
 	enc := bin.NewBinEncoder(data)
