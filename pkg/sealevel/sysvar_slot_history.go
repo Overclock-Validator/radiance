@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarSlotHistoryAddrStr = "SysvarS1otHistory11111111111111111111111111"
@@ -81,7 +81,61 @@ func ReadSlotHistorySysvar(accts *accounts.Accounts) SysvarSlotHistory {
 	return slotHistory
 }
 
-// TODO: implement logic for writing the SlotHistory sysvar and for creating a default
-func UpdateSlotHistorySysvar(globalCtx *global.GlobalCtx, newSlotHistory *SysvarSlotHistory) {
+func WriteSlotHistorySysvar(accts *accounts.Accounts, slotHistory SysvarSlotHistory) {
 
+	slotHistorySysvarAcct, err := (*accts).GetAccount(&SysvarSlotHistoryAddr)
+	if err != nil {
+		panic("failed to read EpochRewards sysvar account")
+	}
+
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	if slotHistory.Bits.Bits.BlocksLen != 0 {
+		err = enc.WriteByte(1)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize opt byte for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteUint64(slotHistory.Bits.Bits.BlocksLen, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize BlocksLen for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		for count := 0; count < int(slotHistory.Bits.Bits.BlocksLen); count++ {
+			err = enc.WriteUint64(slotHistory.Bits.Bits.Blocks[count], bin.LE)
+			if err != nil {
+				err = fmt.Errorf("failed to serialize a Block for SlotHistory sysvar: %w", err)
+				panic(err)
+			}
+		}
+	} else {
+		err = enc.WriteByte(0)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize opt byte for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+	}
+
+	err = enc.WriteUint64(slotHistory.Bits.Len, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize Bits.Len for SlotHistory sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(slotHistory.NextSlot, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize NextSlot for SlotHistory sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(slotHistorySysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarSlotHistoryAddr, slotHistorySysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed to write newly serialized SlotHistory sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }
