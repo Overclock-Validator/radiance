@@ -1,12 +1,12 @@
 package sealevel
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 const SysvarFeesAddrStr = "SysvarFees111111111111111111111111111111111"
@@ -52,7 +52,26 @@ func ReadFeesSysvar(accts *accounts.Accounts) SysvarFees {
 	return fees
 }
 
-// TODO: implement logic for writing the epoch rewards sysvar and for creating a default
-func UpdateFeesSysvar(globalCtx *global.GlobalCtx, newFees *SysvarFees) {
+func WriteFeesSysvar(accts *accounts.Accounts, fees SysvarFees) {
+	feesSysvarAcct, err := (*accts).GetAccount(&SysvarFeesAddr)
+	if err != nil {
+		panic("failed to read Fees sysvar account")
+	}
 
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err = enc.WriteUint64(fees.FeeCalculator.LamportsPerSignature, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize LamportsPerSignature for Fees sysvar: %w", err)
+		panic(err)
+	}
+
+	copy(feesSysvarAcct.Data, data.Bytes())
+
+	err = (*accts).SetAccount(&SysvarFeesAddr, feesSysvarAcct)
+	if err != nil {
+		err = fmt.Errorf("failed write newly serialized Fees sysvar to sysvar account: %w", err)
+		panic(err)
+	}
 }

@@ -81,6 +81,9 @@ func ReadEpochScheduleSysvar(accts *accounts.Accounts) SysvarEpochSchedule {
 func WriteEpochScheduleSysvar(accts *accounts.Accounts, epochSchedule SysvarEpochSchedule) {
 
 	epochScheduleSysvarAcct, err := (*accts).GetAccount(&SysvarEpochScheduleAddr)
+	if err != nil {
+		panic("failed to read EpochSchedule sysvar account")
+	}
 
 	data := new(bytes.Buffer)
 	enc := bin.NewBinEncoder(data)
