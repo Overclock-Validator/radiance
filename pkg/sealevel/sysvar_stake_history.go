@@ -11,7 +11,7 @@ import (
 
 const SysvarStakeHistoryAddrStr = "SysvarStakeHistory1111111111111111111111111"
 
-var SysvarStakeHistoryAddr = base58.MustDecodeFromString(SysvarSlotHashesAddrStr)
+var SysvarStakeHistoryAddr = base58.MustDecodeFromString(SysvarStakeHistoryAddrStr)
 
 type StakeHistoryEntry struct {
 	Effective    uint64
