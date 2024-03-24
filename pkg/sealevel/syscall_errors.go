@@ -9,4 +9,7 @@ var (
 	InvalidString         = errors.New("InvalidString")
 	MaxSeedLengthExceeded = errors.New("MaxSeedLengthExceeded")
 	ReturnDataTooLarge    = errors.New("ReturnDataTooLarge")
+	InvalidArgument       = errors.New("InvalidArgument")
+	NotEnoughAccountKeys  = errors.New("NotEnoughAccountKeys")
+	TooManySigners        = errors.New("TooManySigners")
 )

@@ -46,6 +46,8 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 		reg.Register("sol_get_last_restart_slot_sysvar", SyscallGetLastRestartSlotSysvar)
 	}
 
+	reg.Register("sol_invoke_signed_c", SyscallInvokeSignedC)
+
 	// non-"feature gated" syscalls still yet to implement:
 	// 		sol_get_processed_sibling_instruction
 	// 		sol_invoke_signed_c

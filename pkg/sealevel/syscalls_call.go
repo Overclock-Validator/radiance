@@ -27,7 +27,7 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 		return
 	}
 
-	programId, returnData := transactionCtx(vm).GetReturnData()
+	programId, returnData := transactionCtx(vm).ReturnData()
 
 	if length > uint64(len(returnData)) {
 		length = uint64(len(returnData))

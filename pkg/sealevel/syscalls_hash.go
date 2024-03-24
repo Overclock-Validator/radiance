@@ -55,7 +55,7 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CuSha256ByteCost, dataSize) / 2
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
@@ -115,7 +115,7 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuI
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CuSha256ByteCost, dataSize) / 2
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
@@ -175,7 +175,7 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CuSha256ByteCost, dataSize) / 2
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
@@ -194,7 +194,7 @@ var SyscallBlake3 = sbpf.SyscallFunc3(SyscallBlake3Impl)
 
 // SyscallSecp256k1Recover is an implementation of the sol_secp256k1_recover syscall
 func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CuSecP256k1RecoverCost)
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUSecP256k1RecoverCost)
 	if err != nil {
 		return
 	}
