@@ -4,6 +4,8 @@ import (
 	"io"
 
 	bin "github.com/gagliardetto/binary"
+	"go.firedancer.io/radiance/pkg/base58"
+	"go.firedancer.io/radiance/pkg/features"
 )
 
 type Accounts interface {
@@ -17,6 +19,24 @@ type Account struct {
 	Owner      [32]byte
 	Executable bool
 	RentEpoch  uint64
+}
+
+// TODO: should probably be somewhere else
+const NativeLoaderAddrStr = "NativeLoader1111111111111111111111111111111"
+
+var NativeLoaderAddr = base58.MustDecodeFromString(NativeLoaderAddrStr)
+
+func (a *Account) IsExecutable(features features.Features) bool {
+	return a.Executable
+}
+
+func (a *Account) IsBuiltin() bool {
+	return a.Owner == NativeLoaderAddr && len(a.Data) != 0
+}
+
+// have this placeholder setter to allow for locking/mutex later
+func (a *Account) SetData(data []byte) {
+	a.Data = data
 }
 
 func (a *Account) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {

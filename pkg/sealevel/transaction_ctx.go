@@ -1,16 +1,26 @@
 package sealevel
 
-import "github.com/gagliardetto/solana-go"
+import (
+	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/accounts"
+)
 
 type TxReturnData struct {
 	programId solana.PublicKey
 	data      []byte
 }
 
+type TransactionAccounts struct {
+	Accounts []*accounts.Account
+	Touched  []bool
+}
+
 type TransactionCtx struct {
 	instructionStack []InstructionCtx
 	returnData       TxReturnData
 	accountKeys      []solana.PublicKey
+	Accounts         TransactionAccounts
+	computeMeter     int
 }
 
 func (txCtx TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {
@@ -41,4 +51,19 @@ func (txCtx TransactionCtx) KeyOfAccountAtIndex(index uint64) (solana.PublicKey,
 func (txCtx TransactionCtx) SetReturnData(programId solana.PublicKey, data []byte) {
 	txCtx.returnData.programId = programId
 	txCtx.returnData.data = data
+}
+
+func (txAccounts TransactionAccounts) GetAccount(idx uint64) (*accounts.Account, error) {
+	if len(txAccounts.Accounts) == 0 || idx > (uint64(len(txAccounts.Accounts)-1)) {
+		return nil, ErrMissingAccount
+	}
+	return txAccounts.Accounts[idx], nil
+}
+
+func (txAccounts TransactionAccounts) Touch(idx uint64) error {
+	if len(txAccounts.Touched) == 0 || idx > uint64(len(txAccounts.Touched)-1) {
+		return ErrNotEnoughAccountKeys
+	}
+	txAccounts.Touched[idx] = true
+	return nil
 }

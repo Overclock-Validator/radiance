@@ -12,4 +12,6 @@ var (
 	InvalidArgument       = errors.New("InvalidArgument")
 	NotEnoughAccountKeys  = errors.New("NotEnoughAccountKeys")
 	TooManySigners        = errors.New("TooManySigners")
+	TooManyBytesConsumed  = errors.New("TooManyBytesConsumed")
+	MalformedBool         = errors.New("MalformedBool")
 )
