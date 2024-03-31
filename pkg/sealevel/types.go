@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"io"
 
-	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 )
 
@@ -43,11 +42,6 @@ const SolSignerSeedsCSize = 16
 type VectorDescrC struct {
 	Addr uint64
 	Len  uint64
-}
-
-type ConfigKey struct {
-	PubKey   solana.PublicKey
-	IsSigner bool
 }
 
 type InstructionAccount struct {
@@ -134,28 +128,5 @@ func (vectorDescr *VectorDescrC) Deserialize(buf io.Reader) error {
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func (configKey *ConfigKey) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	pubKey, err := decoder.ReadBytes(solana.PublicKeyLength)
-	if err != nil {
-		return err
-	}
-	copy(configKey.PubKey[:], pubKey)
-
-	isSignerByte, err := decoder.ReadByte()
-	if err != nil {
-		return err
-	}
-
-	if isSignerByte == 1 {
-		configKey.IsSigner = true
-	} else if isSignerByte == 0 {
-		configKey.IsSigner = false
-	} else {
-		return MalformedBool
-	}
-
 	return nil
 }

@@ -11,6 +11,34 @@ const ConfigProgramAddrStr = "Config1111111111111111111111111111111111111"
 
 var ConfigProgramAddr = base58.MustDecodeFromString(ConfigProgramAddrStr)
 
+type ConfigKey struct {
+	PubKey   solana.PublicKey
+	IsSigner bool
+}
+
+func (configKey *ConfigKey) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	pubKey, err := decoder.ReadBytes(solana.PublicKeyLength)
+	if err != nil {
+		return err
+	}
+	copy(configKey.PubKey[:], pubKey)
+
+	isSignerByte, err := decoder.ReadByte()
+	if err != nil {
+		return err
+	}
+
+	if isSignerByte == 1 {
+		configKey.IsSigner = true
+	} else if isSignerByte == 0 {
+		configKey.IsSigner = false
+	} else {
+		return MalformedBool
+	}
+
+	return nil
+}
+
 func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
 	dec := bin.NewBinDecoder(data)
 
