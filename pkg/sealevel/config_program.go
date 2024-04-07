@@ -89,7 +89,7 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 	return dedupeConfigKeys
 }
 
-func ProcessInstruction(ctx ExecutionCtx) int {
+func ConfigProgramExecute(ctx ExecutionCtx) int {
 	var err error
 
 	ctx.transactionContext.computeMeter, err = cu.ConsumeComputeMeter(ctx.transactionContext.computeMeter, CUConfigProcessorDefaultComputeUnits)

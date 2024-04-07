@@ -4,6 +4,8 @@ import "errors"
 
 // error values
 var (
+
+	// instruction errors
 	ErrInvalidInstructionData      = errors.New("ErrInvalidInstructionData")
 	ErrNotEnoughAccountKeys        = errors.New("ErrNotEnoughAccountKeys")
 	ErrComputationalBudgetExceeded = errors.New("ErrComputationalBudgetExceeded")
@@ -15,9 +17,12 @@ var (
 	ErrExecutableDataModified      = errors.New("ErrExecutableDataModified")
 	ErrReadonlyDataModified        = errors.New("ErrReadonlyDataModified")
 	ErrExternalAccountDataModified = errors.New("ErrExternalAccountDataModified")
+
+	// precompile errors
+	ErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")
 )
 
-// Solana error codes
+// Solana error codes for instruction errors
 const (
 	InstrSuccess                        = 0
 	InstrErrInvalidArgument             = 2
@@ -31,6 +36,13 @@ const (
 	InstrErrMissingAccount              = 33
 	InstrErrComputationalBudgetExceeded = 38
 	InstrErrInvalidAccountOwner         = 47
+)
+
+// Solana error codes for precompile program errors
+const (
+	PrecompileErrInvalidDataOffsets         = 100
+	PrecompileErrInvalidInstructionDataSize = 101
+	PrecompileErrInvalidSignature           = 102
 )
 
 func translateErrToInstrErrCode(err error) int {
