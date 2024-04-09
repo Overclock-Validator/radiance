@@ -78,7 +78,7 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 			isWritable = true
 		}
 
-		newAccountMeta := AccountMeta{pubkey: pubkey, IsSigner: isSigner, IsWritable: isWritable}
+		newAccountMeta := AccountMeta{Pubkey: pubkey, IsSigner: isSigner, IsWritable: isWritable}
 		accounts = append(accounts, newAccountMeta)
 	}
 
@@ -109,7 +109,6 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 		if err != nil {
 			return nil, err
 		}
-
 		signerSeeds = append(signerSeeds, s)
 	}
 
@@ -136,7 +135,6 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 			if err != nil {
 				return nil, err
 			}
-
 			seeds = append(seeds, seed)
 		}
 

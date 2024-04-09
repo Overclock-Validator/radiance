@@ -1,6 +1,7 @@
 package sealevel
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 
@@ -26,7 +27,7 @@ type Instruction struct {
 const AccountMetaSize = 34
 
 type AccountMeta struct {
-	pubkey     solana.PublicKey
+	Pubkey     solana.PublicKey
 	IsSigner   bool
 	IsWritable bool
 }
@@ -53,7 +54,7 @@ type InstructionAccount struct {
 }
 
 func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
-	err := binary.Read(buf, binary.LittleEndian, &accountMeta.pubkey)
+	err := binary.Read(buf, binary.LittleEndian, &accountMeta.Pubkey)
 	if err != nil {
 		return err
 	}
@@ -68,6 +69,27 @@ func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
 		return err
 	}
 	return nil
+}
+
+func (accountMeta *AccountMeta) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	var err error
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.Pubkey)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsSigner)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsWritable)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func (accountMeta *SolAccountMeta) Unmarshal(buf io.Reader) error {
@@ -88,8 +110,28 @@ func (accountMeta *SolAccountMeta) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
-func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
+func (accountMeta *SolAccountMeta) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
 
+	var err error
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.PubkeyAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsSigner)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsWritable)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &solInstr.programIdAddr)
 	if err != nil {
 		return err
@@ -118,6 +160,37 @@ func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
+func (solInstr *SolInstruction) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, binary.LittleEndian, solInstr.programIdAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, solInstr.accountsAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, solInstr.accountsLen)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, solInstr.dataAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, solInstr.dataLen)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 func (vectorDescr *VectorDescrC) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &vectorDescr.Addr)
 	if err != nil {
@@ -129,4 +202,20 @@ func (vectorDescr *VectorDescrC) Unmarshal(buf io.Reader) error {
 		return err
 	}
 	return nil
+}
+
+func (vectorDescr *VectorDescrC) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, binary.LittleEndian, vectorDescr.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, vectorDescr.Len)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
