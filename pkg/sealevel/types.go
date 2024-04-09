@@ -52,7 +52,7 @@ type InstructionAccount struct {
 	IsWritable         bool
 }
 
-func (accountMeta *AccountMeta) Deserialize(buf io.Reader) error {
+func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountMeta.pubkey)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func (accountMeta *AccountMeta) Deserialize(buf io.Reader) error {
 	return nil
 }
 
-func (accountMeta *SolAccountMeta) Deserialize(buf io.Reader) error {
+func (accountMeta *SolAccountMeta) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountMeta.PubkeyAddr)
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (accountMeta *SolAccountMeta) Deserialize(buf io.Reader) error {
 	return nil
 }
 
-func (solInstr *SolInstruction) Deserialize(buf io.Reader) error {
+func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
 
 	err := binary.Read(buf, binary.LittleEndian, &solInstr.programIdAddr)
 	if err != nil {
@@ -118,7 +118,7 @@ func (solInstr *SolInstruction) Deserialize(buf io.Reader) error {
 	return nil
 }
 
-func (vectorDescr *VectorDescrC) Deserialize(buf io.Reader) error {
+func (vectorDescr *VectorDescrC) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &vectorDescr.Addr)
 	if err != nil {
 		return err

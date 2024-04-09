@@ -21,7 +21,7 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 	byteReader := bytes.NewReader(ixData)
 	var ix SolInstruction
 
-	err = ix.Deserialize(byteReader)
+	err = ix.Unmarshal(byteReader)
 	if err != nil {
 		return Instruction{}, err
 	}
@@ -45,7 +45,7 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 
 	for count := uint64(0); count < ix.accountsLen; count++ {
 		var am SolAccountMeta
-		err = am.Deserialize(byteReader)
+		err = am.Unmarshal(byteReader)
 		if err != nil {
 			return Instruction{}, err
 		}
@@ -105,7 +105,7 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 	var signerSeeds []VectorDescrC
 	for count := uint64(0); count < signersSeedsLen; count++ {
 		var s VectorDescrC
-		err = s.Deserialize(byteReader)
+		err = s.Unmarshal(byteReader)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +132,7 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 
 		for i := uint64(0); i < signerSeed.Len; i++ {
 			var seed VectorDescrC
-			err = seed.Deserialize(seedReader)
+			err = seed.Unmarshal(seedReader)
 			if err != nil {
 				return nil, err
 			}
