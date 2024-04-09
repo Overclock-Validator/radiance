@@ -43,6 +43,7 @@ const (
 	PrecompileErrInvalidDataOffsets         = 100
 	PrecompileErrInvalidInstructionDataSize = 101
 	PrecompileErrInvalidSignature           = 102
+	PrecompileErrInvalidRecoveryId          = 103 // TODO: not sure this is correct
 )
 
 func translateErrToInstrErrCode(err error) int {

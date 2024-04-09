@@ -65,7 +65,7 @@ func (offsets *Ed25519SignatureOffsets) UnmarshalWithDecoder(buf io.Reader) erro
 	return nil
 }
 
-func getDataSlice(data []byte, instructionDatas [][]byte, instructionIndex, offsetStart uint16, size uint64) ([]byte, int) {
+func ed25519GetDataSlice(data []byte, instructionDatas [][]byte, instructionIndex, offsetStart uint16, size uint64) ([]byte, int) {
 
 	var instruction []byte
 	if instructionIndex == math.MaxUint16 {
@@ -115,17 +115,17 @@ func Ed25519ProgramExecute(data []byte, instructionDatas [][]byte) int {
 			return PrecompileErrInvalidDataOffsets
 		}
 
-		signature, errCode := getDataSlice(data, instructionDatas, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
+		signature, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
 		if errCode != InstrSuccess {
 			return errCode
 		}
 
-		pubkey, errCode := getDataSlice(data, instructionDatas, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
+		pubkey, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
 		if errCode != InstrSuccess {
 			return errCode
 		}
 
-		msg, errCode := getDataSlice(data, instructionDatas, offsets.MessageInstructionIndex, offsets.MessageDataOffset, uint64(offsets.MessageDataSize))
+		msg, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.MessageInstructionIndex, offsets.MessageDataOffset, uint64(offsets.MessageDataSize))
 		if errCode != InstrSuccess {
 			return errCode
 		}
