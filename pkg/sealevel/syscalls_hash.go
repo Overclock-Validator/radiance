@@ -225,10 +225,11 @@ func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureA
 		return
 	}
 
-	// the Labs validator now calls `libsecp256k1::Signature::parse_standard_slice` and returns
-	// the error `Secp256k1RecoverError::InvalidSignature` if the parse fails. However, this function
-	// actually just checks that the input slice is valid, i.e. len (sig) == 64. This is always
-	// the case.
+	err = parseAndValidateSignature(signature)
+	if err != nil {
+		r0 = 3 // Secp256k1RecoverError::InvalidSignature
+		return
+	}
 
 	sigAndRecoveryId := make([]byte, 65)
 	copy(sigAndRecoveryId, signature)
