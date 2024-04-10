@@ -99,7 +99,9 @@ func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64, cuIn int) (r0 uin
 	}
 
 	txCtx := transactionCtx(vm)
-	programId := txCtx.CurrentInstructionCtx().ProgramId()
+	ixCtx := txCtx.CurrentInstructionCtx()
+	programId := ixCtx.ProgramId()
+
 	txCtx.SetReturnData(programId, returnData)
 
 	r0 = 0
