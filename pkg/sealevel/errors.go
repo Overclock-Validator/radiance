@@ -49,7 +49,7 @@ var (
 	PrecompileErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")
 )
 
-// instruction errors - Solana numerical error codes for
+// instruction errors - Solana numerical error codes
 const (
 	InstrErrCodeSuccess                     = 0
 	InstrErrCodeInvalidArgument             = 2
@@ -73,6 +73,7 @@ const (
 	PrecompileErrCodeInvalidRecoveryId          = 103 // TODO: not sure this is correct
 )
 
+// TODO: add additional error conversions
 func translateErrToInstrErrCode(err error) int {
 	var errorCode int
 	switch err {
