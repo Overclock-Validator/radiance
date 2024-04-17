@@ -15,7 +15,7 @@ import (
 // SyscallSha256Impl is the implementation for the sol_sha256 syscall
 func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
 	if valsLen > CUSha256MaxSlices {
-		err = TooManySlices
+		err = SyscallErrTooManySlices
 		return
 	}
 
@@ -75,7 +75,7 @@ var SyscallSha256 = sbpf.SyscallFunc3(SyscallSha256Impl)
 // SyscallKeccak256Impl is the implementation for the sol_keccak256 syscall
 func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
 	if valsLen > CUSha256MaxSlices {
-		err = TooManySlices
+		err = SyscallErrTooManySlices
 		return
 	}
 
@@ -135,7 +135,7 @@ var SyscallKeccak256 = sbpf.SyscallFunc3(SyscallKeccak256Impl)
 // SyscallBlake3Impl is the implementation for the sol_blake3 syscall
 func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
 	if valsLen > CUSha256MaxSlices {
-		err = TooManySlices
+		err = SyscallErrTooManySlices
 		return
 	}
 

@@ -47,7 +47,7 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 		}
 
 		if len(returnData) != len(returnDataResult) {
-			err = InvalidLength
+			err = SyscallErrInvalidLength
 			return
 		}
 
@@ -60,7 +60,7 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 		}
 
 		if !isNonOverlapping(returnDataAddr, length, programIdAddr, solana.PublicKeyLength) {
-			err = ErrCopyOverlapping
+			err = SyscallErrCopyOverlapping
 			return
 		}
 
@@ -84,7 +84,7 @@ func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64, cuIn int) (r0 uin
 	}
 
 	if length > MaxReturnData {
-		err = ReturnDataTooLarge
+		err = SyscallErrReturnDataTooLarge
 		return
 	}
 

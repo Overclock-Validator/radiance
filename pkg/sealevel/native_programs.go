@@ -39,5 +39,5 @@ func ResolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 		return nil, IsPrecompile
 	}
 
-	return nil, ErrUnsupportedProgramId
+	return nil, InstrErrUnsupportedProgramId
 }

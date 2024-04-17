@@ -2,87 +2,102 @@ package sealevel
 
 import "errors"
 
-// error values
+// instruction errors
 var (
-
-	// instruction errors
-	ErrInvalidInstructionData      = errors.New("ErrInvalidInstructionData")
-	ErrNotEnoughAccountKeys        = errors.New("ErrNotEnoughAccountKeys")
-	ErrComputationalBudgetExceeded = errors.New("ErrComputationalBudgetExceeded")
-	ErrMissingAccount              = errors.New("ErrMissingAccount")
-	ErrInvalidAccountOwner         = errors.New("InvalidAccountOwner")
-	ErrInvalidAccountData          = errors.New("ErrInvalidAccountData")
-	ErrMissingRequiredSignature    = errors.New("ErrMissingRequiredSignature")
-	ErrInvalidArgument             = errors.New("ErrInvalidArgument")
-	ErrExecutableDataModified      = errors.New("ErrExecutableDataModified")
-	ErrReadonlyDataModified        = errors.New("ErrReadonlyDataModified")
-	ErrExternalAccountDataModified = errors.New("ErrExternalAccountDataModified")
-	ErrPrivilegeEscalation         = errors.New("ErrPrivilegeEscalation")
-	ErrAccountNotExecutable        = errors.New("ErrAccountNotExecutable")
-	ErrAccountDataSizeChanged      = errors.New("ErrAccountDataSizeChanged")
-	ErrInvalidRealloc              = errors.New("InvalidRealloc")
-	ErrModifiedProgramId           = errors.New("ErrModifiedProgramId")
-	ErrCallDepth                   = errors.New("ErrCallDepth")
-	ErrUnsupportedProgramId        = errors.New("ErrUnsupportedProgramId")
-	ErrReentrancyNotAllowed        = errors.New("ErrReentrancyNotAllowed")
-	ErrArithmeticOverflow          = errors.New("ErrArithmeticOverflow")
-	ErrUnbalancedInstruction       = errors.New("ErrUnbalancedInstruction")
-	ErrAccountDataTooSmall         = errors.New("ErrAccountDataTooSmall")
-	ErrAccountBorrowOutstanding    = errors.New("ErrAccountBorrowOutstanding")
-
-	// precompile errors
-	ErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")
+	InstrErrInvalidInstructionData      = errors.New("InstrErrInvalidInstructionData")
+	InstrErrNotEnoughAccountKeys        = errors.New("InstrErrNotEnoughAccountKeys")
+	InstrErrComputationalBudgetExceeded = errors.New("InstrErrComputationalBudgetExceeded")
+	InstrErrMissingAccount              = errors.New("InstrErrMissingAccount")
+	InstrErrInvalidAccountOwner         = errors.New("InstrErrInvalidAccountOwner")
+	InstrErrInvalidAccountData          = errors.New("InstrErrInvalidAccountData")
+	InstrErrMissingRequiredSignature    = errors.New("InstrErrMissingRequiredSignature")
+	InstrErrInvalidArgument             = errors.New("InstrErrInvalidArgument")
+	InstrErrExecutableDataModified      = errors.New("InstrErrExecutableDataModified")
+	InstrErrReadonlyDataModified        = errors.New("InstrErrReadonlyDataModified")
+	InstrErrExternalAccountDataModified = errors.New("InstrErrExternalAccountDataModified")
+	InstrErrPrivilegeEscalation         = errors.New("InstrErrPrivilegeEscalation")
+	InstrErrAccountNotExecutable        = errors.New("InstrErrAccountNotExecutable")
+	InstrErrAccountDataSizeChanged      = errors.New("InstrErrAccountDataSizeChanged")
+	InstrErrInvalidRealloc              = errors.New("InstrErrInvalidRealloc")
+	InstrErrModifiedProgramId           = errors.New("InstrErrModifiedProgramId")
+	InstrErrCallDepth                   = errors.New("InstrErrCallDepth")
+	InstrErrUnsupportedProgramId        = errors.New("InstrErrUnsupportedProgramId")
+	InstrErrReentrancyNotAllowed        = errors.New("InstrErrReentrancyNotAllowed")
+	InstrErrArithmeticOverflow          = errors.New("InstrErrArithmeticOverflow")
+	InstrErrUnbalancedInstruction       = errors.New("InstrErrUnbalancedInstruction")
+	InstrErrAccountDataTooSmall         = errors.New("InstrErrAccountDataTooSmall")
+	InstrErrAccountBorrowOutstanding    = errors.New("InstrErrAccountBorrowOutstanding")
 )
 
-// Solana error codes for instruction errors
-const (
-	InstrSuccess                        = 0
-	InstrErrInvalidArgument             = 2
-	InstrErrInvalidInstructionData      = 3
-	InstrErrInvalidAccountData          = 4
-	InstrErrMissingRequiredSignature    = 8
-	InstrErrExternalAccountDataModified = 14
-	InstrErrReadonlyDataModified        = 16
-	InstrErrNotEnoughAccountKeys        = 20
-	InstrErrExecutableDataModified      = 28
-	InstrErrMissingAccount              = 33
-	InstrErrComputationalBudgetExceeded = 38
-	InstrErrInvalidAccountOwner         = 47
+// syscall errors
+var (
+	SyscallErrCopyOverlapping       = errors.New("SyscallErrCopyOverlapping")
+	SyscallErrTooManySlices         = errors.New("SyscallErrTooManySlices")
+	SyscallErrInvalidLength         = errors.New("SyscallErrInvalidLength")
+	SyscallErrInvalidString         = errors.New("SyscallErrInvalidString")
+	SyscallErrMaxSeedLengthExceeded = errors.New("SyscallErrMaxSeedLengthExceeded")
+	SyscallErrReturnDataTooLarge    = errors.New("SyscallErrReturnDataTooLarge")
+	SyscallErrInvalidArgument       = errors.New("SyscallErrInvalidArgument")
+	SyscallErrNotEnoughAccountKeys  = errors.New("SyscallErrNotEnoughAccountKeys")
+	SyscallErrTooManySigners        = errors.New("SyscallErrTooManySigners")
+	SyscallErrTooManyBytesConsumed  = errors.New("SyscallErrTooManyBytesConsumed")
+	SyscallErrMalformedBool         = errors.New("SyscallErrMalformedBool")
 )
 
-// Solana error codes for precompile program errors
+// precompile errors
+var (
+	PrecompileErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")
+)
+
+// instruction errors - Solana numerical error codes for
 const (
-	PrecompileErrInvalidDataOffsets         = 100
-	PrecompileErrInvalidInstructionDataSize = 101
-	PrecompileErrInvalidSignature           = 102
-	PrecompileErrInvalidRecoveryId          = 103 // TODO: not sure this is correct
+	InstrErrCodeSuccess                     = 0
+	InstrErrCodeInvalidArgument             = 2
+	InstrErrCodeInvalidInstructionData      = 3
+	InstrErrCodeInvalidAccountData          = 4
+	InstrErrCodeMissingRequiredSignature    = 8
+	InstrErrCodeExternalAccountDataModified = 14
+	InstrErrCodeReadonlyDataModified        = 16
+	InstrErrCodeNotEnoughAccountKeys        = 20
+	InstrErrCodeExecutableDataModified      = 28
+	InstrErrCodeMissingAccount              = 33
+	InstrErrCodeComputationalBudgetExceeded = 38
+	InstrErrCodeInvalidAccountOwner         = 47
+)
+
+// precompile program errors - Solana numerical error codes
+const (
+	PrecompileErrCodeInvalidDataOffsets         = 100
+	PrecompileErrCodeInvalidInstructionDataSize = 101
+	PrecompileErrCodeInvalidSignature           = 102
+	PrecompileErrCodeInvalidRecoveryId          = 103 // TODO: not sure this is correct
 )
 
 func translateErrToInstrErrCode(err error) int {
 	var errorCode int
 	switch err {
-	case ErrInvalidInstructionData:
-		errorCode = InstrErrInvalidInstructionData
-	case ErrNotEnoughAccountKeys:
-		errorCode = InstrErrNotEnoughAccountKeys
-	case ErrComputationalBudgetExceeded:
-		errorCode = InstrErrComputationalBudgetExceeded
-	case ErrMissingAccount:
-		errorCode = InstrErrMissingAccount
-	case ErrInvalidAccountOwner:
-		errorCode = InstrErrInvalidAccountOwner
-	case ErrInvalidAccountData:
-		errorCode = InstrErrInvalidAccountData
-	case ErrMissingRequiredSignature:
-		errorCode = InstrErrMissingRequiredSignature
-	case ErrInvalidArgument:
-		errorCode = InstrErrInvalidArgument
-	case ErrExecutableDataModified:
-		errorCode = InstrErrExecutableDataModified
-	case ErrReadonlyDataModified:
-		errorCode = InstrErrReadonlyDataModified
-	case ErrExternalAccountDataModified:
-		errorCode = InstrErrExternalAccountDataModified
+	case InstrErrInvalidInstructionData:
+		errorCode = InstrErrCodeInvalidInstructionData
+	case InstrErrNotEnoughAccountKeys:
+		errorCode = InstrErrCodeNotEnoughAccountKeys
+	case InstrErrComputationalBudgetExceeded:
+		errorCode = InstrErrCodeComputationalBudgetExceeded
+	case InstrErrMissingAccount:
+		errorCode = InstrErrCodeMissingAccount
+	case InstrErrInvalidAccountOwner:
+		errorCode = InstrErrCodeInvalidAccountOwner
+	case InstrErrInvalidAccountData:
+		errorCode = InstrErrCodeInvalidAccountData
+	case InstrErrMissingRequiredSignature:
+		errorCode = InstrErrCodeMissingRequiredSignature
+	case InstrErrInvalidArgument:
+		errorCode = InstrErrCodeInvalidArgument
+	case InstrErrExecutableDataModified:
+		errorCode = InstrErrCodeExecutableDataModified
+	case InstrErrReadonlyDataModified:
+		errorCode = InstrErrCodeReadonlyDataModified
+	case InstrErrExternalAccountDataModified:
+		errorCode = InstrErrCodeExternalAccountDataModified
 	}
 	return errorCode
 }

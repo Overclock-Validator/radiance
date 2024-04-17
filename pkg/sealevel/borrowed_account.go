@@ -65,19 +65,19 @@ func (acct *BorrowedAccount) IsZeroed() bool {
 
 func (acct *BorrowedAccount) SetOwner(f features.Features, owner solana.PublicKey) error {
 	if !acct.IsOwnedByCurrentProgram() {
-		return ErrModifiedProgramId
+		return InstrErrModifiedProgramId
 	}
 
 	if !acct.IsWritable() {
-		return ErrModifiedProgramId
+		return InstrErrModifiedProgramId
 	}
 
 	if acct.IsExecutable(f) {
-		return ErrModifiedProgramId
+		return InstrErrModifiedProgramId
 	}
 
 	if !acct.IsZeroed() {
-		return ErrModifiedProgramId
+		return InstrErrModifiedProgramId
 	}
 
 	if acct.Owner() == owner {
@@ -144,13 +144,13 @@ func (acct *BorrowedAccount) IsOwnedByCurrentProgram() bool {
 
 func (acct *BorrowedAccount) DataCanBeChanged(features features.Features) error {
 	if acct.IsExecutable(features) {
-		return ErrExecutableDataModified
+		return InstrErrExecutableDataModified
 	}
 	if !acct.IsWritable() {
-		return ErrReadonlyDataModified
+		return InstrErrReadonlyDataModified
 	}
 	if !acct.IsOwnedByCurrentProgram() {
-		return ErrExternalAccountDataModified
+		return InstrErrExternalAccountDataModified
 	}
 	return nil
 }
@@ -160,11 +160,11 @@ const MaxPermittedDataLength = 10 * 1024 * 1024
 func (acct *BorrowedAccount) CanDataBeResized(newLen uint64) error {
 	oldLen := len(acct.Data())
 	if newLen != uint64(oldLen) && !acct.IsOwnedByCurrentProgram() {
-		return ErrAccountDataSizeChanged
+		return InstrErrAccountDataSizeChanged
 	}
 
 	if newLen > MaxPermittedDataLength {
-		return ErrInvalidRealloc
+		return InstrErrInvalidRealloc
 	}
 
 	// TODO: support 'per-transaction maximum'

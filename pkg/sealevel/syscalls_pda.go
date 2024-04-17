@@ -14,7 +14,7 @@ const MaxSeedLen = 32
 
 func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte, error) {
 	if seedsLen > MaxSeeds {
-		return nil, MaxSeedLengthExceeded
+		return nil, SyscallErrMaxSeedLengthExceeded
 	}
 
 	seedsData, err := vm.Translate(seedsAddr, seedsLen*16, false)
@@ -32,7 +32,7 @@ func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte
 		idx += 16
 
 		if dataSize > MaxSeedLen {
-			return nil, MaxSeedLengthExceeded
+			return nil, SyscallErrMaxSeedLengthExceeded
 		}
 
 		data, err = vm.Translate(dataPtr, dataSize, false)
@@ -115,7 +115,7 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 				return
 			}
 			if !isNonOverlapping(bumpSeedAddr, 1, addressAddr, 32) {
-				err = ErrCopyOverlapping
+				err = SyscallErrCopyOverlapping
 				return
 			}
 			bumpSeedOut[0] = bumpSeed

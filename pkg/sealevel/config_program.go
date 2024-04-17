@@ -28,7 +28,7 @@ func (configKey *ConfigKey) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	} else if isSignerByte == 0 {
 		configKey.IsSigner = false
 	} else {
-		return MalformedBool
+		return SyscallErrMalformedBool
 	}
 
 	return nil
@@ -54,7 +54,7 @@ func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
 	}
 
 	if checkMaxLen && dec.Position() > 1232 {
-		return nil, TooManyBytesConsumed
+		return nil, SyscallErrTooManyBytesConsumed
 	}
 
 	return configKeys, nil
@@ -89,7 +89,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 
 	ctx.ComputeMeter, err = cu.ConsumeComputeMeter(ctx.ComputeMeter, CUConfigProcessorDefaultComputeUnits)
 	if err != nil {
-		return ErrComputationalBudgetExceeded
+		return InstrErrComputationalBudgetExceeded
 	}
 
 	txCtx := ctx.TransactionContext
@@ -101,7 +101,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	instrData := instrCtx.Data
 	configKeys, err := unmarshalConfigKeys(instrData, true)
 	if err != nil {
-		return ErrInvalidInstructionData
+		return InstrErrInvalidInstructionData
 	}
 
 	idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
@@ -119,18 +119,18 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	}
 
 	if configAccount.Owner() != ConfigProgramAddr {
-		return ErrInvalidAccountOwner
+		return InstrErrInvalidAccountOwner
 	}
 
 	configAcctData := configAccount.Data()
 	currentConfigKeys, err := unmarshalConfigKeys(configAcctData, false)
 	if err != nil {
-		return ErrInvalidAccountData
+		return InstrErrInvalidAccountData
 	}
 
 	currentSignerKeys := signerOnlyConfigKeys(currentConfigKeys)
 	if len(currentSignerKeys) == 0 && !configAccount.IsSigner() {
-		return ErrMissingRequiredSignature
+		return InstrErrMissingRequiredSignature
 	}
 
 	signerKeys := signerOnlyConfigKeys(configKeys)
@@ -140,13 +140,13 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 		if signerKey.PubKey != configAccountKey {
 			signerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, counter)
 			if err != nil {
-				return ErrMissingRequiredSignature
+				return InstrErrMissingRequiredSignature
 			}
 			if !signerAcct.IsSigner() {
-				return ErrMissingRequiredSignature
+				return InstrErrMissingRequiredSignature
 			}
 			if signerKey.PubKey != signerAcct.Key() {
-				return ErrMissingRequiredSignature
+				return InstrErrMissingRequiredSignature
 			}
 
 			if len(currentConfigKeys) != 0 {
@@ -158,26 +158,26 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 					}
 				}
 				if !matchFound {
-					return ErrMissingRequiredSignature
+					return InstrErrMissingRequiredSignature
 				}
 			}
 		} else if !configAccount.IsSigner() {
-			return ErrMissingRequiredSignature
+			return InstrErrMissingRequiredSignature
 		}
 	}
 
 	totalNewConfigKeys := len(configKeys)
 	uniqueNewConfigKeys := len(deduplicateConfigKeySigners(configKeys))
 	if totalNewConfigKeys != uniqueNewConfigKeys {
-		return ErrInvalidArgument
+		return InstrErrInvalidArgument
 	}
 
 	if len(currentSignerKeys) > int(counter) {
-		return ErrMissingRequiredSignature
+		return InstrErrMissingRequiredSignature
 	}
 
 	if len(configAccount.Data()) < len(instrData) {
-		return ErrInvalidInstructionData
+		return InstrErrInvalidInstructionData
 	}
 
 	err = configAccount.SetData(ctx.GlobalCtx.Features, instrData)

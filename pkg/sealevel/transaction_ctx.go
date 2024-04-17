@@ -37,7 +37,7 @@ func (txCtx *TransactionCtx) InstructionCtxStackHeight() uint64 {
 func (txCtx *TransactionCtx) CurrentInstructionCtx() (*InstructionCtx, error) {
 	level, err := safemath.CheckedSubU64(txCtx.InstructionCtxStackHeight(), 1)
 	if err != nil {
-		return nil, ErrCallDepth
+		return nil, InstrErrCallDepth
 	}
 	return &txCtx.InstructionTrace[level], nil
 }
@@ -48,7 +48,7 @@ func (txCtx *TransactionCtx) ReturnData() (solana.PublicKey, []byte) {
 
 func (txCtx *TransactionCtx) KeyOfAccountAtIndex(index uint64) (solana.PublicKey, error) {
 	if len(txCtx.AccountKeys) == 0 || index > uint64(len(txCtx.AccountKeys)-1) {
-		return solana.PublicKey{}, NotEnoughAccountKeys
+		return solana.PublicKey{}, SyscallErrNotEnoughAccountKeys
 	}
 
 	return txCtx.AccountKeys[index], nil
@@ -65,19 +65,19 @@ func (txCtx *TransactionCtx) IndexOfAccount(pubkey solana.PublicKey) (uint64, er
 			return uint64(index), nil
 		}
 	}
-	return 0, ErrMissingAccount
+	return 0, InstrErrMissingAccount
 }
 
 func (txCtx *TransactionCtx) NextInstructionCtx() (*InstructionCtx, error) {
 	if len(txCtx.InstructionTrace) == 0 {
-		return nil, ErrCallDepth
+		return nil, InstrErrCallDepth
 	}
 	return &txCtx.InstructionTrace[len(txCtx.InstructionTrace)-1], nil
 }
 
 func (txCtx *TransactionCtx) InstructionCtxAtIndexInTrace(idxInTrace uint64) (*InstructionCtx, error) {
 	if len(txCtx.InstructionTrace) == 0 || idxInTrace > uint64(len(txCtx.InstructionTrace)-1) {
-		return nil, ErrCallDepth
+		return nil, InstrErrCallDepth
 	}
 	return &txCtx.InstructionTrace[idxInTrace], nil
 }
@@ -89,7 +89,7 @@ func (txCtx *TransactionCtx) InstructionTraceLength() uint64 {
 
 func (txCtx *TransactionCtx) InstructionCtxAtNestingLevel(nestingLevel uint64) (*InstructionCtx, error) {
 	if len(txCtx.InstructionStack) == 0 || nestingLevel > uint64(len(txCtx.InstructionStack)-1) {
-		return nil, ErrCallDepth
+		return nil, InstrErrCallDepth
 	}
 	idxInTrace := txCtx.InstructionStack[nestingLevel]
 	ixCtx, err := txCtx.InstructionCtxAtIndexInTrace(idxInTrace)
@@ -101,7 +101,7 @@ func (txCtx *TransactionCtx) InstructionCtxAtNestingLevel(nestingLevel uint64) (
 
 func (txCtx *TransactionCtx) AccountAtIndex(idxInTx uint64) (*accounts.Account, error) {
 	if len(txCtx.Accounts.Accounts) == 0 || idxInTx > uint64(len(txCtx.Accounts.Accounts)-1) {
-		return nil, ErrNotEnoughAccountKeys
+		return nil, InstrErrNotEnoughAccountKeys
 	}
 	return txCtx.Accounts.Accounts[idxInTx], nil
 }
@@ -129,7 +129,7 @@ func (txCtx *TransactionCtx) InstructionAccountsLamportSum(instrCtx *Instruction
 		lamportsUint128 := wide.Uint128FromUint64(acct.Lamports)
 		instructionAcctsLamportSum, err = safemath.CheckedAddU128(instructionAcctsLamportSum, lamportsUint128)
 		if err != nil {
-			return wide.NewUint128(0, 0), ErrArithmeticOverflow
+			return wide.NewUint128(0, 0), InstrErrArithmeticOverflow
 		}
 	}
 
@@ -140,7 +140,7 @@ func (txCtx *TransactionCtx) Push() error {
 	nestingLevel := txCtx.InstructionCtxStackHeight()
 
 	if len(txCtx.InstructionTrace) == 0 {
-		return ErrCallDepth
+		return InstrErrCallDepth
 	}
 
 	callerInstrCtx := txCtx.InstructionTrace[len(txCtx.InstructionTrace)-1]
@@ -162,7 +162,7 @@ func (txCtx *TransactionCtx) Push() error {
 		}
 
 		if originalCallerInstrAcctsLamportSum.Cmp(currentCallerInstructionAccountsLamportSum) != 0 {
-			return ErrUnbalancedInstruction
+			return InstrErrUnbalancedInstruction
 		}
 	}
 
@@ -175,7 +175,7 @@ func (txCtx *TransactionCtx) Push() error {
 
 	idxInTrace := txCtx.InstructionTraceLength()
 	if idxInTrace >= txCtx.InstructionTraceCapacity {
-		return ErrCallDepth
+		return InstrErrCallDepth
 	}
 
 	txCtx.InstructionStack = append(txCtx.InstructionStack, idxInTrace)
@@ -185,7 +185,7 @@ func (txCtx *TransactionCtx) Push() error {
 
 func (txCtx *TransactionCtx) Pop() error {
 	if len(txCtx.InstructionStack) == 0 {
-		return ErrCallDepth
+		return InstrErrCallDepth
 	}
 
 	currentInstrCtx, err := txCtx.CurrentInstructionCtx()
@@ -195,7 +195,7 @@ func (txCtx *TransactionCtx) Pop() error {
 
 	lamportsSum, err := txCtx.InstructionAccountsLamportSum(currentInstrCtx)
 	if err != nil {
-		return ErrUnbalancedInstruction
+		return InstrErrUnbalancedInstruction
 	}
 
 	unbalanced := currentInstrCtx.InstructionAccountsLamportSum.Cmp(lamportsSum)
@@ -204,7 +204,7 @@ func (txCtx *TransactionCtx) Pop() error {
 	txCtx.InstructionStack = txCtx.InstructionStack[:len(txCtx.InstructionStack)-1]
 
 	if unbalanced != 0 {
-		return ErrUnbalancedInstruction
+		return InstrErrUnbalancedInstruction
 	}
 
 	return nil
@@ -212,14 +212,14 @@ func (txCtx *TransactionCtx) Pop() error {
 
 func (txAccounts *TransactionAccounts) GetAccount(idx uint64) (*accounts.Account, error) {
 	if len(txAccounts.Accounts) == 0 || idx > (uint64(len(txAccounts.Accounts)-1)) {
-		return nil, ErrMissingAccount
+		return nil, InstrErrMissingAccount
 	}
 	return txAccounts.Accounts[idx], nil
 }
 
 func (txAccounts *TransactionAccounts) Touch(idx uint64) error {
 	if len(txAccounts.Touched) == 0 || idx > uint64(len(txAccounts.Touched)-1) {
-		return ErrNotEnoughAccountKeys
+		return InstrErrNotEnoughAccountKeys
 	}
 	txAccounts.Touched[idx] = true
 	return nil

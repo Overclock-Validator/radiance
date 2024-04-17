@@ -127,17 +127,17 @@ func parseAndValidateSignature(sigBytes []byte) error {
 func secp256k1GetDataSlice(instructionDatas [][]byte, instructionIndex byte, offsetStart uint16, size uint64) ([]byte, int) {
 	signatureIndex := uint64(instructionIndex)
 	if signatureIndex >= uint64(len(instructionDatas)) {
-		return nil, PrecompileErrInvalidDataOffsets
+		return nil, PrecompileErrCodeInvalidDataOffsets
 	}
 
 	signatureInstruction := instructionDatas[signatureIndex]
 	start := uint64(offsetStart)
 	end := start + size
 	if end > uint64(len(signatureInstruction)) {
-		return nil, PrecompileErrInvalidSignature
+		return nil, PrecompileErrCodeInvalidSignature
 	}
 
-	return signatureInstruction[start:end], InstrSuccess
+	return signatureInstruction[start:end], InstrErrCodeSuccess
 }
 
 func constructEthPubkey(pubkey []byte) []byte {
@@ -149,7 +149,7 @@ func constructEthPubkey(pubkey []byte) []byte {
 
 func Secp256k1ProgramExecute(data []byte, instructionDatas [][]byte, f features.Features) int {
 	if len(data) == 0 {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	count := uint64(data[0])
@@ -157,12 +157,12 @@ func Secp256k1ProgramExecute(data []byte, instructionDatas [][]byte, f features.
 	if (f.IsActive(features.Libsecp256k1FailOnBadCount) ||
 		f.IsActive(features.Libsecp256k1FailOnBadCount2)) &&
 		count == 0 && len(data) > 1 {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	expectedDataSize := (count * Secp256k1SignatureOffsetsSerializedSize) + 1
 	if uint64(len(data)) < expectedDataSize {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	for i := uint64(0); i < count; i++ {
@@ -174,40 +174,40 @@ func Secp256k1ProgramExecute(data []byte, instructionDatas [][]byte, f features.
 		dec := bin.NewBinDecoder(data[start:end])
 		err := secpOffsets.UnmarshalWithDecoder(dec)
 		if err != nil {
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 
 		signatureIndex := uint64(secpOffsets.SignatureInstructionIndex)
 		if signatureIndex >= uint64(len(instructionDatas)) {
-			return PrecompileErrInvalidInstructionDataSize
+			return PrecompileErrCodeInvalidInstructionDataSize
 		}
 
 		signatureInstruction := instructionDatas[signatureIndex]
 		sigStart := uint64(secpOffsets.SignatureOffset)
 		sigEnd := sigStart + Secp256k1SignatureSerializedSize
 		if sigEnd >= uint64(len(signatureInstruction)) {
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 
 		signature := signatureInstruction[sigStart:sigEnd]
 		err = parseAndValidateSignature(signature)
 		if err != nil {
 			klog.Errorf("error parsing signature: %s\n", err)
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 
 		recoveryId := signatureInstruction[sigEnd]
 		if recoveryId >= 4 {
-			return PrecompileErrInvalidRecoveryId
+			return PrecompileErrCodeInvalidRecoveryId
 		}
 
 		ethAddressSlice, errCode := secp256k1GetDataSlice(instructionDatas, secpOffsets.EthAddressInstructionIndex, secpOffsets.EthAddressOffset, Secp256k1HashedPubkeySerializedSize)
-		if errCode != InstrSuccess {
+		if errCode != InstrErrCodeSuccess {
 			return errCode
 		}
 
 		messageSlice, errCode := secp256k1GetDataSlice(instructionDatas, secpOffsets.MessageInstructionIndex, secpOffsets.MessageDataOffset, uint64(secpOffsets.MessageDataSize))
-		if errCode != InstrSuccess {
+		if errCode != InstrErrCodeSuccess {
 			return errCode
 		}
 
@@ -221,14 +221,14 @@ func Secp256k1ProgramExecute(data []byte, instructionDatas [][]byte, f features.
 
 		recoveredPubKey, err := secp256k1.RecoverPubkey(messageHash, sigAndRecoveryId)
 		if err != nil {
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 		ethAddress := constructEthPubkey(recoveredPubKey)
 
 		if !bytes.Equal(ethAddressSlice, ethAddress) {
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 	}
 
-	return InstrSuccess
+	return InstrErrCodeSuccess
 }

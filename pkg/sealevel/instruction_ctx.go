@@ -21,7 +21,7 @@ func (instrCtx *InstructionCtx) ProgramId() solana.PublicKey {
 
 func (instrCtx *InstructionCtx) IndexOfProgramAccountInTransaction(programAccountIndex uint64) (uint64, error) {
 	if len(instrCtx.ProgramAccounts) == 0 || programAccountIndex > uint64(len(instrCtx.ProgramAccounts)-1) {
-		return 0, NotEnoughAccountKeys
+		return 0, SyscallErrNotEnoughAccountKeys
 	}
 	return instrCtx.ProgramAccounts[programAccountIndex], nil
 }
@@ -47,14 +47,14 @@ func (instrCtx *InstructionCtx) LastProgramKey(txCtx *TransactionCtx) (solana.Pu
 
 func (instrCtx *InstructionCtx) IndexOfInstructionAccountInTransaction(instrAcctIdx uint64) (uint64, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)-1) {
-		return 0, NotEnoughAccountKeys
+		return 0, SyscallErrNotEnoughAccountKeys
 	}
 	return instrCtx.InstructionAccounts[instrAcctIdx].IndexInTransaction, nil
 }
 
 func (instrCtx *InstructionCtx) IsInstructionAccountDuplicate(instrAcctIdx uint64) (bool, uint64, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)-1) {
-		return false, 0, ErrNotEnoughAccountKeys
+		return false, 0, InstrErrNotEnoughAccountKeys
 	}
 
 	idxInCallee := instrCtx.InstructionAccounts[instrAcctIdx].IndexInCallee
@@ -99,7 +99,7 @@ func (instrCtx *InstructionCtx) BorrowLastProgramAccount(txCtx *TransactionCtx) 
 
 func (instrCtx *InstructionCtx) IsInstructionAccountSigner(instrAcctIdx uint64) (bool, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)) {
-		return false, ErrMissingAccount
+		return false, InstrErrMissingAccount
 	}
 
 	return instrCtx.InstructionAccounts[instrAcctIdx].IsSigner, nil
@@ -107,7 +107,7 @@ func (instrCtx *InstructionCtx) IsInstructionAccountSigner(instrAcctIdx uint64) 
 
 func (instrCtx *InstructionCtx) IsInstructionAccountWritable(instrAcctIdx uint64) (bool, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)) {
-		return false, ErrMissingAccount
+		return false, InstrErrMissingAccount
 	}
 
 	return instrCtx.InstructionAccounts[instrAcctIdx].IsWritable, nil
@@ -119,5 +119,5 @@ func (instrCtx *InstructionCtx) IndexOfInstructionAccount(txCtx *TransactionCtx,
 			return uint64(index), nil
 		}
 	}
-	return 0, ErrMissingAccount
+	return 0, InstrErrMissingAccount
 }

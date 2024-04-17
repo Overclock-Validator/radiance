@@ -73,7 +73,7 @@ func ed25519GetDataSlice(data []byte, instructionDatas [][]byte, instructionInde
 	} else {
 		signatureIndex := int(instructionIndex)
 		if signatureIndex >= len(instructionDatas) {
-			return nil, PrecompileErrInvalidDataOffsets
+			return nil, PrecompileErrCodeInvalidDataOffsets
 		}
 		instruction = instructionDatas[signatureIndex]
 	}
@@ -81,27 +81,27 @@ func ed25519GetDataSlice(data []byte, instructionDatas [][]byte, instructionInde
 	start := uint64(offsetStart)
 	end := safemath.SaturatingAddU64(start, size)
 	if end > uint64(len(instruction)) {
-		return nil, PrecompileErrInvalidDataOffsets
+		return nil, PrecompileErrCodeInvalidDataOffsets
 	}
-	return instruction[start:end], InstrSuccess
+	return instruction[start:end], InstrErrCodeSuccess
 }
 
 func Ed25519ProgramExecute(data []byte, instructionDatas [][]byte) int {
 	dataLen := uint64(len(data))
 
 	if dataLen < SignatureOffsetStarts {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	numSignatures := data[0]
 
 	if numSignatures == 0 && dataLen > SignatureOffsetStarts {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	expectedDataSize := (uint64(numSignatures) * SignatureOffsetsSerializedSize) + SignatureOffsetStarts
 	if dataLen < expectedDataSize {
-		return PrecompileErrInvalidInstructionDataSize
+		return PrecompileErrCodeInvalidInstructionDataSize
 	}
 
 	for count := uint64(0); count < uint64(numSignatures); count++ {
@@ -112,28 +112,28 @@ func Ed25519ProgramExecute(data []byte, instructionDatas [][]byte) int {
 		var offsets Ed25519SignatureOffsets
 		err := offsets.UnmarshalWithDecoder(bytes.NewReader(data[start:end]))
 		if err != nil {
-			return PrecompileErrInvalidDataOffsets
+			return PrecompileErrCodeInvalidDataOffsets
 		}
 
 		signature, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
-		if errCode != InstrSuccess {
+		if errCode != InstrErrCodeSuccess {
 			return errCode
 		}
 
 		pubkey, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
-		if errCode != InstrSuccess {
+		if errCode != InstrErrCodeSuccess {
 			return errCode
 		}
 
 		msg, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.MessageInstructionIndex, offsets.MessageDataOffset, uint64(offsets.MessageDataSize))
-		if errCode != InstrSuccess {
+		if errCode != InstrErrCodeSuccess {
 			return errCode
 		}
 
 		if !ed25519.Verify(pubkey, msg, signature) {
-			return PrecompileErrInvalidSignature
+			return PrecompileErrCodeInvalidSignature
 		}
 	}
 
-	return InstrSuccess
+	return InstrErrCodeSuccess
 }

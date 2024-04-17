@@ -31,7 +31,7 @@ func SyscallMemcpyImpl(vm sbpf.VM, dst, src, n uint64, cuIn int) (r0 uint64, cuO
 	// memcpy when src and dst are overlapping results in undefined behaviour,
 	// hence check if there is an overlap and return early with an error if so.
 	if !isNonOverlapping(src, n, dst, n) {
-		return r0, cuOut, ErrCopyOverlapping
+		return r0, cuOut, SyscallErrCopyOverlapping
 	}
 
 	err = memmoveImplInternal(vm, dst, src, n)

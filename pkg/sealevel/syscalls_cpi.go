@@ -61,7 +61,7 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 	for count := uint64(0); count < ix.accountsLen; count++ {
 		accountMeta := accountMetas[count]
 		if accountMeta.IsSigner > 1 || accountMeta.IsWritable > 1 {
-			return Instruction{}, InvalidArgument
+			return Instruction{}, SyscallErrInvalidArgument
 		}
 
 		pubkeyData, err := vm.Translate(accountMeta.PubkeyAddr, solana.PublicKeyLength, false)
@@ -93,7 +93,7 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 	}
 
 	if signersSeedsLen > MaxSigners {
-		return nil, TooManySigners
+		return nil, SyscallErrTooManySigners
 	}
 
 	ssLen := safemath.SaturatingMulU64(signersSeedsLen, SolSignerSeedsCSize)
@@ -118,7 +118,7 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 	for _, signerSeed := range signerSeeds {
 
 		if signerSeed.Len > MaxSeeds {
-			return nil, MaxSeedLengthExceeded
+			return nil, SyscallErrMaxSeedLengthExceeded
 		}
 
 		sz := safemath.SaturatingMulU64(signerSeed.Len, SolSignerSeedsCSize)
@@ -301,13 +301,13 @@ func updateCallerAccount(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct *CallerAc
 
 		// account data size increased by too much
 		if postLen > safemath.SaturatingAddU64(callerAcct.SerializedDataLen, maxPermittedIncrease) {
-			return ErrInvalidRealloc
+			return InstrErrInvalidRealloc
 		}
 
 		if postLen < prevLen {
 			serializedData := *callerAcct.SerializedData
 			if uint64(len(serializedData)) < postLen {
-				return ErrAccountDataTooSmall
+				return InstrErrAccountDataTooSmall
 			}
 			for i := range serializedData[postLen:] {
 				serializedData[i] = 0
@@ -333,13 +333,13 @@ func updateCallerAccount(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct *CallerAc
 	fromSlice := calleeAcct.Data()
 
 	if uint64(len(fromSlice)) < postLen {
-		return InvalidLength
+		return SyscallErrInvalidLength
 	}
 
 	fromSlice = fromSlice[:postLen]
 
 	if len(toSlice) != len(fromSlice) {
-		return ErrAccountDataTooSmall
+		return InstrErrAccountDataTooSmall
 	}
 
 	copy(toSlice, fromSlice)
@@ -359,7 +359,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 
 	idx := len(programIndices) - 1
 	if idx < 0 {
-		return nil, ErrMissingAccount
+		return nil, InstrErrMissingAccount
 	}
 	programAcctIdx := programIndices[idx]
 	accounts = append(accounts, TranslatedAccount{IndexOfAccount: programAcctIdx, CallerAccount: nil})
@@ -382,7 +382,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 			cost := len(calleeAcct.Data()) / CUCpiBytesPerUnit
 			execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
 			if err != nil {
-				return nil, ErrComputationalBudgetExceeded
+				return nil, InstrErrComputationalBudgetExceeded
 			}
 		} else {
 			var found bool
@@ -409,7 +409,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 				}
 			}
 			if !found {
-				return nil, ErrMissingAccount
+				return nil, InstrErrMissingAccount
 			}
 		}
 	}

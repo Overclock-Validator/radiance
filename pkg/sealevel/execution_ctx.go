@@ -45,7 +45,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 		if duplicateIndex != -1 {
 			duplicateIndices = append(duplicateIndices, uint64(duplicateIndex))
 			if duplicateIndex > len(dedupInstructionAccounts)-1 {
-				return nil, nil, ErrNotEnoughAccountKeys
+				return nil, nil, InstrErrNotEnoughAccountKeys
 			}
 			instructionAcct := dedupInstructionAccounts[duplicateIndex]
 			instructionAcct.IsSigner = instructionAcct.IsSigner || accountMeta.IsSigner
@@ -75,7 +75,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 
 		// "Read-only in caller cannot become writable in callee"
 		if instructionAcct.IsWritable && !borrowedAcct.IsWritable() {
-			return nil, nil, ErrPrivilegeEscalation
+			return nil, nil, InstrErrPrivilegeEscalation
 		}
 
 		// "To be signed in the callee,
@@ -88,14 +88,14 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 			}
 		}
 		if instructionAcct.IsSigner && !(borrowedAcct.IsSigner() || presentInSigners) {
-			return nil, nil, ErrPrivilegeEscalation
+			return nil, nil, InstrErrPrivilegeEscalation
 		}
 	}
 
 	var instructionAccounts []InstructionAccount
 	for _, duplicateIndex := range duplicateIndices {
 		if duplicateIndex > uint64(len(dedupInstructionAccounts)-1) {
-			return nil, nil, ErrNotEnoughAccountKeys
+			return nil, nil, InstrErrNotEnoughAccountKeys
 		}
 		instrAcct := dedupInstructionAccounts[duplicateIndex]
 		instructionAccounts = append(instructionAccounts, instrAcct)
@@ -116,7 +116,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 
 	if !borrowedProgramAcct.IsExecutable(execCtx.GlobalCtx.Features) {
 		klog.Errorf("account %s is not executable", calleeProgramId)
-		return nil, nil, ErrAccountNotExecutable
+		return nil, nil, InstrErrAccountNotExecutable
 	}
 
 	return instructionAccounts, []uint64{borrowedProgramAcct.IndexInTransaction}, nil
@@ -159,7 +159,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 
 	borrowedRootAccount, err := instrCtx.BorrowProgramAccount(txCtx, 0)
 	if err != nil {
-		return ErrUnsupportedProgramId
+		return InstrErrUnsupportedProgramId
 	}
 
 	ownerId := borrowedRootAccount.Owner()
@@ -174,7 +174,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 	nativeProgramFn, err := ResolveNativeProgramById(builtinId)
 	if err == IsPrecompile {
 		// TODO: handle precompile calls (ed25519, secp256k)
-		return ErrUnsupportedProgramId
+		return InstrErrUnsupportedProgramId
 	} else if err != nil { // unrecognised builtin
 		return err
 	}
@@ -199,7 +199,7 @@ func (execCtx *ExecutionCtx) Push() error {
 
 	programId, err := ixCtx.LastProgramKey(txCtx)
 	if err != nil {
-		return ErrUnsupportedProgramId
+		return InstrErrUnsupportedProgramId
 	}
 
 	if txCtx.InstructionCtxStackHeight() != 0 {
@@ -230,7 +230,7 @@ func (execCtx *ExecutionCtx) Push() error {
 		}
 
 		if contains && !isLast {
-			return ErrReentrancyNotAllowed
+			return InstrErrReentrancyNotAllowed
 		}
 	}
 
