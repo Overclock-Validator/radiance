@@ -19,6 +19,10 @@ func (acct *BorrowedAccount) Owner() solana.PublicKey {
 	return acct.Account.Owner
 }
 
+func (acct *BorrowedAccount) Lamports() uint64 {
+	return acct.Account.Lamports
+}
+
 func (acct *BorrowedAccount) Touch() error {
 	err := acct.TxCtx.Accounts.Touch(acct.IndexInTransaction)
 	if err != nil {
@@ -42,6 +46,50 @@ func (acct *BorrowedAccount) SetData(features features.Features, data []byte) er
 	}
 
 	acct.Account.SetData(data)
+	return nil
+}
+
+func (acct *BorrowedAccount) IsZeroed() bool {
+	if len(acct.Data()) == 0 {
+		return true
+	}
+
+	for _, b := range acct.Data() {
+		if b != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (acct *BorrowedAccount) SetOwner(f features.Features, owner solana.PublicKey) error {
+	if !acct.IsOwnedByCurrentProgram() {
+		return ErrModifiedProgramId
+	}
+
+	if !acct.IsWritable() {
+		return ErrModifiedProgramId
+	}
+
+	if acct.IsExecutable(f) {
+		return ErrModifiedProgramId
+	}
+
+	if !acct.IsZeroed() {
+		return ErrModifiedProgramId
+	}
+
+	if acct.Owner() == owner {
+		return nil
+	}
+
+	err := acct.Touch()
+	if err != nil {
+		return err
+	}
+
+	acct.Account.Owner = owner
 	return nil
 }
 
@@ -87,7 +135,7 @@ func (acct *BorrowedAccount) IsWritable() bool {
 }
 
 func (acct *BorrowedAccount) IsOwnedByCurrentProgram() bool {
-	lastProgramKey, err := acct.InstrCtx.LastProgramKey(*acct.TxCtx)
+	lastProgramKey, err := acct.InstrCtx.LastProgramKey(acct.TxCtx)
 	if err != nil {
 		return false
 	}
@@ -104,5 +152,22 @@ func (acct *BorrowedAccount) DataCanBeChanged(features features.Features) error 
 	if !acct.IsOwnedByCurrentProgram() {
 		return ErrExternalAccountDataModified
 	}
+	return nil
+}
+
+const MaxPermittedDataLength = 10 * 1024 * 1024
+
+func (acct *BorrowedAccount) CanDataBeResized(newLen uint64) error {
+	oldLen := len(acct.Data())
+	if newLen != uint64(oldLen) && !acct.IsOwnedByCurrentProgram() {
+		return ErrAccountDataSizeChanged
+	}
+
+	if newLen > MaxPermittedDataLength {
+		return ErrInvalidRealloc
+	}
+
+	// TODO: support 'per-transaction maximum'
+
 	return nil
 }

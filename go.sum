@@ -355,6 +355,8 @@ github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZV
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/russross/blackfriday/v2 v2.0.1/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
+github.com/ryanavella/wide v0.0.0-20190709032049-e93517939246 h1:0SZhYbgJP6nLl9eR1jA52I3ODO/k/a7hfvj2hXYqgbg=
+github.com/ryanavella/wide v0.0.0-20190709032049-e93517939246/go.mod h1:BSx6mpeWyxA4fQ+ZQ54r4tiWVIwNR1BS4s28OWXr9Ns=
 github.com/ryanuber/columnize v0.0.0-20160712163229-9b3edd62028f/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529/go.mod h1:DxrIzT+xaE7yg65j358z/aeFdxmN0P9QXhEzd20vsDc=
 github.com/segmentio/textio v1.2.0 h1:Ug4IkV3kh72juJbG8azoSBlgebIbUUxVNrfFcKHfTSQ=

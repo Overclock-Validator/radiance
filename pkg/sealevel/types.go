@@ -53,6 +53,38 @@ type InstructionAccount struct {
 	IsWritable         bool
 }
 
+const SolAccountInfoSize = 51
+
+type SolAccountInfo struct {
+	KeyAddr      uint64
+	LamportsAddr uint64
+	DataLen      uint64
+	DataAddr     uint64
+	OwnerAddr    uint64
+	RentEpoch    uint64
+	IsSigner     bool
+	IsWritable   bool
+	Executable   bool
+}
+
+type TranslatedAccounts []TranslatedAccount
+
+type TranslatedAccount struct {
+	IndexOfAccount uint64
+	CallerAccount  *CallerAccount
+}
+
+type CallerAccount struct {
+	Lamports          uint64
+	Owner             solana.PublicKey
+	SerializedData    *[]byte
+	SerializedDataLen uint64
+	VmDataAddr        uint64
+	RefToLenInVm      uint64
+	Executable        bool
+	RentEpoch         uint64
+}
+
 func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountMeta.Pubkey)
 	if err != nil {
@@ -218,4 +250,53 @@ func (vectorDescr *VectorDescrC) Marshal() ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (accountInfo *SolAccountInfo) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &accountInfo.KeyAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.LamportsAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.DataLen)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.DataAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.OwnerAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.RentEpoch)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.IsSigner)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.IsWritable)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.Executable)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -3,13 +3,8 @@ package sealevel
 import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
-
-const ConfigProgramAddrStr = "Config1111111111111111111111111111111111111"
-
-var ConfigProgramAddr = base58.MustDecodeFromString(ConfigProgramAddrStr)
 
 type ConfigKey struct {
 	PubKey   solana.PublicKey
@@ -89,50 +84,53 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 	return dedupeConfigKeys
 }
 
-func ConfigProgramExecute(ctx ExecutionCtx) int {
+func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	var err error
 
-	ctx.transactionContext.computeMeter, err = cu.ConsumeComputeMeter(ctx.transactionContext.computeMeter, CUConfigProcessorDefaultComputeUnits)
+	ctx.ComputeMeter, err = cu.ConsumeComputeMeter(ctx.ComputeMeter, CUConfigProcessorDefaultComputeUnits)
 	if err != nil {
-		return InstrErrComputationalBudgetExceeded
+		return ErrComputationalBudgetExceeded
 	}
 
-	instrCtx := ctx.transactionContext.CurrentInstructionCtx()
-	txCtx := ctx.transactionContext
+	txCtx := ctx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
 
 	instrData := instrCtx.Data
 	configKeys, err := unmarshalConfigKeys(instrData, true)
 	if err != nil {
-		return InstrErrInvalidInstructionData
+		return ErrInvalidInstructionData
 	}
 
 	idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
 	if err != nil {
-		return translateErrToInstrErrCode(err)
+		return err
 	}
 	configAccountKey, err := txCtx.KeyOfAccountAtIndex(idx)
 	if err != nil {
-		return translateErrToInstrErrCode(err)
+		return err
 	}
 
-	configAccount, err := instrCtx.BorrowInstructionAccount(ctx.transactionContext, 0)
+	configAccount, err := instrCtx.BorrowInstructionAccount(ctx.TransactionContext, 0)
 	if err != nil {
-		return translateErrToInstrErrCode(err)
+		return err
 	}
 
 	if configAccount.Owner() != ConfigProgramAddr {
-		return InstrErrInvalidAccountOwner
+		return ErrInvalidAccountOwner
 	}
 
 	configAcctData := configAccount.Data()
 	currentConfigKeys, err := unmarshalConfigKeys(configAcctData, false)
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return ErrInvalidAccountData
 	}
 
 	currentSignerKeys := signerOnlyConfigKeys(currentConfigKeys)
 	if len(currentSignerKeys) == 0 && !configAccount.IsSigner() {
-		return InstrErrMissingRequiredSignature
+		return ErrMissingRequiredSignature
 	}
 
 	signerKeys := signerOnlyConfigKeys(configKeys)
@@ -142,13 +140,13 @@ func ConfigProgramExecute(ctx ExecutionCtx) int {
 		if signerKey.PubKey != configAccountKey {
 			signerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, counter)
 			if err != nil {
-				return InstrErrMissingRequiredSignature
+				return ErrMissingRequiredSignature
 			}
 			if !signerAcct.IsSigner() {
-				return InstrErrMissingRequiredSignature
+				return ErrMissingRequiredSignature
 			}
 			if signerKey.PubKey != signerAcct.Key() {
-				return InstrErrMissingRequiredSignature
+				return ErrMissingRequiredSignature
 			}
 
 			if len(currentConfigKeys) != 0 {
@@ -160,32 +158,32 @@ func ConfigProgramExecute(ctx ExecutionCtx) int {
 					}
 				}
 				if !matchFound {
-					return InstrErrMissingRequiredSignature
+					return ErrMissingRequiredSignature
 				}
 			}
 		} else if !configAccount.IsSigner() {
-			return InstrErrMissingRequiredSignature
+			return ErrMissingRequiredSignature
 		}
 	}
 
 	totalNewConfigKeys := len(configKeys)
 	uniqueNewConfigKeys := len(deduplicateConfigKeySigners(configKeys))
 	if totalNewConfigKeys != uniqueNewConfigKeys {
-		return InstrErrInvalidArgument
+		return ErrInvalidArgument
 	}
 
 	if len(currentSignerKeys) > int(counter) {
-		return InstrErrMissingRequiredSignature
+		return ErrMissingRequiredSignature
 	}
 
 	if len(configAccount.Data()) < len(instrData) {
-		return InstrErrInvalidInstructionData
+		return ErrInvalidInstructionData
 	}
 
-	err = configAccount.SetData(ctx.globalCtx.Features, instrData)
+	err = configAccount.SetData(ctx.GlobalCtx.Features, instrData)
 	if err != nil {
-		return translateErrToInstrErrCode(err)
+		return err
 	}
 
-	return InstrSuccess
+	return nil
 }

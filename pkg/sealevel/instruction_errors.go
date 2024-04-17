@@ -17,6 +17,18 @@ var (
 	ErrExecutableDataModified      = errors.New("ErrExecutableDataModified")
 	ErrReadonlyDataModified        = errors.New("ErrReadonlyDataModified")
 	ErrExternalAccountDataModified = errors.New("ErrExternalAccountDataModified")
+	ErrPrivilegeEscalation         = errors.New("ErrPrivilegeEscalation")
+	ErrAccountNotExecutable        = errors.New("ErrAccountNotExecutable")
+	ErrAccountDataSizeChanged      = errors.New("ErrAccountDataSizeChanged")
+	ErrInvalidRealloc              = errors.New("InvalidRealloc")
+	ErrModifiedProgramId           = errors.New("ErrModifiedProgramId")
+	ErrCallDepth                   = errors.New("ErrCallDepth")
+	ErrUnsupportedProgramId        = errors.New("ErrUnsupportedProgramId")
+	ErrReentrancyNotAllowed        = errors.New("ErrReentrancyNotAllowed")
+	ErrArithmeticOverflow          = errors.New("ErrArithmeticOverflow")
+	ErrUnbalancedInstruction       = errors.New("ErrUnbalancedInstruction")
+	ErrAccountDataTooSmall         = errors.New("ErrAccountDataTooSmall")
+	ErrAccountBorrowOutstanding    = errors.New("ErrAccountBorrowOutstanding")
 
 	// precompile errors
 	ErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")

@@ -8,6 +8,8 @@ package safemath
 import (
 	"errors"
 	"math/bits"
+
+	"github.com/ryanavella/wide"
 )
 
 var (
@@ -168,5 +170,14 @@ func CheckedDivU64(a, b uint64) (uint64, error) {
 		return 0, ErrDivByZero
 	}
 	result, _ := bits.Div64(0, a, b)
+	return result, nil
+}
+
+// CheckedAddU128 adds two uint128's together, returning an error in the event of an overflow.
+func CheckedAddU128(a, b wide.Uint128) (wide.Uint128, error) {
+	result := a.Add(b)
+	if result.Cmp(a) == -1 {
+		return wide.NewUint128(0, 0), ErrOverflowAdd
+	}
 	return result, nil
 }

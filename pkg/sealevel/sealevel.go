@@ -12,11 +12,11 @@ func executionCtx(vm sbpf.VM) *ExecutionCtx {
 }
 
 func transactionCtx(vm sbpf.VM) *TransactionCtx {
-	return &vm.VMContext().(*ExecutionCtx).transactionContext
+	return vm.VMContext().(*ExecutionCtx).TransactionContext
 }
 
 func getAccounts(vm sbpf.VM) *accounts.Accounts {
-	return vm.VMContext().(*ExecutionCtx).globalCtx.Accounts
+	return vm.VMContext().(*ExecutionCtx).GlobalCtx.Accounts
 }
 
 func (t *TransactionCtx) newVMOpts(params *Params) *sbpf.VMOpts {
