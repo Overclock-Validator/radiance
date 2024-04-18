@@ -13,7 +13,7 @@ import (
 
 const MaxSigners = 16
 
-func translateInstruction(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
+func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
 	ixData, err := vm.Translate(addr, SolInstructionCStructSize, false)
 	if err != nil {
 		return Instruction{}, err
@@ -654,7 +654,7 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 	}
 
 	// translate instruction
-	ix, err := translateInstruction(vm, instructionAddr, &cuIn)
+	ix, err := translateInstructionC(vm, instructionAddr, &cuIn)
 	if err != nil {
 		return
 	}
