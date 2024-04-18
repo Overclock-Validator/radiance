@@ -47,11 +47,10 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 	}
 
 	reg.Register("sol_invoke_signed_c", SyscallInvokeSignedC)
+	reg.Register("sol_invoke_signed_rust", SyscallInvokeSignedRust)
 
 	// non-"feature gated" syscalls still yet to implement:
 	// 		sol_get_processed_sibling_instruction
-	// 		sol_invoke_signed_c
-	// 		sol_invoke_signed_rust
 
 	// feature gated syscalls yet to implement:
 	//		sol_curve_validate_point (disabled)

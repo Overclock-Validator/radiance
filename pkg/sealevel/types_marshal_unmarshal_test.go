@@ -27,7 +27,7 @@ func TestMarshal_Unmarshal_AccountMeta(t *testing.T) {
 }
 
 func TestMarshal_Unmarshal_SolAccountMeta(t *testing.T) {
-	var accountMeta SolAccountMeta
+	var accountMeta SolAccountMetaC
 	accountMeta.PubkeyAddr = 22222222
 	accountMeta.IsSigner = 1
 	accountMeta.IsWritable = 0
@@ -35,7 +35,7 @@ func TestMarshal_Unmarshal_SolAccountMeta(t *testing.T) {
 	accountMetaBytes, err := accountMeta.Marshal()
 	assert.NoError(t, err)
 
-	var newAccountMeta SolAccountMeta
+	var newAccountMeta SolAccountMetaC
 	reader := bytes.NewReader(accountMetaBytes)
 	err = newAccountMeta.Unmarshal(reader)
 	assert.NoError(t, err)
@@ -46,25 +46,25 @@ func TestMarshal_Unmarshal_SolAccountMeta(t *testing.T) {
 }
 
 func TestMarshal_Unmarshal_SolInstruction(t *testing.T) {
-	var instr SolInstruction
-	instr.accountsAddr = 12345
-	instr.accountsLen = 1337
-	instr.dataAddr = 67890
-	instr.dataLen = 1212
-	instr.programIdAddr = 11111111
+	var instr SolInstructionC
+	instr.AccountsAddr = 12345
+	instr.AccountsLen = 1337
+	instr.DataAddr = 67890
+	instr.DataLen = 1212
+	instr.ProgramIdAddr = 11111111
 
 	instrBytes, err := instr.Marshal()
 	assert.NoError(t, err)
 
-	var newInstr SolInstruction
+	var newInstr SolInstructionC
 	err = newInstr.Unmarshal(bytes.NewReader(instrBytes))
 	assert.NoError(t, err)
 
-	assert.Equal(t, instr.accountsAddr, newInstr.accountsAddr)
-	assert.Equal(t, instr.accountsLen, newInstr.accountsLen)
-	assert.Equal(t, instr.dataAddr, newInstr.dataAddr)
-	assert.Equal(t, instr.dataLen, newInstr.dataLen)
-	assert.Equal(t, instr.programIdAddr, newInstr.programIdAddr)
+	assert.Equal(t, instr.AccountsAddr, newInstr.AccountsAddr)
+	assert.Equal(t, instr.AccountsLen, newInstr.AccountsLen)
+	assert.Equal(t, instr.DataAddr, newInstr.DataAddr)
+	assert.Equal(t, instr.DataLen, newInstr.DataLen)
+	assert.Equal(t, instr.ProgramIdAddr, newInstr.ProgramIdAddr)
 }
 
 func TestMarshal_Unmarshal_VectorDescrC(t *testing.T) {

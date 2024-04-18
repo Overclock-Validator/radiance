@@ -13,14 +13,14 @@ import (
 
 const MaxSigners = 16
 
-func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
-	ixData, err := vm.Translate(addr, SolInstructionStructSize, false)
+func translateInstruction(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
+	ixData, err := vm.Translate(addr, SolInstructionCStructSize, false)
 	if err != nil {
 		return Instruction{}, err
 	}
 
 	byteReader := bytes.NewReader(ixData)
-	var ix SolInstruction
+	var ix SolInstructionC
 
 	err = ix.Unmarshal(byteReader)
 	if err != nil {
@@ -29,23 +29,22 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 
 	// TODO: implement an `check_instruction_size()` upon ix
 
-	pkData, err := vm.Translate(ix.programIdAddr, solana.PublicKeyLength, false)
+	pkData, err := vm.Translate(ix.ProgramIdAddr, solana.PublicKeyLength, false)
 	if err != nil {
 		return Instruction{}, err
 	}
 	programId := solana.PublicKeyFromBytes(pkData)
 
-	accountMetasData, err := vm.Translate(ix.accountsAddr, AccountMetaSize*ix.accountsLen, false)
+	accountMetasData, err := vm.Translate(ix.AccountsAddr, SolAccountMetaCSize*ix.AccountsLen, false)
 	if err != nil {
 		return Instruction{}, err
 	}
 
 	byteReader.Reset(accountMetasData)
 
-	var accountMetas []SolAccountMeta
-
-	for count := uint64(0); count < ix.accountsLen; count++ {
-		var am SolAccountMeta
+	var accountMetas []SolAccountMetaC
+	for count := uint64(0); count < ix.AccountsLen; count++ {
+		var am SolAccountMetaC
 		err = am.Unmarshal(byteReader)
 		if err != nil {
 			return Instruction{}, err
@@ -55,10 +54,13 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 
 	// TODO: do CU accounting for `loosen_cpi_size_restriction` feature gate
 
-	data, err := vm.Translate(ix.dataAddr, ix.dataLen, false)
+	data, err := vm.Translate(ix.DataAddr, ix.DataLen, false)
+	if err != nil {
+		return Instruction{}, err
+	}
 
-	accounts := make([]AccountMeta, ix.accountsLen)
-	for count := uint64(0); count < ix.accountsLen; count++ {
+	accounts := make([]AccountMeta, ix.AccountsLen)
+	for count := uint64(0); count < ix.AccountsLen; count++ {
 		accountMeta := accountMetas[count]
 		if accountMeta.IsSigner > 1 || accountMeta.IsWritable > 1 {
 			return Instruction{}, SyscallErrInvalidArgument
@@ -84,6 +86,47 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 	}
 
 	return Instruction{Accounts: accounts, Data: data, ProgramId: programId}, nil
+}
+
+func translateInstructionRust(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
+	ixData, err := vm.Translate(addr, SolInstructionRustStructSize, false)
+	if err != nil {
+		return Instruction{}, err
+	}
+
+	byteReader := bytes.NewReader(ixData)
+	var ix SolInstructionRust
+
+	err = ix.Unmarshal(byteReader)
+	if err != nil {
+		return Instruction{}, err
+	}
+
+	// TODO: implement an `check_instruction_size()` upon ix
+
+	accountMetasData, err := vm.Translate(ix.Accounts.Addr, AccountMetaSize*ix.Accounts.Len, false)
+	if err != nil {
+		return Instruction{}, err
+	}
+
+	var accountMetas []AccountMeta
+	byteReader.Reset(accountMetasData)
+
+	for i := uint64(0); i < ix.Accounts.Len; i++ {
+		var accountMeta AccountMeta
+		err = accountMeta.Unmarshal(byteReader)
+		if err != nil {
+			return Instruction{}, err
+		}
+		accountMetas = append(accountMetas, accountMeta)
+	}
+
+	data, err := vm.Translate(ix.Data.Addr, ix.Data.Len, false)
+	if err != nil {
+		return Instruction{}, err
+	}
+
+	return Instruction{Accounts: accountMetas, Data: data, ProgramId: ix.Pubkey}, nil
 }
 
 func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, signersSeedsLen uint64) ([]solana.PublicKey, error) {
@@ -170,18 +213,18 @@ func checkAccountInfos(numAccountInfos uint64, execCtx *ExecutionCtx) error {
 	return nil
 }
 
-func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64, execCtx *ExecutionCtx) ([]SolAccountInfo, []solana.PublicKey, error) {
-	size := safemath.SaturatingMulU64(accountInfosLen, SolAccountInfoSize)
+func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64, execCtx *ExecutionCtx) ([]SolAccountInfoC, []solana.PublicKey, error) {
+	size := safemath.SaturatingMulU64(accountInfosLen, SolAccountInfoCSize)
 	accountInfosData, err := vm.Translate(accountInfosAddr, size, false)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var accountInfos []SolAccountInfo
+	var accountInfos []SolAccountInfoC
 	reader := bytes.NewReader(accountInfosData)
 
 	for count := uint64(0); count < accountInfosLen; count++ {
-		var acctInfo SolAccountInfo
+		var acctInfo SolAccountInfoC
 		err = acctInfo.Unmarshal(reader)
 		if err != nil {
 			return nil, nil, err
@@ -207,14 +250,49 @@ func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64
 	return accountInfos, accountInfoKeys, nil
 }
 
+func translateAccountInfosRust(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64, execCtx *ExecutionCtx) ([]SolAccountInfoRust, []solana.PublicKey, error) {
+	size := safemath.SaturatingMulU64(accountInfosLen, SolAccountInfoRustSize)
+	accountInfosData, err := vm.Translate(accountInfosAddr, size, false)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var accountInfos []SolAccountInfoRust
+	reader := bytes.NewReader(accountInfosData)
+
+	for count := uint64(0); count < accountInfosLen; count++ {
+		var acctInfo SolAccountInfoRust
+		err = acctInfo.Unmarshal(reader)
+		if err != nil {
+			return nil, nil, err
+		}
+		accountInfos = append(accountInfos, acctInfo)
+	}
+
+	err = checkAccountInfos(uint64(len(accountInfos)), execCtx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var accountInfoKeys []solana.PublicKey
+	for _, acctInfo := range accountInfos {
+		keyData, err := vm.Translate(acctInfo.PubkeyAddr, 32, false)
+		if err != nil {
+			return nil, nil, err
+		}
+		key := solana.PublicKeyFromBytes(keyData)
+		accountInfoKeys = append(accountInfoKeys, key)
+	}
+
+	return accountInfos, accountInfoKeys, nil
+}
+
 type callerAccountsAndIndex struct {
 	index   uint64
 	account CallerAccount
 }
 
-func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, accountInfo SolAccountInfo) (CallerAccount, error) {
-
-	// TODO: logic for 'direct mapping' feature gate
+func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, accountInfo SolAccountInfoC) (CallerAccount, error) {
 
 	var callerAcct CallerAccount
 
@@ -244,6 +322,67 @@ func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, accountInf
 	callerAcct.SerializedData = &acctData
 	callerAcct.SerializedDataLen = accountInfo.DataLen
 	callerAcct.Executable = accountInfo.Executable
+	callerAcct.RentEpoch = accountInfo.RentEpoch
+
+	return callerAcct, nil
+}
+
+func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, accountInfo SolAccountInfoRust) (CallerAccount, error) {
+
+	var callerAcct CallerAccount
+
+	lamportsBoxData, err := vm.Translate(accountInfo.LamportsBoxAddr, RefCellRustSize, false)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	reader := bytes.NewReader(lamportsBoxData)
+
+	var lamportsBox RefCellRust
+	err = lamportsBox.Unmarshal(reader)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	lamports, err := vm.Read64(lamportsBox.Addr)
+	if err != nil {
+		return callerAcct, err
+	}
+	callerAcct.Lamports = lamports
+
+	ownerAddrBytes, err := vm.Translate(accountInfo.OwnerAddr, solana.PublicKeyLength, false)
+	if err != nil {
+		return callerAcct, err
+	}
+	callerAcct.Owner = solana.PublicKeyFromBytes(ownerAddrBytes)
+
+	dataBoxBytes, err := vm.Translate(accountInfo.DataBoxAddr, RefCellRustSize, false)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	reader.Reset(dataBoxBytes)
+
+	var dataBox RefCellVecRust
+	err = dataBox.Unmarshal(reader)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	cost := int(dataBox.Len / CUCpiBytesPerUnit)
+	execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	data, err := vm.Translate(dataBox.Addr, dataBox.Len, false)
+	if err != nil {
+		return callerAcct, err
+	}
+
+	callerAcct.SerializedData = &data
+	callerAcct.SerializedDataLen = dataBox.Len
+	callerAcct.Executable = accountInfo.Executable == 1
 	callerAcct.RentEpoch = accountInfo.RentEpoch
 
 	return callerAcct, nil
@@ -347,7 +486,7 @@ func updateCallerAccount(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct *CallerAc
 	return nil
 }
 
-func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfo, accountInfosAddr uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoC, accountInfosAddr uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
 	txCtx := execCtx.TransactionContext
 
 	ixCtx, err := txCtx.CurrentInstructionCtx()
@@ -417,6 +556,76 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 	return accounts, nil
 }
 
+func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoRust, accountInfosAddr uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+	txCtx := execCtx.TransactionContext
+
+	ixCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return nil, err
+	}
+
+	accounts := make(TranslatedAccounts, len(instructionAccts)+1)
+
+	idx := len(programIndices) - 1
+	if idx < 0 {
+		return nil, InstrErrMissingAccount
+	}
+	programAcctIdx := programIndices[idx]
+	accounts = append(accounts, TranslatedAccount{IndexOfAccount: programAcctIdx, CallerAccount: nil})
+
+	for instructionAcctIdx, instructionAcct := range instructionAccts {
+		if uint64(instructionAcctIdx) != instructionAcct.IndexInCallee {
+			continue
+		}
+		calleeAcct, err := ixCtx.BorrowInstructionAccount(txCtx, instructionAcct.IndexInCaller)
+		if err != nil {
+			return nil, err
+		}
+
+		accountKey, err := txCtx.KeyOfAccountAtIndex(instructionAcct.IndexInTransaction)
+		if err != nil {
+			return nil, err
+		}
+
+		if calleeAcct.IsExecutable(execCtx.GlobalCtx.Features) {
+			cost := len(calleeAcct.Data()) / CUCpiBytesPerUnit
+			execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+			if err != nil {
+				return nil, InstrErrComputationalBudgetExceeded
+			}
+		} else {
+			var found bool
+			for index, accountInfoKey := range accountInfoKeys {
+				if accountKey == accountInfoKey {
+					accountInfo := accountInfos[index]
+					callerAcct, err := callerAccountFromAccountInfoRust(vm, execCtx, accountInfo)
+					if err != nil {
+						return nil, err
+					}
+					err = updateCalleeAccount(execCtx, callerAcct, calleeAcct)
+					if err != nil {
+						return nil, err
+					}
+
+					var c *CallerAccount
+					if instructionAcct.IsWritable {
+						c = &callerAcct
+					} else {
+						c = nil
+					}
+					accounts = append(accounts, TranslatedAccount{IndexOfAccount: instructionAcct.IndexInCaller, CallerAccount: c})
+					found = true
+				}
+			}
+			if !found {
+				return nil, InstrErrMissingAccount
+			}
+		}
+	}
+
+	return accounts, nil
+}
+
 func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
 
 	accountInfos, accountInfoKeys, err := translateAccountInfosC(vm, accountInfosAddr, accountInfosLen, execCtx)
@@ -427,6 +636,16 @@ func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, progr
 	return translateAndUpdateAccountsC(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated, execCtx)
 }
 
+func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+
+	accountInfos, accountInfoKeys, err := translateAccountInfosRust(vm, accountInfosAddr, accountInfosLen, execCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return translateAndUpdateAccountsRust(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated, execCtx)
+}
+
 // SyscallInvokeSignedCImpl is an implementation of the sol_invoke_signed_c syscall
 func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64, cuIn int) (r0 uint64, cuOut int, err error) {
 	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUInvokeUnits)
@@ -435,7 +654,7 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 	}
 
 	// translate instruction
-	ix, err := translateInstructionC(vm, instructionAddr, &cuIn)
+	ix, err := translateInstruction(vm, instructionAddr, &cuIn)
 	if err != nil {
 		return
 	}
@@ -505,3 +724,82 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 }
 
 var SyscallInvokeSignedC = sbpf.SyscallFunc5(SyscallInvokeSignedCImpl)
+
+// SyscallInvokeSignedRustImpl is an implementation of the sol_invoke_signed_rust syscall
+func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUInvokeUnits)
+	if err != nil {
+		return
+	}
+
+	// translate instruction
+	ix, err := translateInstructionRust(vm, instructionAddr, &cuIn)
+	if err != nil {
+		return
+	}
+
+	txCtx := transactionCtx(vm)
+	execCtx := executionCtx(vm)
+	instructionCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return
+	}
+
+	callerProgramId, err := instructionCtx.LastProgramKey(txCtx)
+
+	// translate signers
+	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsAddr)
+
+	fmt.Printf("got Rust ABI CPI call from programId: %s -----> %s, %d signers\n", callerProgramId, ix.ProgramId, len(signers))
+
+	var isLoaderDeprecated bool
+	lastProgramAcct, err := instructionCtx.BorrowLastProgramAccount(txCtx)
+	if err != nil {
+		r0 = 1
+		return
+	}
+	if lastProgramAcct.Owner() == BpfLoaderDeprecatedAddr {
+		isLoaderDeprecated = true
+	}
+
+	instructionAccts, programIndices, err := execCtx.PrepareInstruction(ix, signers)
+	if err != nil {
+		r0 = 1
+		return
+	}
+
+	err = checkAuthorizedProgram(ix.ProgramId, ix.Data, execCtx)
+	if err != nil {
+		r0 = 1
+		return
+	}
+
+	accounts, err := translateAccountsRust(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated, execCtx)
+	if err != nil {
+		r0 = 1
+		return
+	}
+
+	err = execCtx.ProcessInstruction(ix.Data, instructionAccts, programIndices)
+	if err != nil {
+		r0 = uint64(translateErrToInstrErrCode(err))
+		return
+	}
+
+	for _, acct := range accounts {
+		var calleeAcct *BorrowedAccount
+		calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
+		if err != nil {
+			return
+		}
+		err = updateCallerAccount(vm, execCtx, acct.CallerAccount, calleeAcct)
+		if err != nil {
+			return
+		}
+	}
+
+	r0 = 0
+	return
+}
+
+var SyscallInvokeSignedRust = sbpf.SyscallFunc5(SyscallInvokeSignedRustImpl)

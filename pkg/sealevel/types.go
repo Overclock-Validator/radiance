@@ -8,14 +8,22 @@ import (
 	"github.com/gagliardetto/solana-go"
 )
 
-const SolInstructionStructSize = 40
+const SolInstructionCStructSize = 40
 
-type SolInstruction struct {
-	programIdAddr uint64
-	accountsAddr  uint64
-	accountsLen   uint64
-	dataAddr      uint64
-	dataLen       uint64
+type SolInstructionC struct {
+	ProgramIdAddr uint64
+	AccountsAddr  uint64
+	AccountsLen   uint64
+	DataAddr      uint64
+	DataLen       uint64
+}
+
+const SolInstructionRustStructSize = 80
+
+type SolInstructionRust struct {
+	Accounts VectorDescrRust
+	Data     VectorDescrRust
+	Pubkey   solana.PublicKey
 }
 
 type Instruction struct {
@@ -32,8 +40,18 @@ type AccountMeta struct {
 	IsWritable bool
 }
 
-type SolAccountMeta struct {
+const SolAccountMetaCSize = 10
+
+type SolAccountMetaC struct {
 	PubkeyAddr uint64
+	IsSigner   byte
+	IsWritable byte
+}
+
+const SolAccountMetaRustSize = 34
+
+type SolAccountMetaRust struct {
+	Pubkey     solana.PublicKey
 	IsSigner   byte
 	IsWritable byte
 }
@@ -45,6 +63,12 @@ type VectorDescrC struct {
 	Len  uint64
 }
 
+type VectorDescrRust struct {
+	Addr uint64
+	Cap  uint64
+	Len  uint64
+}
+
 type InstructionAccount struct {
 	IndexInTransaction uint64
 	IndexInCaller      uint64
@@ -53,9 +77,9 @@ type InstructionAccount struct {
 	IsWritable         bool
 }
 
-const SolAccountInfoSize = 51
+const SolAccountInfoCSize = 51
 
-type SolAccountInfo struct {
+type SolAccountInfoC struct {
 	KeyAddr      uint64
 	LamportsAddr uint64
 	DataLen      uint64
@@ -65,6 +89,36 @@ type SolAccountInfo struct {
 	IsSigner     bool
 	IsWritable   bool
 	Executable   bool
+}
+
+const SolAccountInfoRustSize = 43
+
+type SolAccountInfoRust struct {
+	PubkeyAddr      uint64 // points to uchar[32]
+	LamportsBoxAddr uint64 // points to Rc with embedded RefCell which points to u64
+	DataBoxAddr     uint64 // points to Rc with embedded RefCell which contains slice which points to bytes
+	OwnerAddr       uint64 // points to uchar[32]
+	RentEpoch       uint64
+	IsSigner        byte
+	IsWritable      byte
+	Executable      byte
+}
+
+const RefCellRustSize = 32
+
+type RefCellRust struct {
+	Strong uint64
+	Weak   uint64
+	Borrow uint64
+	Addr   uint64
+}
+
+type RefCellVecRust struct {
+	Strong uint64
+	Weak   uint64
+	Borrow uint64
+	Addr   uint64
+	Len    uint64
 }
 
 type TranslatedAccounts []TranslatedAccount
@@ -124,7 +178,7 @@ func (accountMeta *AccountMeta) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (accountMeta *SolAccountMeta) Unmarshal(buf io.Reader) error {
+func (accountMeta *SolAccountMetaC) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountMeta.PubkeyAddr)
 	if err != nil {
 		return err
@@ -142,7 +196,7 @@ func (accountMeta *SolAccountMeta) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
-func (accountMeta *SolAccountMeta) Marshal() ([]byte, error) {
+func (accountMeta *SolAccountMetaC) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	var err error
@@ -163,28 +217,46 @@ func (accountMeta *SolAccountMeta) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
-	err := binary.Read(buf, binary.LittleEndian, &solInstr.programIdAddr)
+func (accountMeta *SolAccountMetaRust) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &accountMeta.Pubkey)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Read(buf, binary.LittleEndian, &solInstr.accountsAddr)
+	err = binary.Read(buf, binary.LittleEndian, &accountMeta.IsSigner)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Read(buf, binary.LittleEndian, &solInstr.accountsLen)
+	err = binary.Read(buf, binary.LittleEndian, &accountMeta.IsWritable)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (solInstr *SolInstructionC) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &solInstr.ProgramIdAddr)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Read(buf, binary.LittleEndian, &solInstr.dataAddr)
+	err = binary.Read(buf, binary.LittleEndian, &solInstr.AccountsAddr)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Read(buf, binary.LittleEndian, &solInstr.dataLen)
+	err = binary.Read(buf, binary.LittleEndian, &solInstr.AccountsLen)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &solInstr.DataAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &solInstr.DataLen)
 	if err != nil {
 		return err
 	}
@@ -192,30 +264,72 @@ func (solInstr *SolInstruction) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
-func (solInstr *SolInstruction) Marshal() ([]byte, error) {
+func (solInstr *SolInstructionC) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
-	err := binary.Write(buf, binary.LittleEndian, solInstr.programIdAddr)
+	err := binary.Write(buf, binary.LittleEndian, solInstr.ProgramIdAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buf, binary.LittleEndian, solInstr.accountsAddr)
+	err = binary.Write(buf, binary.LittleEndian, solInstr.AccountsAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buf, binary.LittleEndian, solInstr.accountsLen)
+	err = binary.Write(buf, binary.LittleEndian, solInstr.AccountsLen)
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buf, binary.LittleEndian, solInstr.dataAddr)
+	err = binary.Write(buf, binary.LittleEndian, solInstr.DataAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buf, binary.LittleEndian, solInstr.dataLen)
+	err = binary.Write(buf, binary.LittleEndian, solInstr.DataLen)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (solInstr *SolInstructionRust) Unmarshal(buf io.Reader) error {
+	err := solInstr.Accounts.Unmarshal(buf)
+	if err != nil {
+		return err
+	}
+
+	err = solInstr.Data.Unmarshal(buf)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &solInstr.Pubkey)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (solInstr *SolInstructionRust) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	accountsBytes, err := solInstr.Accounts.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	err = binary.Write(buf, binary.LittleEndian, accountsBytes)
+
+	dataBytes, err := solInstr.Data.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	err = binary.Write(buf, binary.LittleEndian, dataBytes)
+
+	err = binary.Write(buf, binary.LittleEndian, solInstr.Pubkey)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +366,46 @@ func (vectorDescr *VectorDescrC) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (accountInfo *SolAccountInfo) Unmarshal(buf io.Reader) error {
+func (vectorDescr *VectorDescrRust) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &vectorDescr.Addr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &vectorDescr.Cap)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &vectorDescr.Len)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (vectorDescr *VectorDescrRust) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, binary.LittleEndian, vectorDescr.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, vectorDescr.Cap)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, vectorDescr.Len)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func (accountInfo *SolAccountInfoC) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountInfo.KeyAddr)
 	if err != nil {
 		return err
@@ -294,6 +447,103 @@ func (accountInfo *SolAccountInfo) Unmarshal(buf io.Reader) error {
 	}
 
 	err = binary.Read(buf, binary.LittleEndian, &accountInfo.Executable)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (accountInfo *SolAccountInfoRust) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &accountInfo.PubkeyAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.LamportsBoxAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.DataBoxAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.OwnerAddr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.RentEpoch)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.IsSigner)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.IsWritable)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &accountInfo.Executable)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (refCell *RefCellRust) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &refCell.Strong)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCell.Weak)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCell.Borrow)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCell.Addr)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (refCellVec *RefCellVecRust) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &refCellVec.Strong)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCellVec.Weak)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCellVec.Borrow)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCellVec.Addr)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &refCellVec.Len)
 	if err != nil {
 		return err
 	}
