@@ -5,7 +5,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/math"
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 	"go.firedancer.io/radiance/pkg/solana"
 )
 
@@ -45,9 +44,10 @@ func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte
 	return seedsRet, nil
 }
 
-func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cu.ConsumeLowerBound(cuIn, CUCreateProgramAddressUnits, 0)
-	if cuOut < 0 {
+func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
+	if err != nil {
 		return
 	}
 
@@ -63,7 +63,7 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 
 	newAddress, err := solana.CreateProgramAddressBytes(seeds, programId)
 	if err != nil {
-		return 1, cuOut, nil
+		return 1, nil
 	}
 
 	address, err := vm.Translate(addressAddr, 32, true)
@@ -72,14 +72,15 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 	}
 
 	copy(address, newAddress)
-	return 0, cuOut, nil
+	return 0, nil
 }
 
 var SyscallCreateProgramAddress = sbpf.SyscallFunc4(SyscallCreateProgramAddressImpl)
 
-func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr, bumpSeedAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cu.ConsumeLowerBound(cuIn, CUCreateProgramAddressUnits, 0)
-	if cuOut < 0 {
+func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr, bumpSeedAddr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
+	if err != nil {
 		return
 	}
 
@@ -120,15 +121,15 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 			}
 			bumpSeedOut[0] = bumpSeed
 			copy(addressOut, newAddress)
-			return 0, cuOut, nil
+			return 0, nil
 		}
-		cuOut = cu.ConsumeLowerBound(cuOut, CUCreateProgramAddressUnits, 0)
-		if cuOut < 0 {
+		err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
+		if err != nil {
 			return
 		}
 	}
 
-	return 1, cuOut, nil
+	return 1, nil
 }
 
 var SyscallTryFindProgramAddress = sbpf.SyscallFunc5(SyscallTryFindProgramAddressImpl)

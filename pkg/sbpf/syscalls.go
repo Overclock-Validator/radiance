@@ -28,7 +28,7 @@ func PCHash(addr uint64) uint32 {
 
 // Syscall are callback handles from VM to Go. (work in progress)
 type Syscall interface {
-	Invoke(vm VM, r1, r2, r3, r4, r5 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+	Invoke(vm VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error)
 }
 
 type SyscallRegistry map[uint32]Syscall
@@ -49,38 +49,38 @@ func (s SyscallRegistry) Register(name string, syscall Syscall) (hash uint32, ok
 
 // Convenience Methods
 
-type SyscallFunc0 func(vm VM, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc0 func(vm VM) (r0 uint64, err error)
 
-func (f SyscallFunc0) Invoke(vm VM, _, _, _, _, _ uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, cuIn)
+func (f SyscallFunc0) Invoke(vm VM, _, _, _, _, _ uint64) (r0 uint64, err error) {
+	return f(vm)
 }
 
-type SyscallFunc1 func(vm VM, r1 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc1 func(vm VM, r1 uint64) (r0 uint64, err error)
 
-func (f SyscallFunc1) Invoke(vm VM, r1, _, _, _, _ uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, r1, cuIn)
+func (f SyscallFunc1) Invoke(vm VM, r1, _, _, _, _ uint64) (r0 uint64, err error) {
+	return f(vm, r1)
 }
 
-type SyscallFunc2 func(vm VM, r1, r2 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc2 func(vm VM, r1, r2 uint64) (r0 uint64, err error)
 
-func (f SyscallFunc2) Invoke(vm VM, r1, r2, _, _, _ uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, r1, r2, cuIn)
+func (f SyscallFunc2) Invoke(vm VM, r1, r2, _, _, _ uint64) (r0 uint64, err error) {
+	return f(vm, r1, r2)
 }
 
-type SyscallFunc3 func(vm VM, r1, r2, r3 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc3 func(vm VM, r1, r2, r3 uint64) (r0 uint64, err error)
 
-func (f SyscallFunc3) Invoke(vm VM, r1, r2, r3, _, _ uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, r1, r2, r3, cuIn)
+func (f SyscallFunc3) Invoke(vm VM, r1, r2, r3, _, _ uint64) (r0 uint64, err error) {
+	return f(vm, r1, r2, r3)
 }
 
-type SyscallFunc4 func(vm VM, r1, r2, r3, r4 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc4 func(vm VM, r1, r2, r3, r4 uint64) (r0 uint64, err error)
 
-func (f SyscallFunc4) Invoke(vm VM, r1, r2, r3, r4, _ uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, r1, r2, r3, r4, cuIn)
+func (f SyscallFunc4) Invoke(vm VM, r1, r2, r3, r4, _ uint64) (r0 uint64, err error) {
+	return f(vm, r1, r2, r3, r4)
 }
 
-type SyscallFunc5 func(vm VM, r1, r2, r3, r4, r5 uint64, cuIn int) (r0 uint64, cuOut int, err error)
+type SyscallFunc5 func(vm VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error)
 
-func (f SyscallFunc5) Invoke(vm VM, r1, r2, r3, r4, r5 uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	return f(vm, r1, r2, r3, r4, r5, cuIn)
+func (f SyscallFunc5) Invoke(vm VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error) {
+	return f(vm, r1, r2, r3, r4, r5)
 }

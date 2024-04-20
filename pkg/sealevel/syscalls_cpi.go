@@ -8,12 +8,11 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
 
 const MaxSigners = 16
 
-func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
+func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 	ixData, err := vm.Translate(addr, SolInstructionCStructSize, false)
 	if err != nil {
 		return Instruction{}, err
@@ -88,7 +87,7 @@ func translateInstructionC(vm sbpf.VM, addr uint64, cu *int) (Instruction, error
 	return Instruction{Accounts: accounts, Data: data, ProgramId: programId}, nil
 }
 
-func translateInstructionRust(vm sbpf.VM, addr uint64, cu *int) (Instruction, error) {
+func translateInstructionRust(vm sbpf.VM, addr uint64) (Instruction, error) {
 	ixData, err := vm.Translate(addr, SolInstructionRustStructSize, false)
 	if err != nil {
 		return Instruction{}, err
@@ -308,8 +307,8 @@ func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, accountInf
 	}
 	callerAcct.Owner = solana.PublicKeyFromBytes(accOwner)
 
-	cost := int(accountInfo.DataLen / CUCpiBytesPerUnit)
-	execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+	cost := accountInfo.DataLen / CUCpiBytesPerUnit
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return callerAcct, err
 	}
@@ -369,8 +368,8 @@ func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, account
 		return callerAcct, err
 	}
 
-	cost := int(dataBox.Len / CUCpiBytesPerUnit)
-	execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+	cost := dataBox.Len / CUCpiBytesPerUnit
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return callerAcct, err
 	}
@@ -518,8 +517,8 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 		}
 
 		if calleeAcct.IsExecutable(execCtx.GlobalCtx.Features) {
-			cost := len(calleeAcct.Data()) / CUCpiBytesPerUnit
-			execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+			cost := uint64(len(calleeAcct.Data()) / CUCpiBytesPerUnit)
+			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return nil, InstrErrComputationalBudgetExceeded
 			}
@@ -588,8 +587,8 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 		}
 
 		if calleeAcct.IsExecutable(execCtx.GlobalCtx.Features) {
-			cost := len(calleeAcct.Data()) / CUCpiBytesPerUnit
-			execCtx.ComputeMeter, err = cu.ConsumeComputeMeter(execCtx.ComputeMeter, cost)
+			cost := uint64(len(calleeAcct.Data()) / CUCpiBytesPerUnit)
+			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return nil, InstrErrComputationalBudgetExceeded
 			}
@@ -647,20 +646,20 @@ func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, pr
 }
 
 // SyscallInvokeSignedCImpl is an implementation of the sol_invoke_signed_c syscall
-func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUInvokeUnits)
+func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUInvokeUnits)
 	if err != nil {
 		return
 	}
 
 	// translate instruction
-	ix, err := translateInstructionC(vm, instructionAddr, &cuIn)
+	ix, err := translateInstructionC(vm, instructionAddr)
 	if err != nil {
 		return
 	}
 
 	txCtx := transactionCtx(vm)
-	execCtx := executionCtx(vm)
 	instructionCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
 		return
@@ -726,20 +725,20 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 var SyscallInvokeSignedC = sbpf.SyscallFunc5(SyscallInvokeSignedCImpl)
 
 // SyscallInvokeSignedRustImpl is an implementation of the sol_invoke_signed_rust syscall
-func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUInvokeUnits)
+func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUInvokeUnits)
 	if err != nil {
 		return
 	}
 
 	// translate instruction
-	ix, err := translateInstructionRust(vm, instructionAddr, &cuIn)
+	ix, err := translateInstructionRust(vm, instructionAddr)
 	if err != nil {
 		return
 	}
 
 	txCtx := transactionCtx(vm)
-	execCtx := executionCtx(vm)
 	instructionCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
 		return

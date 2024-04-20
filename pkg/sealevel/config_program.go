@@ -3,7 +3,6 @@ package sealevel
 import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
 
 type ConfigKey struct {
@@ -87,7 +86,7 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	var err error
 
-	ctx.ComputeMeter, err = cu.ConsumeComputeMeter(ctx.ComputeMeter, CUConfigProcessorDefaultComputeUnits)
+	err = ctx.ComputeMeter.Consume(CUConfigProcessorDefaultComputeUnits)
 	if err != nil {
 		return InstrErrComputationalBudgetExceeded
 	}

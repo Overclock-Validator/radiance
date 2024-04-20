@@ -3,6 +3,7 @@ package sealevel
 import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/global"
 	"k8s.io/klog/v2"
 )
@@ -12,7 +13,7 @@ type ExecutionCtx struct {
 	Accounts           accounts.Accounts
 	TransactionContext *TransactionCtx
 	GlobalCtx          global.GlobalCtx
-	ComputeMeter       int
+	ComputeMeter       cu.ComputeMeter
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {

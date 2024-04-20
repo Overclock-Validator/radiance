@@ -8,19 +8,19 @@ import (
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 	"golang.org/x/crypto/sha3"
 )
 
 // SyscallSha256Impl is the implementation for the sol_sha256 syscall
-func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
 	if valsLen > CUSha256MaxSlices {
 		err = SyscallErrTooManySlices
 		return
 	}
 
-	cuOut = cu.ConsumeLowerBound(cuIn, CUSha256BaseCost, 0)
-	if cuOut < 0 {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	if err != nil {
 		return
 	}
 
@@ -59,8 +59,8 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
-			cuOut = cu.ConsumeLowerBound(cuOut, int(cost), 0)
-			if cuOut < 0 {
+			err = execCtx.ComputeMeter.Consume(cost)
+			if err != nil {
 				return
 			}
 			hasher.Write(data)
@@ -73,14 +73,15 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 var SyscallSha256 = sbpf.SyscallFunc3(SyscallSha256Impl)
 
 // SyscallKeccak256Impl is the implementation for the sol_keccak256 syscall
-func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
 	if valsLen > CUSha256MaxSlices {
 		err = SyscallErrTooManySlices
 		return
 	}
 
-	cuOut = cu.ConsumeLowerBound(cuIn, CUSha256BaseCost, 0)
-	if cuOut < 0 {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	if err != nil {
 		return
 	}
 
@@ -119,10 +120,12 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuI
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
-			cuOut = cu.ConsumeLowerBound(cuOut, int(cost), 0)
-			if cuOut < 0 {
+
+			err = execCtx.ComputeMeter.Consume(cost)
+			if err != nil {
 				return
 			}
+
 			hasher.Write(data)
 		}
 	}
@@ -133,14 +136,15 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuI
 var SyscallKeccak256 = sbpf.SyscallFunc3(SyscallKeccak256Impl)
 
 // SyscallBlake3Impl is the implementation for the sol_blake3 syscall
-func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
 	if valsLen > CUSha256MaxSlices {
 		err = SyscallErrTooManySlices
 		return
 	}
 
-	cuOut = cu.ConsumeLowerBound(cuIn, CUSha256BaseCost, 0)
-	if cuOut < 0 {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	if err != nil {
 		return
 	}
 
@@ -179,10 +183,12 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
-			cuOut = cu.ConsumeLowerBound(cuOut, int(cost), 0)
-			if cuOut < 0 {
+
+			err = execCtx.ComputeMeter.Consume(cost)
+			if err != nil {
 				return
 			}
+
 			hasher.Write(data)
 		}
 	}
@@ -193,8 +199,9 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64, cuIn i
 var SyscallBlake3 = sbpf.SyscallFunc3(SyscallBlake3Impl)
 
 // SyscallSecp256k1Recover is an implementation of the sol_secp256k1_recover syscall
-func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUSecP256k1RecoverCost)
+func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSecP256k1RecoverCost)
 	if err != nil {
 		return
 	}

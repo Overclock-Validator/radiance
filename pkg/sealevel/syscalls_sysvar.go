@@ -4,14 +4,14 @@ import (
 	"encoding/binary"
 
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
 
 // SyscallGetClockSysvarImpl is an implementation of the sol_get_clock_sysvar syscall
-func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 
-	cost := CUSyscallBaseCost + SysvarClockStructLen
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	cost := uint64(CUSyscallBaseCost + SysvarClockStructLen)
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}
@@ -36,10 +36,11 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cu
 var SyscallGetClockSysvar = sbpf.SyscallFunc1(SyscallGetClockSysvarImpl)
 
 // SyscallGetRentSysvarImpl is an implementation of the sol_get_rent_sysvar syscall
-func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 
-	cost := CUSyscallBaseCost + SysvarRentStructLen
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	cost := uint64(CUSyscallBaseCost + SysvarRentStructLen)
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}
@@ -62,10 +63,11 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuO
 var SyscallGetRentSysvar = sbpf.SyscallFunc1(SyscallGetRentSysvarImpl)
 
 // SyscallGetEpochScheduleSysvarImpl is an implementation of the sol_get_epoch_schedule_sysvar syscall
-func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 
-	cost := CUSyscallBaseCost + SysvarEpochScheduleStructLen
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	cost := uint64(CUSyscallBaseCost + SysvarEpochScheduleStructLen)
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}
@@ -96,10 +98,11 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 ui
 var SyscallGetEpochScheduleSysvar = sbpf.SyscallFunc1(SyscallGetEpochScheduleSysvarImpl)
 
 // SyscallGetEpochRewardsSysvarImpl is an implementation of the sol_get_epoch_rewards_sysvar syscall
-func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 
-	cost := CUSyscallBaseCost + SysvarEpochRewardsStructLen
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	cost := uint64(CUSyscallBaseCost + SysvarEpochRewardsStructLen)
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}
@@ -122,10 +125,11 @@ func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uin
 var SyscallGetEpochRewardsSysvar = sbpf.SyscallFunc1(SyscallGetEpochRewardsSysvarImpl)
 
 // SyscallGetLastRestartSlotSysvarImpl is an implementation of the sol_get_last_restart_slot_sysvar syscall
-func SyscallGetLastRestartSlotSysvarImpl(vm sbpf.VM, addr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallGetLastRestartSlotSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 
-	cost := CUSyscallBaseCost + SysvarLastRestartSlotStructLen
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, cost)
+	cost := uint64(CUSyscallBaseCost + SysvarLastRestartSlotStructLen)
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}

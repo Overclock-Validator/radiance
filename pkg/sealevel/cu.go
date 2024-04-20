@@ -2,6 +2,8 @@ package sealevel
 
 const (
 	CUSyscallBaseCost                    = 100
+	CULog64Units                         = 100
+	CULogPubkeyUnits                     = 100
 	CUMemOpBaseCost                      = 10
 	CUCpiBytesPerUnit                    = 250
 	CUSha256BaseCost                     = 85
@@ -10,6 +12,5 @@ const (
 	CUSecP256k1RecoverCost               = 25000
 	CUInvokeUnits                        = 1000
 	CUConfigProcessorDefaultComputeUnits = 450
-
-	CUSha256MaxSlices = 20000
+	CUSha256MaxSlices                    = 20000
 )

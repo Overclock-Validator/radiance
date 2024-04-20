@@ -6,6 +6,7 @@ import (
 	"math/bits"
 	"unsafe"
 
+	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/global"
 )
 
@@ -63,7 +64,6 @@ func (ip *Interpreter) Run() (err error) {
 	r[10] = ip.stack.GetFramePtr()
 	// TODO frame pointer
 	pc := int64(ip.entry)
-	cuLeft := int(ip.cuMax)
 
 	// Design notes
 	// - The interpreter is deliberately implemented in a single big loop,
@@ -386,7 +386,7 @@ mainLoop:
 		case OpCall:
 			// TODO use src reg hint
 			if sc, ok := ip.syscalls[ins.Uimm()]; ok {
-				r[0], cuLeft, err = sc.Invoke(ip, r[1], r[2], r[3], r[4], r[5], cuLeft)
+				r[0], err = sc.Invoke(ip, r[1], r[2], r[3], r[4], r[5])
 			} else if target, ok := ip.funcs[ins.Uimm()]; ok {
 				r[10], ok = ip.stack.Push((*[4]uint64)(r[6:10]), pc+1)
 				if !ok {
@@ -418,10 +418,12 @@ mainLoop:
 		default:
 			panic(fmt.Sprintf("unimplemented opcode %#02x", ins.Op()))
 		}
+
 		// Post execute
-		if cuLeft < 0 {
+		if err == cu.ErrComputeExceeded {
 			err = ExcOutOfCU
 		}
+
 		if err != nil {
 			exc := &Exception{
 				PC:     pc,

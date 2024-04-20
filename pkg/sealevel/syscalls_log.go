@@ -8,16 +8,20 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 )
 
-func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	if strlen > (1 << 30) {
-		cuOut = -1
-		return
+func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+
+	var cost uint64
+	if strlen > CUSyscallBaseCost {
+		cost = strlen
+	} else {
+		cost = CUSyscallBaseCost
 	}
-	cuOut = cu.ConsumeLowerBound(cuIn, CUSyscallBaseCost, int(strlen))
-	if cuOut < 0 {
+
+	err = execCtx.ComputeMeter.Consume(cost)
+	if err != nil {
 		return
 	}
 
@@ -25,41 +29,44 @@ func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64, cuIn int) (r0 uint64, cuOut 
 	if err = vm.Read(ptr, buf); err != nil {
 		return
 	}
-	executionCtx(vm).Log.Log("Program log: " + string(buf))
+	execCtx.Log.Log("Program log: " + string(buf))
 	return
 }
 
 var SyscallLog = sbpf.SyscallFunc2(SyscallLogImpl)
 
-func SyscallLog64Impl(vm sbpf.VM, r1, r2, r3, r4, r5 uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cuIn - CUSyscallBaseCost
-	if cuOut < 0 {
+func SyscallLog64Impl(vm sbpf.VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CULog64Units)
+	if err != nil {
 		return
 	}
 
 	msg := fmt.Sprintf("Program log: %#x, %#x, %#x, %#x, %#x\n", r1, r2, r3, r4, r5)
-	executionCtx(vm).Log.Log(msg)
+	execCtx.Log.Log(msg)
 	return
 }
 
 var SyscallLog64 = sbpf.SyscallFunc5(SyscallLog64Impl)
 
-func SyscallLogCUsImpl(vm sbpf.VM, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cuIn - CUSyscallBaseCost
-	if cuOut < 0 {
+func SyscallLogCUsImpl(vm sbpf.VM) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
+	if err != nil {
 		return
 	}
 
-	msg := fmt.Sprintf("Program consumption: %d units remaining", cuIn)
-	executionCtx(vm).Log.Log(msg)
+	msg := fmt.Sprintf("Program consumption: %d units remaining", execCtx.ComputeMeter.Remaining())
+	execCtx.Log.Log(msg)
 	return
 }
 
 var SyscallLogCUs = sbpf.SyscallFunc0(SyscallLogCUsImpl)
 
-func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cuIn - CUSyscallBaseCost
-	if cuOut < 0 {
+func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CULogPubkeyUnits)
+	if err != nil {
 		return
 	}
 
@@ -69,15 +76,16 @@ func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64, cuIn int) (r0 uint64, c
 		return
 	}
 
-	executionCtx(vm).Log.Log("Program log: " + pubkey.String())
+	execCtx.Log.Log("Program log: " + pubkey.String())
 	return
 }
 
 var SyscallLogPubkey = sbpf.SyscallFunc1(SyscallLogPubkeyImpl)
 
-func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut = cuIn - CUSyscallBaseCost
-	if cuOut < 0 {
+func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
+	if err != nil {
 		return
 	}
 
@@ -116,12 +124,12 @@ func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64, cuIn int) (r0 uint6
 		msg += fmt.Sprintf("%s", encodedStr)
 	}
 
-	cuOut, err = cu.ConsumeComputeMeter(cuOut, int(totalSize))
+	err = execCtx.ComputeMeter.Consume(totalSize)
 	if err != nil {
 		return
 	}
 
-	executionCtx(vm).Log.Log("Program log: " + msg)
+	execCtx.Log.Log("Program log: " + msg)
 
 	r0 = 0
 	return

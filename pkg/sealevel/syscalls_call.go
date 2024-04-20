@@ -3,13 +3,13 @@ package sealevel
 import (
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/sbpf/cu"
 	"go.firedancer.io/radiance/pkg/solana"
 )
 
 // SyscallGetStackHeightImpl is an implementation of the sol_get_stack_height syscall
-func SyscallGetStackHeightImpl(vm sbpf.VM, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUSyscallBaseCost)
+func SyscallGetStackHeightImpl(vm sbpf.VM) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
 		return
 	}
@@ -21,8 +21,9 @@ func SyscallGetStackHeightImpl(vm sbpf.VM, cuIn int) (r0 uint64, cuOut int, err 
 var SyscallGetStackHeight = sbpf.SyscallFunc0(SyscallGetStackHeightImpl)
 
 // SyscallGetReturnDataImpl is an implementation of the sol_get_return_data syscall
-func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr uint64, cuIn int) (r0 uint64, cuOut int, err error) {
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, CUSyscallBaseCost)
+func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
+	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
 		return
 	}
@@ -35,7 +36,7 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 
 	if length != 0 {
 		result := safemath.SaturatingAddU64(length, solana.PublicKeyLength) / CUCpiBytesPerUnit
-		cuOut, err = cu.ConsumeComputeMeter(cuOut, int(result))
+		err = execCtx.ComputeMeter.Consume(result)
 		if err != nil {
 			return
 		}
@@ -76,9 +77,10 @@ var SyscallGetReturnData = sbpf.SyscallFunc3(SyscallGetReturnDataImpl)
 const MaxReturnData = 1024
 
 // SyscallSetReturnDataImpl is an implementation of the sol_set_return_data syscall
-func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64, cuIn int) (r0 uint64, cuOut int, err error) {
+func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (r0 uint64, err error) {
+	execCtx := executionCtx(vm)
 	cost := safemath.SaturatingAddU64(length/CUCpiBytesPerUnit, CUSyscallBaseCost)
-	cuOut, err = cu.ConsumeComputeMeter(cuIn, int(cost))
+	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return
 	}
