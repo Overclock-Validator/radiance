@@ -182,8 +182,6 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 
 	err = nativeProgramFn(execCtx)
 
-	// TODO: CU accounting
-
 	// TODO: other error handling
 
 	return err

@@ -6,11 +6,36 @@ import (
 	"fmt"
 
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/base58"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
-const MaxSigners = 16
+const (
+	MaxSigners                = 16
+	MaxCpiInstructionDataLen  = 10 * 1024
+	MaxCpiInstructionAccounts = 255
+	MaxCpiAccountInfos        = 128
+)
+
+func checkInstructionSize(execCtx *ExecutionCtx, numAccounts uint64, dataLen uint64) error {
+	if execCtx.GlobalCtx.Features.IsActive(features.LoosenCpiSizeRestriction) {
+		if dataLen > MaxCpiInstructionDataLen {
+			return SyscallErrMaxInstructionDataLenExceeded
+		}
+
+		if numAccounts > MaxCpiInstructionAccounts {
+			return SyscallErrMaxInstructionAccountsExceeded
+		}
+	} else {
+		size := safemath.SaturatingAddU64(safemath.SaturatingMulU64(numAccounts, AccountMetaSize), dataLen)
+		if size > CUMaxCpiInstructionSize {
+			return SyscallErrInstructionTooLarge
+		}
+	}
+	return nil
+}
 
 func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 	ixData, err := vm.Translate(addr, SolInstructionCStructSize, false)
@@ -26,7 +51,10 @@ func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 		return Instruction{}, err
 	}
 
-	// TODO: implement an `check_instruction_size()` upon ix
+	err = checkInstructionSize(executionCtx(vm), ix.AccountsLen, ix.DataLen)
+	if err != nil {
+		return Instruction{}, err
+	}
 
 	pkData, err := vm.Translate(ix.ProgramIdAddr, solana.PublicKeyLength, false)
 	if err != nil {
@@ -101,7 +129,10 @@ func translateInstructionRust(vm sbpf.VM, addr uint64) (Instruction, error) {
 		return Instruction{}, err
 	}
 
-	// TODO: implement an `check_instruction_size()` upon ix
+	err = checkInstructionSize(executionCtx(vm), ix.Accounts.Len, ix.Data.Len)
+	if err != nil {
+		return Instruction{}, err
+	}
 
 	accountMetasData, err := vm.Translate(ix.Accounts.Addr, AccountMetaSize*ix.Accounts.Len, false)
 	if err != nil {
@@ -202,17 +233,68 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 	return pdas, nil
 }
 
-// TODO: implement
-func checkAuthorizedProgram(programId solana.PublicKey, instructionData []byte, execCtx *ExecutionCtx) error {
+func isBpfLoaderUpgradebleUpgradeInstr(data []byte) bool {
+	return len(data) != 0 && data[0] == 3
+}
+
+func isBpfLoaderUpgradebleSetAuthorityInstr(data []byte) bool {
+	return len(data) != 0 && data[0] == 4
+}
+
+func isBpfLoaderUpgradebleSetAuthorityCheckedInstr(data []byte) bool {
+	return len(data) != 0 && data[0] == 7
+}
+
+func isBpfLoaderUpgradebleCloseInstr(data []byte) bool {
+	return len(data) != 0 && data[0] == 5
+}
+
+func isPrecompile(programId solana.PublicKey) bool {
+	if programId == Secp256kPrecompileAddr || programId == Ed25519PrecompileAddr {
+		return true
+	} else {
+		return false
+	}
+}
+
+func checkAuthorizedProgram(execCtx *ExecutionCtx, programId solana.PublicKey, instructionData []byte) error {
+
+	if programId == base58.MustDecodeFromString("NativeLoader1111111111111111111111111111111") ||
+		programId == solana.BPFLoaderProgramID ||
+		programId == solana.BPFLoaderDeprecatedProgramID ||
+		(programId == solana.BPFLoaderUpgradeableProgramID &&
+			!(isBpfLoaderUpgradebleUpgradeInstr(instructionData) ||
+				isBpfLoaderUpgradebleSetAuthorityInstr(instructionData) ||
+				(execCtx.GlobalCtx.Features.IsActive(features.EnableBpfLoaderSetAuthorityCheckedIx) && isBpfLoaderUpgradebleSetAuthorityCheckedInstr(instructionData)) ||
+				isBpfLoaderUpgradebleCloseInstr(instructionData))) ||
+		isPrecompile(programId) {
+		return SyscallErrProgramNotSupported
+	}
+
 	return nil
 }
 
-// TODO: implement
-func checkAccountInfos(numAccountInfos uint64, execCtx *ExecutionCtx) error {
+func checkAccountInfos(execCtx *ExecutionCtx, numAccountInfos uint64) error {
+	if execCtx.GlobalCtx.Features.IsActive(features.LoosenCpiSizeRestriction) {
+		var maxAccountInfos uint64
+		if execCtx.GlobalCtx.Features.IsActive(features.IncreaseTxAccountLockLimit) {
+			maxAccountInfos = MaxCpiAccountInfos
+		} else {
+			maxAccountInfos = 64
+		}
+		if numAccountInfos > maxAccountInfos {
+			return SyscallErrMaxInstructionAccountInfosExceeded
+		}
+	} else {
+		adjustedLen := safemath.SaturatingMulU64(numAccountInfos, solana.PublicKeyLength)
+		if adjustedLen > CUMaxCpiInstructionSize {
+			return SyscallErrTooManyAccounts
+		}
+	}
 	return nil
 }
 
-func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64, execCtx *ExecutionCtx) ([]SolAccountInfoC, []solana.PublicKey, error) {
+func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64) ([]SolAccountInfoC, []solana.PublicKey, error) {
 	size := safemath.SaturatingMulU64(accountInfosLen, SolAccountInfoCSize)
 	accountInfosData, err := vm.Translate(accountInfosAddr, size, false)
 	if err != nil {
@@ -231,7 +313,7 @@ func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64
 		accountInfos = append(accountInfos, acctInfo)
 	}
 
-	err = checkAccountInfos(uint64(len(accountInfos)), execCtx)
+	err = checkAccountInfos(executionCtx(vm), uint64(len(accountInfos)))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -249,7 +331,7 @@ func translateAccountInfosC(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64
 	return accountInfos, accountInfoKeys, nil
 }
 
-func translateAccountInfosRust(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64, execCtx *ExecutionCtx) ([]SolAccountInfoRust, []solana.PublicKey, error) {
+func translateAccountInfosRust(vm sbpf.VM, accountInfosAddr, accountInfosLen uint64) ([]SolAccountInfoRust, []solana.PublicKey, error) {
 	size := safemath.SaturatingMulU64(accountInfosLen, SolAccountInfoRustSize)
 	accountInfosData, err := vm.Translate(accountInfosAddr, size, false)
 	if err != nil {
@@ -268,7 +350,7 @@ func translateAccountInfosRust(vm sbpf.VM, accountInfosAddr, accountInfosLen uin
 		accountInfos = append(accountInfos, acctInfo)
 	}
 
-	err = checkAccountInfos(uint64(len(accountInfos)), execCtx)
+	err = checkAccountInfos(executionCtx(vm), uint64(len(accountInfos)))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -425,7 +507,7 @@ func updateCalleeAccount(execCtx *ExecutionCtx, callerAccount CallerAccount, cal
 	return err
 }
 
-func updateCallerAccount(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct *CallerAccount, calleeAcct *BorrowedAccount) error {
+func updateCallerAccount(vm sbpf.VM, callerAcct *CallerAccount, calleeAcct *BorrowedAccount) error {
 
 	callerAcct.Lamports = calleeAcct.Lamports()
 	callerAcct.Owner = calleeAcct.Owner()
@@ -485,7 +567,8 @@ func updateCallerAccount(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct *CallerAc
 	return nil
 }
 
-func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoC, accountInfosAddr uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoC, accountInfosAddr uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
+	execCtx := executionCtx(vm)
 	txCtx := execCtx.TransactionContext
 
 	ixCtx, err := txCtx.CurrentInstructionCtx()
@@ -555,7 +638,8 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 	return accounts, nil
 }
 
-func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoRust, accountInfosAddr uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfoKeys []solana.PublicKey, accountInfos []SolAccountInfoRust, accountInfosAddr uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
+	execCtx := executionCtx(vm)
 	txCtx := execCtx.TransactionContext
 
 	ixCtx, err := txCtx.CurrentInstructionCtx()
@@ -625,24 +709,24 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 	return accounts, nil
 }
 
-func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
 
-	accountInfos, accountInfoKeys, err := translateAccountInfosC(vm, accountInfosAddr, accountInfosLen, execCtx)
+	accountInfos, accountInfoKeys, err := translateAccountInfosC(vm, accountInfosAddr, accountInfosLen)
 	if err != nil {
 		return nil, err
 	}
 
-	return translateAndUpdateAccountsC(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated, execCtx)
+	return translateAndUpdateAccountsC(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated)
 }
 
-func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool, execCtx *ExecutionCtx) (TranslatedAccounts, error) {
+func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
 
-	accountInfos, accountInfoKeys, err := translateAccountInfosRust(vm, accountInfosAddr, accountInfosLen, execCtx)
+	accountInfos, accountInfoKeys, err := translateAccountInfosRust(vm, accountInfosAddr, accountInfosLen)
 	if err != nil {
 		return nil, err
 	}
 
-	return translateAndUpdateAccountsRust(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated, execCtx)
+	return translateAndUpdateAccountsRust(vm, instructionAccts, programIndices, accountInfoKeys, accountInfos, accountInfosAddr, isLoaderDeprecated)
 }
 
 // SyscallInvokeSignedCImpl is an implementation of the sol_invoke_signed_c syscall
@@ -688,13 +772,13 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 		return
 	}
 
-	err = checkAuthorizedProgram(ix.ProgramId, ix.Data, execCtx)
+	err = checkAuthorizedProgram(execCtx, ix.ProgramId, ix.Data)
 	if err != nil {
 		r0 = 1
 		return
 	}
 
-	accounts, err := translateAccountsC(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated, execCtx)
+	accounts, err := translateAccountsC(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated)
 	if err != nil {
 		r0 = 1
 		return
@@ -712,7 +796,7 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 		if err != nil {
 			return
 		}
-		err = updateCallerAccount(vm, execCtx, acct.CallerAccount, calleeAcct)
+		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 		if err != nil {
 			return
 		}
@@ -767,13 +851,13 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 		return
 	}
 
-	err = checkAuthorizedProgram(ix.ProgramId, ix.Data, execCtx)
+	err = checkAuthorizedProgram(execCtx, ix.ProgramId, ix.Data)
 	if err != nil {
 		r0 = 1
 		return
 	}
 
-	accounts, err := translateAccountsRust(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated, execCtx)
+	accounts, err := translateAccountsRust(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated)
 	if err != nil {
 		r0 = 1
 		return
@@ -791,7 +875,7 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 		if err != nil {
 			return
 		}
-		err = updateCallerAccount(vm, execCtx, acct.CallerAccount, calleeAcct)
+		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 		if err != nil {
 			return
 		}

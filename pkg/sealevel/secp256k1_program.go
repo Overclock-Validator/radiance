@@ -66,7 +66,6 @@ func (so *SecppSignatureOffsets) UnmarshalWithDecoder(decoder *bin.Decoder) (err
 
 var SECP256K1_N = [8]uint32{0xD0364141, 0xBFD25E8C, 0xAF48A03B, 0xBAAEDCE6, 0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF}
 
-// TODO: validate that this is actually correct
 func isSignatureOverflowing(b32 []byte) bool {
 	bytes := make([]uint32, 8)
 

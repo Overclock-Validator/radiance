@@ -13,4 +13,5 @@ const (
 	CUInvokeUnits                        = 1000
 	CUConfigProcessorDefaultComputeUnits = 450
 	CUSha256MaxSlices                    = 20000
+	CUMaxCpiInstructionSize              = 1280
 )
