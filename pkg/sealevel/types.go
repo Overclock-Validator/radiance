@@ -139,6 +139,13 @@ type CallerAccount struct {
 	RentEpoch         uint64
 }
 
+const ProcessedSiblingInstructionSize = 16
+
+type ProcessedSiblingInstruction struct {
+	DataLen     uint64
+	AccountsLen uint64
+}
+
 func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
 	err := binary.Read(buf, binary.LittleEndian, &accountMeta.Pubkey)
 	if err != nil {
@@ -549,4 +556,33 @@ func (refCellVec *RefCellVecRust) Unmarshal(buf io.Reader) error {
 	}
 
 	return nil
+}
+
+func (psi *ProcessedSiblingInstruction) Unmarshal(buf io.Reader) error {
+	err := binary.Read(buf, binary.LittleEndian, &psi.DataLen)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(buf, binary.LittleEndian, &psi.AccountsLen)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (psi *ProcessedSiblingInstruction) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	err := binary.Write(buf, binary.LittleEndian, psi.DataLen)
+	if err != nil {
+		return nil, err
+	}
+
+	err = binary.Write(buf, binary.LittleEndian, psi.AccountsLen)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

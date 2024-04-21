@@ -240,3 +240,7 @@ func (execCtx *ExecutionCtx) Push() error {
 func (execCtx *ExecutionCtx) Pop() error {
 	return execCtx.TransactionContext.Pop()
 }
+
+func (execCtx *ExecutionCtx) StackHeight() uint64 {
+	return execCtx.TransactionContext.InstructionCtxStackHeight()
+}

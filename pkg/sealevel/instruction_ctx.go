@@ -121,3 +121,7 @@ func (instrCtx *InstructionCtx) IndexOfInstructionAccount(txCtx *TransactionCtx,
 	}
 	return 0, InstrErrMissingAccount
 }
+
+func (instrCtx *InstructionCtx) StackHeight() uint64 {
+	return instrCtx.NestingLevel + 1
+}
