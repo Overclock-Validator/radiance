@@ -12,6 +12,7 @@ const (
 	CUSecP256k1RecoverCost               = 25000
 	CUInvokeUnits                        = 1000
 	CUConfigProcessorDefaultComputeUnits = 450
+	CUSystemProgramDefaultComputeUnits   = 150
 	CUSha256MaxSlices                    = 20000
 	CUMaxCpiInstructionSize              = 1280
 )

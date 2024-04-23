@@ -279,8 +279,12 @@ func (instr *SystemInstrTransferWithSeed) UnmarshalWithDecoder(decoder *bin.Deco
 }
 
 func SystemProgramExecute(execCtx *ExecutionCtx) error {
-	txCtx := execCtx.TransactionContext
+	err := execCtx.ComputeMeter.Consume(CUSystemProgramDefaultComputeUnits)
+	if err != nil {
+		return err
+	}
 
+	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
 		return err
@@ -326,7 +330,23 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process Assign instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
+			if err != nil {
+				return err
+			}
+			addr, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramAssign(execCtx, acct, addr, assign.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeTransfer:
@@ -336,7 +356,11 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process Transfer instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramTransfer(execCtx, 0, 1, transfer.Lamports)
 		}
 
 	case SystemProgramInstrTypeCreateAccountWithSeed:
@@ -390,7 +414,23 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process Allocate instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
+			if err != nil {
+				return err
+			}
+			addr, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramAllocate(execCtx, acct, addr, allocate.Space, signers)
 		}
 
 	case SystemProgramInstrTypeAllocateWithSeed:
