@@ -24,6 +24,7 @@ type TransactionCtx struct {
 	AccountKeys              []solana.PublicKey
 	Accounts                 TransactionAccounts
 	InstructionTraceCapacity uint64
+	AccountsResizeDelta      int64
 }
 
 func (txCtx *TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {

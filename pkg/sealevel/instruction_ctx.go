@@ -125,3 +125,25 @@ func (instrCtx *InstructionCtx) IndexOfInstructionAccount(txCtx *TransactionCtx,
 func (instrCtx *InstructionCtx) StackHeight() uint64 {
 	return instrCtx.NestingLevel + 1
 }
+
+func (instrCtx *InstructionCtx) CheckNumOfInstructionAccounts(num uint64) error {
+	if instrCtx.NumberOfInstructionAccounts() < num {
+		return InstrErrNotEnoughAccountKeys
+	} else {
+		return nil
+	}
+}
+
+func (instrCtx *InstructionCtx) Signers(txCtx *TransactionCtx) ([]solana.PublicKey, error) {
+	var signers []solana.PublicKey
+	for _, ixAcct := range instrCtx.InstructionAccounts {
+		if ixAcct.IsSigner {
+			pk, err := txCtx.KeyOfAccountAtIndex(ixAcct.IndexInTransaction)
+			if err != nil {
+				return nil, err
+			}
+			signers = append(signers, pk)
+		}
+	}
+	return signers, nil
+}

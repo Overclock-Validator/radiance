@@ -171,3 +171,71 @@ func (acct *BorrowedAccount) CanDataBeResized(newLen uint64) error {
 
 	return nil
 }
+
+func (acct *BorrowedAccount) SetDataLength(newLength uint64, f features.Features) error {
+	err := acct.CanDataBeResized(newLength)
+	if err != nil {
+		return err
+	}
+
+	err = acct.DataCanBeChanged(f)
+	if err != nil {
+		return err
+	}
+
+	if uint64(len(acct.Data())) == newLength {
+		return nil
+	}
+
+	acct.Touch()
+	acct.UpdateAccountsResizeDelta(newLength)
+	acct.Account.Resize(newLength, 0)
+
+	return nil
+}
+
+func (acct *BorrowedAccount) UpdateAccountsResizeDelta(newLength uint64) {
+	acct.TxCtx.AccountsResizeDelta = (acct.TxCtx.AccountsResizeDelta + int64(newLength)) - int64(len(acct.Data()))
+}
+
+func (acct *BorrowedAccount) SetLamports(lamports uint64, f features.Features) error {
+	if !acct.IsOwnedByCurrentProgram() && lamports < acct.Lamports() {
+		return InstrErrExternalAccountLamportSpend
+	}
+
+	if !acct.IsWritable() {
+		return InstrErrReadonlyLamportChange
+	}
+
+	if acct.IsExecutable(f) {
+		return InstrErrExecutableLamportChange
+	}
+
+	if acct.Lamports() == lamports {
+		return nil
+	}
+
+	err := acct.Touch()
+	if err != nil {
+		return err
+	}
+
+	acct.Account.SetLamports(lamports)
+	return nil
+}
+
+func (acct *BorrowedAccount) CheckedSubLamports(lamports uint64, f features.Features) error {
+	newLamports, err := safemath.CheckedSubU64(acct.Lamports(), lamports)
+	if err != nil {
+		return InstrErrArithmeticOverflow
+	}
+	return acct.SetLamports(newLamports, f)
+}
+
+func (acct *BorrowedAccount) CheckedAddLamports(lamports uint64, f features.Features) error {
+	newLamports, err := safemath.CheckedAddU64(acct.Lamports(), lamports)
+	if err != nil {
+		return InstrErrArithmeticOverflow
+	}
+	return acct.SetLamports(newLamports, f)
+}

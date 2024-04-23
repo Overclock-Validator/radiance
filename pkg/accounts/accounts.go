@@ -39,6 +39,25 @@ func (a *Account) SetData(data []byte) {
 	a.Data = data
 }
 
+func (a *Account) SetLamports(lamports uint64) {
+	a.Lamports = lamports
+}
+
+func (a *Account) Resize(newLen uint64, fillVal byte) {
+	currentDataLen := uint64(len(a.Data))
+
+	if newLen > currentDataLen { // extend, copy existing data, and fill the new excess with fillVal
+		newData := make([]byte, newLen)
+		copy(newData, a.Data)
+		for count := uint64(newLen - currentDataLen); count < newLen; count++ {
+			newData[count] = fillVal
+		}
+		a.Data = newData
+	} else { // truncate
+		a.Data = a.Data[:newLen]
+	}
+}
+
 func (a *Account) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
 	a.Lamports, err = decoder.ReadUint64(bin.LE)
 	if err != nil {

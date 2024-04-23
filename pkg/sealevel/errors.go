@@ -27,6 +27,9 @@ var (
 	InstrErrUnbalancedInstruction       = errors.New("InstrErrUnbalancedInstruction")
 	InstrErrAccountDataTooSmall         = errors.New("InstrErrAccountDataTooSmall")
 	InstrErrAccountBorrowOutstanding    = errors.New("InstrErrAccountBorrowOutstanding")
+	InstrErrExternalAccountLamportSpend = errors.New("InstrErrExternalAccountLamportSpend")
+	InstrErrReadonlyLamportChange       = errors.New("InstrErrReadonlyLamportChange")
+	InstrErrExecutableLamportChange     = errors.New("InstrErrExecutableLamportChange")
 )
 
 // syscall errors
