@@ -30,6 +30,7 @@ var (
 	SystemProgErrAccountAlreadyInUse        = errors.New("SystemProgErrAccountAlreadyInUse")
 	SystemProgErrInvalidAccountDataLength   = errors.New("SystemProgErrInvalidAccountDataLength")
 	SystemProgErrResultWithNegativeLamports = errors.New("SystemProgErrResultWithNegativeLamports")
+	SystemProgErrAddressWithSeedMismatch    = errors.New("SystemProgErrAddressWithSeedMismatch")
 )
 
 type SystemInstrCreateAccount struct {
@@ -450,7 +451,31 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process AssignWithSeed instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
+			if err != nil {
+				return err
+			}
+			addr, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+			addrWithSeed, err := solana.CreateWithSeed(assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
+			if err != nil {
+				return err
+			}
+			if addr != addrWithSeed {
+				klog.Errorf("Create: address %s does not match derived address %s", addr, addrWithSeed)
+				return SystemProgErrAddressWithSeedMismatch
+			}
+			err = SystemProgramAssign(execCtx, acct, addrWithSeed, assignWithSeed.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeTransferWithSeed:
