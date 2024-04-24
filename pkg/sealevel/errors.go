@@ -30,6 +30,7 @@ var (
 	InstrErrExternalAccountLamportSpend = errors.New("InstrErrExternalAccountLamportSpend")
 	InstrErrReadonlyLamportChange       = errors.New("InstrErrReadonlyLamportChange")
 	InstrErrExecutableLamportChange     = errors.New("InstrErrExecutableLamportChange")
+	InstrErrInsufficientFunds           = errors.New("InstrErrInsufficientFunds")
 )
 
 // syscall errors

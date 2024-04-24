@@ -15,6 +15,8 @@ var SysvarRentAddr = base58.MustDecodeFromString(SysvarRentAddrStr)
 
 const SysvarRentStructLen = 17
 
+const rentAccountStorageOverhead = 128
+
 type SysvarRent struct {
 	LamportsPerUint8Year uint64
 	ExemptionThreshold   float64
@@ -48,6 +50,11 @@ func (sr *SysvarRent) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	if err != nil {
 		panic(err.Error())
 	}
+}
+
+func (sr *SysvarRent) MinimumBalance(dataLen uint64) uint64 {
+	min := float64((rentAccountStorageOverhead+dataLen)*sr.LamportsPerUint8Year) * sr.ExemptionThreshold
+	return uint64(min)
 }
 
 func ReadRentSysvar(accts *accounts.Accounts) SysvarRent {

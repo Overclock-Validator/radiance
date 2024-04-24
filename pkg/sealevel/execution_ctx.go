@@ -9,12 +9,14 @@ import (
 )
 
 type ExecutionCtx struct {
-	Log                Logger
-	Accounts           accounts.Accounts
-	TransactionContext *TransactionCtx
-	GlobalCtx          global.GlobalCtx
-	ComputeMeter       cu.ComputeMeter
-	SysvarCache        SysvarCache
+	Log                  Logger
+	Accounts             accounts.Accounts
+	TransactionContext   *TransactionCtx
+	GlobalCtx            global.GlobalCtx
+	ComputeMeter         cu.ComputeMeter
+	SysvarCache          SysvarCache
+	Blockhash            [32]byte
+	LamportsPerSignature uint64
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {

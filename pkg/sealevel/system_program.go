@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 
 	bin "github.com/gagliardetto/binary"
@@ -89,6 +91,24 @@ type SystemInstrTransferWithSeed struct {
 	Lamports  uint64
 	FromSeed  string
 	FromOwner solana.PublicKey
+}
+
+const (
+	NonceVersionLegacy  = 0
+	NonceVersionCurrent = 1
+)
+
+type NonceStateVersions struct {
+	Type    uint32
+	Legacy  NonceData
+	Current NonceData
+}
+
+type NonceData struct {
+	IsInitialized bool
+	Authority     solana.PublicKey
+	DurableNonce  [32]byte
+	FeeCalculator FeeCalculator
 }
 
 func checkWithinDeserializationLimit(decoder *bin.Decoder) error {
@@ -278,6 +298,131 @@ func (instr *SystemInstrTransferWithSeed) UnmarshalWithDecoder(decoder *bin.Deco
 	copy(instr.FromOwner[:], fromOwner)
 
 	return checkWithinDeserializationLimit(decoder)
+}
+
+func (nonceStateVersions *NonceStateVersions) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+	nonceStateVersions.Type, err = decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	switch nonceStateVersions.Type {
+	case NonceVersionLegacy:
+		{
+			err = nonceStateVersions.Legacy.UnmarshalWithDecoder(decoder)
+		}
+	case NonceVersionCurrent:
+		{
+			err = nonceStateVersions.Current.UnmarshalWithDecoder(decoder)
+		}
+	default:
+		err = InstrErrInvalidAccountData
+	}
+
+	return err
+}
+
+func (nonceStateVersions *NonceStateVersions) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	err := encoder.WriteUint32(nonceStateVersions.Type, bin.LE)
+	if err != nil {
+		return nil, err
+	}
+
+	var nonceDataBytes []byte
+	if nonceStateVersions.Type == NonceVersionLegacy {
+		nonceDataBytes, err = nonceStateVersions.Legacy.Marshal()
+		if err != nil {
+			return nil, err
+		}
+	} else if nonceStateVersions.Type == NonceVersionCurrent {
+		nonceDataBytes, err = nonceStateVersions.Current.Marshal()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		panic("NonceStateVersions in an invalid state - programming error")
+	}
+
+	buf.Write(nonceDataBytes)
+
+	return buf.Bytes(), nil
+}
+
+func (nonceStateVersions *NonceStateVersions) State() NonceData {
+	if nonceStateVersions.Type == NonceVersionLegacy {
+		return nonceStateVersions.Legacy
+	} else if nonceStateVersions.Type == NonceVersionCurrent {
+		return nonceStateVersions.Current
+	} else {
+		panic("NonceStateVersions in an invalid state - programming error")
+	}
+}
+
+func (nonceData *NonceData) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+	isInitialized, err := decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	if isInitialized == 1 {
+		authority, err := decoder.ReadBytes(solana.PublicKeyLength)
+		if err != nil {
+			return err
+		}
+		copy(nonceData.Authority[:], authority)
+
+		durableNonce, err := decoder.ReadBytes(32)
+		if err != nil {
+			return err
+		}
+		copy(nonceData.DurableNonce[:], durableNonce)
+
+		lamportsPerSig, err := decoder.ReadUint64(bin.LE)
+		if err != nil {
+			return err
+		}
+		nonceData.FeeCalculator.LamportsPerSignature = lamportsPerSig
+		nonceData.IsInitialized = true
+	}
+	return nil
+}
+
+func (nonceData *NonceData) Marshal() ([]byte, error) {
+	var err error
+
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	if !nonceData.IsInitialized {
+		err = encoder.WriteUint32(0, bin.LE)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err = encoder.WriteUint32(1, bin.LE)
+		if err != nil {
+			return nil, err
+		}
+		err = encoder.WriteBytes(nonceData.Authority[:], false)
+		if err != nil {
+			return nil, err
+		}
+		err = encoder.WriteBytes(nonceData.DurableNonce[:], false)
+		if err != nil {
+			return nil, err
+		}
+		err = encoder.WriteUint64(nonceData.FeeCalculator.LamportsPerSignature, bin.LE)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
 }
 
 func extractAddress(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) (solana.PublicKey, error) {
@@ -738,12 +883,60 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 	return to.CheckedAddLamports(lamports, f)
 }
 
+func durableNonce(hash [32]byte) [32]byte {
+	prefix := "DURABLE_NONCE"
+	hasher := sha256.New()
+	hasher.Write([]byte(prefix))
+	sum := hasher.Sum(hash[:])
+
+	var result [32]byte
+	copy(result[:], sum)
+	return result
+}
+
 func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, rent *SysvarRent) error {
 	if !acct.IsWritable() {
 		klog.Errorf("Initialize nonce account: account %s must be writable", acct.Key())
 		return InstrErrInvalidArgument
 	}
 
-	// TODO: implement initialize nonce account
-	return nil
+	decoder := bin.NewBinDecoder(acct.Data())
+
+	var nonceStateVersions NonceStateVersions
+	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	switch nonceStateVersions.State().IsInitialized {
+	case false:
+		{
+			minBalance := rent.MinimumBalance(uint64(len(acct.Data())))
+			if acct.Lamports() < minBalance {
+				klog.Errorf("initialize nonce account: insufficient lamports %d, need %d", acct.Lamports(), minBalance)
+				return InstrErrInsufficientFunds
+			}
+
+			durableNonce := durableNonce(execCtx.Blockhash)
+
+			newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
+				Authority:     nonceAuthority,
+				DurableNonce:  durableNonce,
+				FeeCalculator: FeeCalculator{LamportsPerSignature: execCtx.LamportsPerSignature},
+			}}
+
+			newStateBytes, err := newNonceStateVersions.Marshal()
+			if err != nil {
+				return err
+			}
+
+			err = acct.SetData(execCtx.GlobalCtx.Features, newStateBytes)
+		}
+	case true:
+		{
+			klog.Errorf("Initialize nonce account: Account %s state is invalid. Already initialized.", acct.Key())
+			err = InstrErrInvalidAccountData
+		}
+	}
+	return err
 }
