@@ -36,7 +36,13 @@ func (acct *BorrowedAccount) Data() []byte {
 }
 
 func (acct *BorrowedAccount) SetData(features features.Features, data []byte) error {
-	err := acct.DataCanBeChanged(features)
+	newLen := uint64(len(data))
+	err := acct.CanDataBeResized(newLen)
+	if err != nil {
+		return err
+	}
+
+	err = acct.DataCanBeChanged(features)
 	if err != nil {
 		return err
 	}
@@ -45,7 +51,9 @@ func (acct *BorrowedAccount) SetData(features features.Features, data []byte) er
 		return err
 	}
 
+	acct.UpdateAccountsResizeDelta(newLen)
 	acct.Account.SetData(data)
+
 	return nil
 }
 

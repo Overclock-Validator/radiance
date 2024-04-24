@@ -7,6 +7,7 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/safemath"
 	"k8s.io/klog/v2"
 )
 
@@ -34,6 +35,7 @@ var (
 	SystemProgErrResultWithNegativeLamports = errors.New("SystemProgErrResultWithNegativeLamports")
 	SystemProgErrAddressWithSeedMismatch    = errors.New("SystemProgErrAddressWithSeedMismatch")
 	SystemProgErrNonceNoRecentBlockhashes   = errors.New("SystemProgErrNonceNoRecentBlockhashes")
+	SystemProgErrNonceBlockhashNotExpired   = errors.New("SystemProgErrNonceBlockhashNotExpired")
 )
 
 type SystemInstrCreateAccount struct {
@@ -379,6 +381,12 @@ func (nonceStateVersions *NonceStateVersions) Upgrade() {
 	nonceStateVersions.Type = NonceVersionCurrent
 }
 
+func (nonceStateVersions *NonceStateVersions) Deinitialize() {
+	nonceStateVersions.Type = NonceVersionCurrent
+	nonceStateVersions.Current = NonceData{}
+	nonceStateVersions.Legacy = NonceData{}
+}
+
 func (nonceData *NonceData) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	isInitialized, err := decoder.ReadUint32(bin.LE)
@@ -603,7 +611,25 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process WithdrawNonceAccount instruction
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			_, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			// TODO: replace with reading rent sysvar from sysvar cache
+			err = checkAcctForRentSysvar(txCtx, instrCtx, 3)
+			if err != nil {
+				return err
+			}
+			rent := ReadRentSysvar(&execCtx.Accounts)
+
+			err = SystemProgramWithdrawNonceAccount(execCtx, instrCtx, 0, withdrawNonceAcct.Lamports, 1, &rent, signers)
 		}
 	case SystemProgramInstrTypeInitializeNonceAccount:
 		{
@@ -1047,4 +1073,85 @@ func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return err
 	}
 	return acct.SetData(execCtx.GlobalCtx.Features, newStateData)
+}
+
+func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *InstructionCtx, fromAcctIdx uint64, lamports uint64, toAcctIdx uint64, rent *SysvarRent, signers []solana.PublicKey) error {
+	from, err := instrCtx.BorrowInstructionAccount(execCtx.TransactionContext, fromAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if !from.IsWritable() {
+		klog.Errorf("withdraw nonce account: account %s must be writeable", from.Key())
+		return InstrErrInvalidArgument
+	}
+
+	var nonceStateVersions NonceStateVersions
+	decoder := bin.NewBinDecoder(from.Data())
+
+	err = nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	var signer solana.PublicKey
+	state := nonceStateVersions.State()
+
+	if state.IsInitialized {
+		if lamports == from.Lamports() {
+			durableNonce := durableNonce(execCtx.Blockhash)
+			if durableNonce == state.DurableNonce {
+				klog.Errorf("Withdraw nonce account: nonce can only advance once per slot")
+				return SystemProgErrNonceBlockhashNotExpired
+			}
+			nonceStateVersions.Deinitialize()
+		} else {
+			minBalance := rent.MinimumBalance(uint64(len(from.Data())))
+			amount, err := safemath.CheckedAddU64(lamports, minBalance)
+			if err != nil {
+				return InstrErrInsufficientFunds
+			}
+			if amount > from.Lamports() {
+				klog.Errorf("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), amount)
+				return InstrErrInsufficientFunds
+			}
+		}
+		signer = state.Authority
+	} else {
+		if lamports > from.Lamports() {
+			klog.Errorf("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), lamports)
+			return InstrErrInsufficientFunds
+		}
+		signer = from.Key()
+	}
+
+	var isSigner bool
+	for _, s := range signers {
+		if s == signer {
+			isSigner = true
+			break
+		}
+	}
+
+	if !isSigner {
+		klog.Errorf("Withdraw nonce account: Account %s must sign", signer)
+		return InstrErrMissingRequiredSignature
+	}
+
+	err = from.CheckedSubLamports(lamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	to, err := instrCtx.BorrowInstructionAccount(execCtx.TransactionContext, toAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	err = to.CheckedAddLamports(lamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
