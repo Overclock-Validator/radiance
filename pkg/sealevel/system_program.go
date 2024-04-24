@@ -352,11 +352,11 @@ func (nonceStateVersions *NonceStateVersions) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (nonceStateVersions *NonceStateVersions) State() NonceData {
+func (nonceStateVersions *NonceStateVersions) State() *NonceData {
 	if nonceStateVersions.Type == NonceVersionLegacy {
-		return nonceStateVersions.Legacy
+		return &nonceStateVersions.Legacy
 	} else if nonceStateVersions.Type == NonceVersionCurrent {
-		return nonceStateVersions.Current
+		return &nonceStateVersions.Current
 	} else {
 		panic("NonceStateVersions in an invalid state - programming error")
 	}
@@ -423,6 +423,19 @@ func (nonceData *NonceData) Marshal() ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (nonceData *NonceData) IsSignerAuthority(signers []solana.PublicKey) bool {
+	for _, signer := range signers {
+		if nonceData.Authority == signer {
+			return true
+		}
+	}
+	return false
+}
+
+func (nonceData *NonceData) ChangeAuthority(newAuthority solana.PublicKey) {
+	nonceData.Authority = newAuthority
 }
 
 func extractAddress(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) (solana.PublicKey, error) {
@@ -615,7 +628,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process AuthorizeNonceAccount instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramAuthorizeNonceAccount(execCtx, acct, authNonceAcct.Pubkey, signers)
 		}
 
 	case SystemProgramInstrTypeAllocate:
@@ -939,4 +960,37 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		}
 	}
 	return err
+}
+
+func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, signers []solana.PublicKey) error {
+	if !acct.IsWritable() {
+		klog.Errorf("Authorize nonce account: Account %s must be writeable", acct.Key())
+		return InstrErrInvalidArgument
+	}
+
+	decoder := bin.NewBinDecoder(acct.Data())
+
+	var nonceStateVersions NonceStateVersions
+	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	nonceData := nonceStateVersions.State()
+	if !nonceData.IsInitialized {
+		klog.Errorf("Authorize nonce account: account %s state invalid (uninitialized)", acct.Key())
+		return InstrErrInvalidAccountData
+	}
+
+	if !nonceData.IsSignerAuthority(signers) {
+		return InstrErrMissingRequiredSignature
+	}
+
+	nonceData.ChangeAuthority(nonceAuthority)
+
+	newStateData, err := nonceStateVersions.Marshal()
+	if err != nil {
+		return err
+	}
+	return acct.SetData(execCtx.GlobalCtx.Features, newStateData)
 }
