@@ -362,6 +362,23 @@ func (nonceStateVersions *NonceStateVersions) State() *NonceData {
 	}
 }
 
+func (nonceStateVersions *NonceStateVersions) IsUpgradeable() bool {
+	if nonceStateVersions.Type == NonceVersionCurrent || !nonceStateVersions.State().IsInitialized {
+		return false
+	} else {
+		return true
+	}
+}
+
+func (nonceStateVersions *NonceStateVersions) Upgrade() {
+	if !nonceStateVersions.IsUpgradeable() {
+		panic("attempting to mutate non-upgradeable state - programming error")
+	}
+	nonceStateVersions.Current = nonceStateVersions.Legacy
+	nonceStateVersions.Legacy = NonceData{}
+	nonceStateVersions.Type = NonceVersionCurrent
+}
+
 func (nonceData *NonceData) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	isInitialized, err := decoder.ReadUint32(bin.LE)
@@ -719,7 +736,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 
 	case SystemProgramInstrTypeUpgradeNonceAccount:
 		{
-			// TODO: process UpgradeNonceAccount instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramUpgradeNonceAccount(execCtx, acct)
 		}
 
 	default:
@@ -987,6 +1012,35 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 	}
 
 	nonceData.ChangeAuthority(nonceAuthority)
+
+	newStateData, err := nonceStateVersions.Marshal()
+	if err != nil {
+		return err
+	}
+	return acct.SetData(execCtx.GlobalCtx.Features, newStateData)
+}
+
+func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount) error {
+	if acct.Owner() != solana.SystemProgramID {
+		return InstrErrInvalidAccountOwner
+	}
+
+	if !acct.IsWritable() {
+		return InstrErrInvalidArgument
+	}
+
+	decoder := bin.NewBinDecoder(acct.Data())
+	var nonceStateVersions NonceStateVersions
+	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	if !nonceStateVersions.IsUpgradeable() {
+		return InstrErrInvalidArgument
+	}
+
+	nonceStateVersions.Upgrade()
 
 	newStateData, err := nonceStateVersions.Marshal()
 	if err != nil {
