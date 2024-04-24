@@ -459,10 +459,6 @@ func (nonceData *NonceData) IsSignerAuthority(signers []solana.PublicKey) bool {
 	return false
 }
 
-func (nonceData *NonceData) ChangeAuthority(newAuthority solana.PublicKey) {
-	nonceData.Authority = newAuthority
-}
-
 func extractAddress(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) (solana.PublicKey, error) {
 	var addr solana.PublicKey
 	var err error
@@ -601,7 +597,22 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 
 	case SystemProgramInstrTypeAdvanceNonceAccount:
 		{
-			// TODO: process AdvanceNonceAccount instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+			if len(*recentBlockHashes) == 0 {
+				return SystemProgErrNonceNoRecentBlockhashes
+			}
+			err = SystemProgramAdvanceNonceAccount(execCtx, acct, signers)
 		}
 
 	case SystemProgramInstrTypeWithdrawNonceAccount:
@@ -980,37 +991,31 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		return InstrErrInvalidAccountData
 	}
 
-	switch nonceStateVersions.State().IsInitialized {
-	case false:
-		{
-			minBalance := rent.MinimumBalance(uint64(len(acct.Data())))
-			if acct.Lamports() < minBalance {
-				klog.Errorf("initialize nonce account: insufficient lamports %d, need %d", acct.Lamports(), minBalance)
-				return InstrErrInsufficientFunds
-			}
-
-			durableNonce := durableNonce(execCtx.Blockhash)
-
-			newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
-				Authority:     nonceAuthority,
-				DurableNonce:  durableNonce,
-				FeeCalculator: FeeCalculator{LamportsPerSignature: execCtx.LamportsPerSignature},
-			}}
-
-			newStateBytes, err := newNonceStateVersions.Marshal()
-			if err != nil {
-				return err
-			}
-
-			err = acct.SetData(execCtx.GlobalCtx.Features, newStateBytes)
-		}
-	case true:
-		{
-			klog.Errorf("Initialize nonce account: Account %s state is invalid. Already initialized.", acct.Key())
-			err = InstrErrInvalidAccountData
-		}
+	if nonceStateVersions.State().IsInitialized {
+		klog.Errorf("Initialize nonce account: Account %s state is invalid. Already initialized.", acct.Key())
+		return InstrErrInvalidAccountData
 	}
-	return err
+
+	minBalance := rent.MinimumBalance(uint64(len(acct.Data())))
+	if acct.Lamports() < minBalance {
+		klog.Errorf("initialize nonce account: insufficient lamports %d, need %d", acct.Lamports(), minBalance)
+		return InstrErrInsufficientFunds
+	}
+
+	durableNonce := durableNonce(execCtx.Blockhash)
+
+	newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
+		Authority:     nonceAuthority,
+		DurableNonce:  durableNonce,
+		FeeCalculator: FeeCalculator{LamportsPerSignature: execCtx.LamportsPerSignature},
+	}}
+
+	newStateBytes, err := newNonceStateVersions.Marshal()
+	if err != nil {
+		return err
+	}
+
+	return acct.SetData(execCtx.GlobalCtx.Features, newStateBytes)
 }
 
 func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, signers []solana.PublicKey) error {
@@ -1037,7 +1042,7 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 		return InstrErrMissingRequiredSignature
 	}
 
-	nonceData.ChangeAuthority(nonceAuthority)
+	nonceData.Authority = nonceAuthority
 
 	newStateData, err := nonceStateVersions.Marshal()
 	if err != nil {
@@ -1153,5 +1158,57 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 		return err
 	}
 
+	return nil
+}
+
+func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, signers []solana.PublicKey) error {
+	if !acct.IsWritable() {
+		klog.Errorf("Advance nonce account: Account %s must be writeable", acct.Key())
+		return InstrErrInvalidArgument
+	}
+
+	decoder := bin.NewBinDecoder(acct.Data())
+	var nonceStateVersions NonceStateVersions
+
+	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	state := nonceStateVersions.State()
+
+	if !state.IsInitialized {
+		klog.Errorf("Advance nonce account: Account %s state is invalid (uninitialized)", acct.Key())
+		return InstrErrInvalidAccountData
+	}
+
+	var isSigner bool
+	for _, signer := range signers {
+		if signer == state.Authority {
+			isSigner = true
+			break
+		}
+	}
+
+	if !isSigner {
+		klog.Errorf("Advance nonce account: Account %s must be a signer", state.Authority)
+		return InstrErrMissingRequiredSignature
+	}
+
+	nextDurableNonce := durableNonce(execCtx.Blockhash)
+	if state.DurableNonce == nextDurableNonce {
+		klog.Errorf("Advance nonce account: nonce can only advance once per slot")
+		return SystemProgErrNonceBlockhashNotExpired
+	}
+
+	state.DurableNonce = nextDurableNonce
+	state.FeeCalculator.LamportsPerSignature = execCtx.LamportsPerSignature
+
+	newData, err := nonceStateVersions.Marshal()
+	if err != nil {
+		return err
+	}
+
+	acct.SetData(execCtx.GlobalCtx.Features, newData)
 	return nil
 }
