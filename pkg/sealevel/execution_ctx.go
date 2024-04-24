@@ -14,6 +14,7 @@ type ExecutionCtx struct {
 	TransactionContext *TransactionCtx
 	GlobalCtx          global.GlobalCtx
 	ComputeMeter       cu.ComputeMeter
+	SysvarCache        SysvarCache
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {

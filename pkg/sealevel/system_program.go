@@ -31,6 +31,7 @@ var (
 	SystemProgErrInvalidAccountDataLength   = errors.New("SystemProgErrInvalidAccountDataLength")
 	SystemProgErrResultWithNegativeLamports = errors.New("SystemProgErrResultWithNegativeLamports")
 	SystemProgErrAddressWithSeedMismatch    = errors.New("SystemProgErrAddressWithSeedMismatch")
+	SystemProgErrNonceNoRecentBlockhashes   = errors.New("SystemProgErrNonceNoRecentBlockhashes")
 )
 
 type SystemInstrCreateAccount struct {
@@ -279,6 +280,44 @@ func (instr *SystemInstrTransferWithSeed) UnmarshalWithDecoder(decoder *bin.Deco
 	return checkWithinDeserializationLimit(decoder)
 }
 
+func extractAddress(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) (solana.PublicKey, error) {
+	var addr solana.PublicKey
+	var err error
+
+	idx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return addr, err
+	}
+
+	addr, err = txCtx.KeyOfAccountAtIndex(idx)
+	return addr, err
+}
+
+func extractAddressWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64, base solana.PublicKey, seed string, owner solana.PublicKey) (solana.PublicKey, error) {
+	var addr solana.PublicKey
+	var err error
+
+	idx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return addr, err
+	}
+
+	addr, err = txCtx.KeyOfAccountAtIndex(idx)
+	if err != nil {
+		return addr, err
+	}
+
+	addrWithSeed, err := solana.CreateWithSeed(base, seed, owner)
+	if err != nil {
+		return addr, err
+	}
+	if addr != addrWithSeed {
+		klog.Errorf("Create: address %s does not match derived address %s", addr, addrWithSeed)
+		return addr, SystemProgErrAddressWithSeedMismatch
+	}
+	return addr, err
+}
+
 func SystemProgramExecute(execCtx *ExecutionCtx) error {
 	err := execCtx.ComputeMeter.Consume(CUSystemProgramDefaultComputeUnits)
 	if err != nil {
@@ -312,16 +351,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
 				return err
 			}
-
-			toAddr, err := txCtx.KeyOfAccountAtIndex(idx)
+			toAddr, err := extractAddress(txCtx, instrCtx, 1)
 			if err != nil {
 				return err
 			}
-			err = SystemProgramCreateAccount(execCtx, createAccount, toAddr, signers)
+			err = SystemProgramCreateAccount(execCtx, toAddr, createAccount.Lamports, createAccount.Space, createAccount.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeAssign:
@@ -339,11 +377,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
-			if err != nil {
-				return err
-			}
-			addr, err := txCtx.KeyOfAccountAtIndex(idx)
+			addr, err := extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
 			}
@@ -371,7 +405,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process CreateAccountWithSeed instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+			toAddr, err := extractAddressWithSeed(txCtx, instrCtx, 1, createAcctWithSeed.Base, createAcctWithSeed.Seed, createAcctWithSeed.Owner)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramCreateAccount(execCtx, toAddr, createAcctWithSeed.Lamports, createAcctWithSeed.Space, createAcctWithSeed.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeAdvanceNonceAccount:
@@ -395,7 +437,30 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process InitializeNonceAccount instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+			if len(*recentBlockHashes) == 0 {
+				return SystemProgErrNonceNoRecentBlockhashes
+			}
+
+			// TODO: replace with reading rent sysvar from sysvar cache
+			err = checkAcctForRentSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+			rent := ReadRentSysvar(&execCtx.Accounts)
+
+			err = SystemProgramInitializeNonceAccount(execCtx, acct, initNonceAcct.Pubkey, &rent)
 		}
 
 	case SystemProgramInstrTypeAuthorizeNonceAccount:
@@ -423,11 +488,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
-			if err != nil {
-				return err
-			}
-			addr, err := txCtx.KeyOfAccountAtIndex(idx)
+			addr, err := extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
 			}
@@ -441,7 +502,19 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process AllocateWithSeed instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(1)
+			if err != nil {
+				return err
+			}
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			if err != nil {
+				return err
+			}
+			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, allocateWithSeed.Base, allocateWithSeed.Seed, allocateWithSeed.Owner)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramAllocateAndAssign(execCtx, acct, addr, allocateWithSeed.Space, allocateWithSeed.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeAssignWithSeed:
@@ -459,23 +532,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
-			if err != nil {
-				return err
-			}
-			addr, err := txCtx.KeyOfAccountAtIndex(idx)
-			if err != nil {
-				return err
-			}
-			addrWithSeed, err := solana.CreateWithSeed(assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
-			if err != nil {
-				return err
-			}
-			if addr != addrWithSeed {
-				klog.Errorf("Create: address %s does not match derived address %s", addr, addrWithSeed)
-				return SystemProgErrAddressWithSeedMismatch
-			}
-			err = SystemProgramAssign(execCtx, acct, addrWithSeed, assignWithSeed.Owner, signers)
+			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
+			err = SystemProgramAssign(execCtx, acct, addr, assignWithSeed.Owner, signers)
 		}
 
 	case SystemProgramInstrTypeTransferWithSeed:
@@ -485,7 +543,12 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
-			// TODO: process TransferWithSeed instruction
+			err = instrCtx.CheckNumOfInstructionAccounts(3)
+			if err != nil {
+				return err
+			}
+			err = SystemProgramTransferWithSeed(execCtx, 0, 1, transferWithSeed.FromSeed, transferWithSeed.FromOwner, 2, transferWithSeed.Lamports)
+
 		}
 
 	case SystemProgramInstrTypeUpgradeNonceAccount:
@@ -500,14 +563,9 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 	return err
 }
 
-func SystemProgramCreateAccount(execCtx *ExecutionCtx, createAcct SystemInstrCreateAccount, toAddr solana.PublicKey, signers []solana.PublicKey) error {
+func SystemProgramCreateAccount(execCtx *ExecutionCtx, toAddr solana.PublicKey, lamports uint64, space uint64, owner solana.PublicKey, signers []solana.PublicKey) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
-	if err != nil {
-		return err
-	}
-
-	err = instrCtx.CheckNumOfInstructionAccounts(2)
 	if err != nil {
 		return err
 	}
@@ -522,12 +580,12 @@ func SystemProgramCreateAccount(execCtx *ExecutionCtx, createAcct SystemInstrCre
 		return SystemProgErrAccountAlreadyInUse
 	}
 
-	err = SystemProgramAllocateAndAssign(execCtx, toAcct, toAddr, createAcct.Space, createAcct.Owner, signers)
+	err = SystemProgramAllocateAndAssign(execCtx, toAcct, toAddr, space, owner, signers)
 	if err != nil {
 		return err
 	}
 
-	return SystemProgramTransfer(execCtx, 0, 1, createAcct.Lamports)
+	return SystemProgramTransfer(execCtx, 0, 1, lamports)
 }
 
 func SystemProgramAllocateAndAssign(execCtx *ExecutionCtx, toAcct *BorrowedAccount, toAddr solana.PublicKey, space uint64, owner solana.PublicKey, signers []solana.PublicKey) error {
@@ -605,6 +663,45 @@ func SystemProgramTransfer(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx 
 	return transferInternal(execCtx, fromAcctIdx, toAcctIdx, lamports)
 }
 
+func SystemProgramTransferWithSeed(execCtx *ExecutionCtx, fromAcctIdx uint64, fromBaseAcctIdx uint64, fromSeed string, fromOwner solana.PublicKey, toAcctIdx uint64, lamports uint64) error {
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	isSigner, err := instrCtx.IsInstructionAccountSigner(fromBaseAcctIdx)
+	if err != nil {
+		return err
+	}
+	if !isSigner {
+		klog.Errorf("Transfer: from account must sign")
+		return InstrErrMissingRequiredSignature
+	}
+
+	base, err := txCtx.KeyOfAccountAtIndex(fromBaseAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	addrFromSeed, err := solana.CreateWithSeed(base, fromSeed, fromOwner)
+	if err != nil {
+		return err
+	}
+
+	fromAddr, err := extractAddress(txCtx, instrCtx, fromAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if fromAddr != addrFromSeed {
+		klog.Errorf("Transfer: from address %s does not match derived address %s", fromAddr, addrFromSeed)
+		return SystemProgErrAddressWithSeedMismatch
+	}
+
+	return transferInternal(execCtx, fromAcctIdx, toAcctIdx, lamports)
+}
+
 func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint64, lamports uint64) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -639,4 +736,14 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 	}
 
 	return to.CheckedAddLamports(lamports, f)
+}
+
+func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, rent *SysvarRent) error {
+	if !acct.IsWritable() {
+		klog.Errorf("Initialize nonce account: account %s must be writable", acct.Key())
+		return InstrErrInvalidArgument
+	}
+
+	// TODO: implement initialize nonce account
+	return nil
 }

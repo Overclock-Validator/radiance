@@ -100,3 +100,19 @@ func WriteRentSysvar(accts *accounts.Accounts, rent SysvarRent) {
 		panic(err)
 	}
 }
+
+func checkAcctForRentSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return err
+	}
+	pk, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+	if pk == SysvarRentAddr {
+		return nil
+	} else {
+		return InstrErrInvalidArgument
+	}
+}
