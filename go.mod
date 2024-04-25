@@ -44,6 +44,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/edwingeng/deque/v2 v2.1.1
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/gagliardetto/treeout v0.1.4 // indirect

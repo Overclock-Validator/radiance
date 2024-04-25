@@ -1,8 +1,12 @@
 package sealevel
 
 import (
+	"math"
+
+	"github.com/edwingeng/deque/v2"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/safemath"
 )
 
 const (
@@ -69,7 +73,7 @@ type VoteLockout struct {
 }
 
 type VoteInstrUpdateVoteState struct {
-	Lockouts  []VoteLockout
+	Lockouts  deque.Deque[VoteLockout]
 	Root      *uint64
 	Hash      [32]byte
 	Timestamp *uint64
@@ -98,16 +102,20 @@ type LockoutOffset struct {
 	ConfirmationCount byte
 }
 
-type VoteInstrCompactUpdateVoteState struct {
+type CompactUpdateVoteState struct {
 	Root           uint64
 	LockoutOffsets []LockoutOffset
 	Hash           [32]byte
 	Timestamp      *uint64
 }
 
+type VoteInstrCompactUpdateVoteState struct {
+	UpdateVoteState VoteInstrUpdateVoteState
+}
+
 type VoteInstrCompactUpdateVoteStateSwitch struct {
-	CompactUpdateVoteState VoteInstrCompactUpdateVoteState
-	Hash                   [32]byte
+	UpdateVoteState VoteInstrUpdateVoteState
+	Hash            [32]byte
 }
 
 func (voteInit *VoteInstrVoteInit) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -246,7 +254,7 @@ func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *b
 		if err != nil {
 			return err
 		}
-		updateVoteState.Lockouts = append(updateVoteState.Lockouts, lockout)
+		updateVoteState.Lockouts.PushBack(lockout)
 	}
 
 	hasRoot, err := decoder.ReadBool()
@@ -295,6 +303,62 @@ func (uvss *VoteInstrUpdateVoteStateSwitch) UnmarshalWithDecoder(decoder *bin.De
 		return err
 	}
 	copy(uvss.Hash[:], hash)
+	return nil
+}
+
+func (updateVoteState *VoteInstrUpdateVoteState) BuildFromCompactUpdateVoteState(compactUpdateVoteState *CompactUpdateVoteState) error {
+	if compactUpdateVoteState.Root != math.MaxUint64 {
+		updateVoteState.Root = &compactUpdateVoteState.Root
+	}
+
+	lockoutsLen := uint64(len(compactUpdateVoteState.LockoutOffsets))
+	if lockoutsLen > 1228 {
+		return InstrErrInvalidInstructionData
+	}
+
+	var slot uint64
+	if updateVoteState.Root != nil {
+		slot = *updateVoteState.Root
+	}
+
+	for _, lockoutOffset := range compactUpdateVoteState.LockoutOffsets {
+		nextSlot, err := safemath.CheckedAddU64(slot, lockoutOffset.Offset)
+		if err != nil {
+			return InstrErrInvalidInstructionData
+		}
+		updateVoteState.Lockouts.PushBack(VoteLockout{Slot: nextSlot, ConfirmationCount: uint32(lockoutOffset.ConfirmationCount)})
+	}
+
+	updateVoteState.Hash = compactUpdateVoteState.Hash
+	updateVoteState.Timestamp = compactUpdateVoteState.Timestamp
+
+	return nil
+}
+
+func (compactUpdateVoteState *VoteInstrCompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var compactUpdate CompactUpdateVoteState
+	err := compactUpdate.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return err
+	}
+	return compactUpdateVoteState.UpdateVoteState.BuildFromCompactUpdateVoteState(&compactUpdate)
+}
+
+func (compactUpdateVoteState *VoteInstrCompactUpdateVoteStateSwitch) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var compactUpdate CompactUpdateVoteState
+	err := compactUpdate.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return err
+	}
+	err = compactUpdateVoteState.UpdateVoteState.BuildFromCompactUpdateVoteState(&compactUpdate)
+	if err != nil {
+		return err
+	}
+	hash, err := decoder.ReadBytes(32)
+	if err != nil {
+		return err
+	}
+	copy(compactUpdate.Hash[:], hash)
 	return nil
 }
 
@@ -353,7 +417,7 @@ func (lockoutOffset *LockoutOffset) UnmarshalWithDecoder(decoder *bin.Decoder) e
 	return err
 }
 
-func (cuvs *VoteInstrCompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+func (cuvs *CompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	cuvs.Root, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
@@ -388,20 +452,6 @@ func (cuvs *VoteInstrCompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.D
 		}
 		cuvs.Timestamp = &timestamp
 	}
-	return nil
-}
-
-func (cuvss *VoteInstrCompactUpdateVoteStateSwitch) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	err := cuvss.CompactUpdateVoteState.UnmarshalWithDecoder(decoder)
-	if err != nil {
-		return err
-	}
-
-	hash, err := decoder.ReadBytes(32)
-	if err != nil {
-		return err
-	}
-	copy(cuvss.Hash[:], hash)
 	return nil
 }
 
