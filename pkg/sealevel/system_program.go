@@ -354,6 +354,18 @@ func (nonceStateVersions *NonceStateVersions) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func unmarshalNonceStateVersions(data []byte) (*NonceStateVersions, error) {
+	decoder := bin.NewBinDecoder(data)
+
+	nonceStateVersions := new(NonceStateVersions)
+	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	return nonceStateVersions, nil
+}
+
 func (nonceStateVersions *NonceStateVersions) State() *NonceData {
 	if nonceStateVersions.Type == NonceVersionLegacy {
 		return &nonceStateVersions.Legacy
@@ -983,12 +995,9 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		return InstrErrInvalidArgument
 	}
 
-	decoder := bin.NewBinDecoder(acct.Data())
-
-	var nonceStateVersions NonceStateVersions
-	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	if nonceStateVersions.State().IsInitialized {
@@ -1024,12 +1033,9 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 		return InstrErrInvalidArgument
 	}
 
-	decoder := bin.NewBinDecoder(acct.Data())
-
-	var nonceStateVersions NonceStateVersions
-	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	nonceData := nonceStateVersions.State()
@@ -1060,11 +1066,9 @@ func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrInvalidArgument
 	}
 
-	decoder := bin.NewBinDecoder(acct.Data())
-	var nonceStateVersions NonceStateVersions
-	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	if !nonceStateVersions.IsUpgradeable() {
@@ -1091,12 +1095,9 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 		return InstrErrInvalidArgument
 	}
 
-	var nonceStateVersions NonceStateVersions
-	decoder := bin.NewBinDecoder(from.Data())
-
-	err = nonceStateVersions.UnmarshalWithDecoder(decoder)
+	nonceStateVersions, err := unmarshalNonceStateVersions(from.Data())
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	var signer solana.PublicKey
@@ -1167,12 +1168,9 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrInvalidArgument
 	}
 
-	decoder := bin.NewBinDecoder(acct.Data())
-	var nonceStateVersions NonceStateVersions
-
-	err := nonceStateVersions.UnmarshalWithDecoder(decoder)
+	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	state := nonceStateVersions.State()
@@ -1182,15 +1180,7 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrInvalidAccountData
 	}
 
-	var isSigner bool
-	for _, signer := range signers {
-		if signer == state.Authority {
-			isSigner = true
-			break
-		}
-	}
-
-	if !isSigner {
+	if !state.IsSignerAuthority(signers) {
 		klog.Errorf("Advance nonce account: Account %s must be a signer", state.Authority)
 		return InstrErrMissingRequiredSignature
 	}
