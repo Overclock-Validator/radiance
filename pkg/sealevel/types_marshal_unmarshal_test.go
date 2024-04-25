@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"testing"
 
+	bin "github.com/gagliardetto/binary"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestMarshal_Unmarshal_AccountMeta(t *testing.T) {
@@ -45,6 +47,10 @@ func TestMarshal_Unmarshal_SolAccountMeta(t *testing.T) {
 	assert.Equal(t, accountMeta.IsWritable, newAccountMeta.IsWritable)
 }
 
+type Suite struct {
+	suite.Suite
+}
+
 func TestMarshal_Unmarshal_SolInstruction(t *testing.T) {
 	var instr SolInstructionC
 	instr.AccountsAddr = 12345
@@ -58,6 +64,84 @@ func TestMarshal_Unmarshal_SolInstruction(t *testing.T) {
 
 	var newInstr SolInstructionC
 	err = newInstr.Unmarshal(bytes.NewReader(instrBytes))
+	assert.NoError(t, err)
+
+	assert.Equal(t, instr.AccountsAddr, newInstr.AccountsAddr)
+	assert.Equal(t, instr.AccountsLen, newInstr.AccountsLen)
+	assert.Equal(t, instr.DataAddr, newInstr.DataAddr)
+	assert.Equal(t, instr.DataLen, newInstr.DataLen)
+	assert.Equal(t, instr.ProgramIdAddr, newInstr.ProgramIdAddr)
+}
+
+func Benchmark_Marshal_Unmarshal_SolInstruction(t *testing.B) {
+
+	s := new(Suite)
+	s.SetT(&testing.T{})
+	t.ResetTimer()
+
+	var instr SolInstructionC
+	instr.AccountsAddr = 12345
+	instr.AccountsLen = 1337
+	instr.DataAddr = 67890
+	instr.DataLen = 1212
+	instr.ProgramIdAddr = 11111111
+
+	instrBytes, err := instr.Marshal()
+	assert.NoError(t, err)
+
+	var newInstr SolInstructionC
+
+	t.StartTimer()
+
+	for i := 0; i < 10000000; i++ {
+		err = newInstr.Unmarshal(bytes.NewReader(instrBytes))
+		assert.NoError(t, err)
+	}
+
+	t.StopTimer()
+
+	assert.NoError(t, err)
+
+	assert.Equal(t, instr.AccountsAddr, newInstr.AccountsAddr)
+	assert.Equal(t, instr.AccountsLen, newInstr.AccountsLen)
+	assert.Equal(t, instr.DataAddr, newInstr.DataAddr)
+	assert.Equal(t, instr.DataLen, newInstr.DataLen)
+	assert.Equal(t, instr.ProgramIdAddr, newInstr.ProgramIdAddr)
+}
+
+func ParseBincode[T any](data []byte) (*T, error) {
+	dec := bin.NewBinDecoder(data)
+	val := new(T)
+	err := dec.Decode(val)
+	return val, err
+}
+
+func Benchmark_Marshal_Unmarshal_SolInstruction_Reflection(t *testing.B) {
+
+	s := new(Suite)
+	s.SetT(&testing.T{})
+	t.ResetTimer()
+
+	var instr SolInstructionC
+	instr.AccountsAddr = 12345
+	instr.AccountsLen = 1337
+	instr.DataAddr = 67890
+	instr.DataLen = 1212
+	instr.ProgramIdAddr = 11111111
+
+	instrBytes, err := instr.Marshal()
+	assert.NoError(t, err)
+
+	var newInstr *SolInstructionC
+	t.StartTimer()
+
+	for i := 0; i < 10000000; i++ {
+		newInstr, err = ParseBincode[SolInstructionC](instrBytes)
+		assert.NoError(t, err)
+	}
+
+	t.StopTimer()
+
 	assert.NoError(t, err)
 
 	assert.Equal(t, instr.AccountsAddr, newInstr.AccountsAddr)
