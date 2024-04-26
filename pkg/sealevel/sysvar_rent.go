@@ -57,6 +57,10 @@ func (sr *SysvarRent) MinimumBalance(dataLen uint64) uint64 {
 	return uint64(min)
 }
 
+func (sr *SysvarRent) IsExempt(balance uint64, dataLen uint64) bool {
+	return balance >= sr.MinimumBalance(dataLen)
+}
+
 func ReadRentSysvar(accts *accounts.Accounts) SysvarRent {
 	rentAcct, err := (*accts).GetAccount(&SysvarRentAddr)
 	if err != nil {

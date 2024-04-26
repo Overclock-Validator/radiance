@@ -1111,6 +1111,11 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 				return SystemProgErrNonceBlockhashNotExpired
 			}
 			nonceStateVersions.Deinitialize()
+			deinitNonceStateVersionsData, err := nonceStateVersions.Marshal()
+			if err != nil {
+				return err
+			}
+			from.SetData(execCtx.GlobalCtx.Features, deinitNonceStateVersionsData)
 		} else {
 			minBalance := rent.MinimumBalance(uint64(len(from.Data())))
 			amount, err := safemath.CheckedAddU64(lamports, minBalance)

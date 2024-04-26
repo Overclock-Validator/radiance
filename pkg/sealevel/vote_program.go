@@ -6,6 +6,7 @@ import (
 	"github.com/edwingeng/deque/v2"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 )
 
@@ -469,8 +470,6 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 	// TODO: implement instruction handling
 
-	//data := instrCtx.Data
-
 	me, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
 		return err
@@ -480,10 +479,56 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidAccountOwner
 	}
 
-	/*signers, err := instrCtx.Signers(txCtx)
+	signers, err := instrCtx.Signers(txCtx)
 	if err != nil {
 		return err
-	}*/
+	}
+
+	decoder := bin.NewBinDecoder(instrCtx.Data)
+
+	instructionType, err := decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return InstrErrInvalidInstructionData
+	}
+
+	switch instructionType {
+	case VoteProgramInstrTypeInitializeAccount:
+		{
+			var voteInit VoteInstrVoteInit
+			err = voteInit.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			// TODO: switch to using a sysvar cache
+			rent := ReadRentSysvar(&execCtx.Accounts)
+			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			if !rent.IsExempt(me.Lamports(), uint64(len(me.Data()))) {
+				return InstrErrInsufficientFunds
+			}
+
+			// TODO: switch to using a sysvar cache
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramInitializeAccount(me, voteInit, signers, clock, execCtx.GlobalCtx.Features)
+		}
+	}
+
+	return err
+}
+
+func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteInstrVoteInit, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
+	if uint64(len(voteAccount.Data())) != sizeOfVersionedVoteState(f) {
+		return InstrErrInvalidAccountData
+	}
 
 	return nil
 }

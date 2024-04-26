@@ -124,3 +124,19 @@ func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 		panic(err)
 	}
 }
+
+func checkAcctForClockSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return err
+	}
+	pk, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+	if pk == SysvarClockAddr {
+		return nil
+	} else {
+		return InstrErrInvalidArgument
+	}
+}
