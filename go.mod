@@ -83,6 +83,7 @@ require (
 	github.com/ryanavella/wide v0.0.0-20190709032049-e93517939246
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091 // indirect
+	github.com/tidwall/btree v1.7.0
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	github.com/zeebo/blake3 v0.2.3
 	go.mongodb.org/mongo-driver v1.11.2 // indirect

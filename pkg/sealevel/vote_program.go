@@ -240,6 +240,18 @@ func (lockout *VoteLockout) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	return err
 }
 
+func (lockout *VoteLockout) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint64(lockout.Slot, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(lockout.ConfirmationCount, bin.LE)
+	return err
+}
+
 func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	numLockouts, err := decoder.ReadUint64(bin.LE)
 	if err != nil {
@@ -525,9 +537,32 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	return err
 }
 
+func verifySigner(authorized solana.PublicKey, signers []solana.PublicKey) error {
+	for _, signer := range signers {
+		if signer == authorized {
+			return nil
+		}
+	}
+	return InstrErrMissingRequiredSignature
+}
+
 func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteInstrVoteInit, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
 	if uint64(len(voteAccount.Data())) != sizeOfVersionedVoteState(f) {
 		return InstrErrInvalidAccountData
+	}
+
+	versionedVoteState, err := unmarshalVersionedVoteState(voteAccount.Data())
+	if err != nil {
+		return err
+	}
+
+	if versionedVoteState.IsInitialized() {
+		return InstrErrAccountAlreadyInitialized
+	}
+
+	err = verifySigner(voteInit.NodePubkey, signers)
+	if err != nil {
+		return err
 	}
 
 	return nil
