@@ -89,7 +89,7 @@ type VoteState1_14_11 struct {
 	NodePubkey           solana.PublicKey
 	AuthorizedWithdrawer solana.PublicKey
 	Commission           byte
-	Votes                deque.Deque[VoteLockout]
+	Votes                *deque.Deque[VoteLockout]
 	RootSlot             *uint64
 	AuthorizedVoters     AuthorizedVoters
 	PriorVoters          PriorVoters
@@ -97,11 +97,11 @@ type VoteState1_14_11 struct {
 	LastTimestamp        BlockTimestamp
 }
 
-type VoteStateCurrent struct {
+type VoteState struct {
 	NodePubkey           solana.PublicKey
 	AuthorizedWithdrawer solana.PublicKey
 	Commission           byte
-	Votes                deque.Deque[LandedVote]
+	Votes                *deque.Deque[LandedVote]
 	RootSlot             *uint64
 	AuthorizedVoters     AuthorizedVoters
 	PriorVoters          PriorVoters
@@ -113,7 +113,7 @@ type VoteStateVersions struct {
 	Type     uint32
 	V0_23_5  VoteState0_23_5
 	V1_14_11 VoteState1_14_11
-	Current  VoteStateCurrent
+	Current  VoteState
 }
 
 func (priorVoter *PriorVoter) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -521,6 +521,29 @@ func (authVoters *AuthorizedVoters) MarshalWithEncoder(encoder *bin.Encoder) err
 	return nil
 }
 
+func (lockout *VoteLockout) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+	lockout.Slot, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	lockout.ConfirmationCount, err = decoder.ReadUint32(bin.LE)
+	return err
+}
+
+func (lockout *VoteLockout) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint64(lockout.Slot, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(lockout.ConfirmationCount, bin.LE)
+	return err
+}
+
 func (voteState *VoteState1_14_11) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	nodePk, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
@@ -657,7 +680,7 @@ func (voteState *VoteState1_14_11) MarshalWithEncoder(encoder *bin.Encoder) erro
 	return err
 }
 
-func (voteState *VoteStateCurrent) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+func (voteState *VoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	nodePk, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
 		return err
@@ -730,7 +753,7 @@ func (voteState *VoteStateCurrent) UnmarshalWithDecoder(decoder *bin.Decoder) er
 	return err
 }
 
-func (voteState *VoteStateCurrent) MarshalWithEncoder(encoder *bin.Encoder) error {
+func (voteState *VoteState) MarshalWithEncoder(encoder *bin.Encoder) error {
 	err := encoder.WriteBytes(voteState.NodePubkey[:], false)
 	if err != nil {
 		return err
@@ -887,5 +910,80 @@ func marshalVersionedVoteState(voteStateVersions *VoteStateVersions) ([]byte, er
 		return nil, err
 	} else {
 		return buffer.Bytes(), nil
+	}
+}
+
+func newVoteState1_14_11FromCurrent(voteState *VoteState) *VoteState1_14_11 {
+	newVoteState := new(VoteState1_14_11)
+	newVoteState.NodePubkey = voteState.NodePubkey
+	newVoteState.AuthorizedWithdrawer = voteState.AuthorizedWithdrawer
+	newVoteState.Commission = voteState.Commission
+	newVoteState.RootSlot = voteState.RootSlot
+	newVoteState.AuthorizedVoters = voteState.AuthorizedVoters
+	newVoteState.PriorVoters = voteState.PriorVoters
+	newVoteState.EpochCredits = voteState.EpochCredits
+	newVoteState.LastTimestamp = voteState.LastTimestamp
+
+	voteState.Votes.Range(func(i int, landedVote LandedVote) bool {
+		newVoteState.Votes.PushBack(landedVote.Lockout)
+		return true
+	})
+
+	return newVoteState
+}
+
+func newVoteStateFromVoteInit(voteInit VoteInstrVoteInit, clock SysvarClock) *VoteState {
+	voteState := new(VoteState)
+	voteState.NodePubkey = voteInit.NodePubkey
+
+	var authVoters AuthorizedVoters
+	authVoters.AuthorizedVoters.Set(AuthorizedVoter{Epoch: clock.Epoch, Pubkey: voteInit.AuthorizedVoter})
+	voteState.AuthorizedVoters = authVoters
+
+	voteState.AuthorizedWithdrawer = voteInit.AuthorizedWithdrawer
+	voteState.Commission = voteInit.Commission
+	return voteState
+}
+
+func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features.Features) error {
+	// "Only if vote_state_add_vote_latency feature is enabled should the new version of vote state be stored"
+	if f.IsActive(features.VoteStateAddVoteLatency) {
+		// "If the account is not large enough to store the vote state, then attempt a realloc to make it large enough.
+		// The realloc can only proceed if the vote account has balance sufficient for rent exemption at the new size."
+		if len(acct.Data()) < VoteStateV3Size &&
+			(!acct.IsRentExemptAtDataLength(VoteStateV3Size) || acct.SetDataLength(VoteStateV3Size, f) != nil) {
+			// "Account cannot be resized to the size of a vote state as it will not be rent exempt, or failed to be
+			// resized for other reasons.  So store the V1_14_11 version."
+			newVoteState := newVoteState1_14_11FromCurrent(voteState)
+			newVoteStateVersioned := new(VoteStateVersions)
+			newVoteStateVersioned.V1_14_11 = *newVoteState
+			voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
+			if err != nil {
+				return err
+			}
+			err = acct.SetState(f, voteStateBytes)
+			return err
+		} else {
+			// "Vote account is large enough to store the newest version of vote state"
+			newVoteStateVersioned := new(VoteStateVersions)
+			newVoteStateVersioned.Current = *voteState
+			voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
+			if err != nil {
+				return err
+			}
+			err = acct.SetState(f, voteStateBytes)
+			return err
+		}
+	} else {
+		// "Else when the vote_state_add_vote_latency feature is not enabled, then the V1_14_11 version is stored"
+		newVoteState := newVoteState1_14_11FromCurrent(voteState)
+		newVoteStateVersioned := new(VoteStateVersions)
+		newVoteStateVersioned.V1_14_11 = *newVoteState
+		voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
+		if err != nil {
+			return err
+		}
+		err = acct.SetState(f, voteStateBytes)
+		return err
 	}
 }

@@ -25,6 +25,7 @@ type TransactionCtx struct {
 	Accounts                 TransactionAccounts
 	InstructionTraceCapacity uint64
 	AccountsResizeDelta      int64
+	Rent                     SysvarRent
 }
 
 func (txCtx *TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {

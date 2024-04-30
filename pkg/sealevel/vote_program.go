@@ -229,29 +229,6 @@ func (voteAuthChecked *VoteInstrVoteAuthorizeChecked) UnmarshalWithDecoder(decod
 	return err
 }
 
-func (lockout *VoteLockout) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	var err error
-	lockout.Slot, err = decoder.ReadUint64(bin.LE)
-	if err != nil {
-		return err
-	}
-
-	lockout.ConfirmationCount, err = decoder.ReadUint32(bin.LE)
-	return err
-}
-
-func (lockout *VoteLockout) MarshalWithEncoder(encoder *bin.Encoder) error {
-	var err error
-
-	err = encoder.WriteUint64(lockout.Slot, bin.LE)
-	if err != nil {
-		return err
-	}
-
-	err = encoder.WriteUint32(lockout.ConfirmationCount, bin.LE)
-	return err
-}
-
 func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	numLockouts, err := decoder.ReadUint64(bin.LE)
 	if err != nil {
@@ -480,8 +457,6 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 		return err
 	}
 
-	// TODO: implement instruction handling
-
 	me, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
 		return err
@@ -565,5 +540,6 @@ func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteIns
 		return err
 	}
 
-	return nil
+	voteState := newVoteStateFromVoteInit(voteInit, clock)
+	return setVoteAccountState(voteAccount, voteState, f)
 }

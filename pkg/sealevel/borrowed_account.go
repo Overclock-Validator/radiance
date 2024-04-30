@@ -57,6 +57,24 @@ func (acct *BorrowedAccount) SetData(features features.Features, data []byte) er
 	return nil
 }
 
+func (acct *BorrowedAccount) SetState(f features.Features, data []byte) error {
+	err := acct.DataCanBeChanged(f)
+	if err != nil {
+		return err
+	}
+	err = acct.Touch()
+	if err != nil {
+		return err
+	}
+
+	if len(data) > len(acct.Data()) {
+		return InstrErrAccountDataTooSmall
+	}
+
+	acct.Account.SetData(data)
+	return nil
+}
+
 func (acct *BorrowedAccount) IsZeroed() bool {
 	if len(acct.Data()) == 0 {
 		return true
@@ -246,4 +264,8 @@ func (acct *BorrowedAccount) CheckedAddLamports(lamports uint64, f features.Feat
 		return InstrErrArithmeticOverflow
 	}
 	return acct.SetLamports(newLamports, f)
+}
+
+func (acct *BorrowedAccount) IsRentExemptAtDataLength(len uint64) bool {
+	return acct.TxCtx.Rent.IsExempt(acct.Lamports(), len)
 }
