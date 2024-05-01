@@ -1,6 +1,7 @@
 package sealevel
 
 import (
+	"errors"
 	"math"
 
 	"github.com/edwingeng/deque/v2"
@@ -25,6 +26,10 @@ const (
 	VoteProgramInstrTypeAuthorizeCheckedWithSeed
 	VoteProgramInstrTypeCompactUpdateVoteState
 	VoteProgramInstrTypeCompactUpdateVoteStateSwitch
+)
+
+var (
+	VoteErrTooSoonToReauthorize = errors.New("VoteErrTooSoonToReauthorize")
 )
 
 type VoteInstrVoteInit struct {
@@ -507,6 +512,24 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramInitializeAccount(me, voteInit, signers, clock, execCtx.GlobalCtx.Features)
 		}
+
+	case VoteProgramInstrTypeAuthorize:
+		{
+			var voteAuthorize VoteInstrVoteAuthorize
+			err = voteAuthorize.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			// TODO: switch to using a sysvar cache
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramAuthorize(me, voteAuthorize.Pubkey, voteAuthorize.VoteAuthorize, signers, clock, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
@@ -542,4 +565,48 @@ func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteIns
 
 	voteState := newVoteStateFromVoteInit(voteInit, clock)
 	return setVoteAccountState(voteAccount, voteState, f)
+}
+
+func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey, voteAuthorize uint32, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
+
+	voteStateVersions, err := unmarshalVersionedVoteState(voteAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	voteState := voteStateVersions.ConvertToCurrent()
+
+	switch voteAuthorize {
+	case VoteAuthorizeTypeVoter:
+		{
+			var authorizedWithDrawerSigner bool
+			if verifySigner(voteState.AuthorizedWithdrawer, signers) == nil {
+				authorizedWithDrawerSigner = true
+			}
+
+			err = voteState.SetNewAuthorizedVoter(authorized, clock.Epoch, clock.LeaderScheduleEpoch+1, func(epochAuthorizedVoter solana.PublicKey) error {
+				if authorizedWithDrawerSigner {
+					return nil
+				} else {
+					return verifySigner(epochAuthorizedVoter, signers)
+				}
+			})
+			if err != nil {
+				return err
+			}
+
+		}
+
+	case VoteAuthorizeTypeWithdrawer:
+		{
+			err = verifySigner(voteState.AuthorizedWithdrawer, signers)
+			if err != nil {
+				return err
+			}
+			voteState.AuthorizedWithdrawer = authorized
+		}
+	}
+
+	err = setVoteAccountState(voteAcct, voteState, f)
+	return err
 }
