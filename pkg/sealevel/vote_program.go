@@ -546,6 +546,41 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramAuthorizeWithSeed(execCtx, instrCtx, me, voteAuthWithSeed.NewAuthority, voteAuthWithSeed.AuthorizationType, voteAuthWithSeed.CurrentAuthorityDerivedKeyOwner, voteAuthWithSeed.CurrentAuthorityDerivedKeySeed)
 		}
+
+	case VoteProgramInstrTypeAuthorizeCheckedWithSeed:
+		{
+			var voteAuthCheckedWithSeed VoteInstrAuthorizeCheckedWithSeed
+			err = voteAuthCheckedWithSeed.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			if err != nil {
+				return err
+			}
+
+			newAuthority, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				return InstrErrMissingRequiredSignature
+			}
+
+			err = VoteProgramAuthorizeWithSeed(execCtx, instrCtx, me, newAuthority, voteAuthCheckedWithSeed.AuthorizationType, voteAuthCheckedWithSeed.CurrentAuthorityDerivedKeyOwner, voteAuthCheckedWithSeed.CurrentAuthorityDerivedKeySeed)
+		}
 	}
 
 	return err
