@@ -581,6 +581,26 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramAuthorizeWithSeed(execCtx, instrCtx, me, newAuthority, voteAuthCheckedWithSeed.AuthorizationType, voteAuthCheckedWithSeed.CurrentAuthorityDerivedKeyOwner, voteAuthCheckedWithSeed.CurrentAuthorityDerivedKeySeed)
 		}
+
+	case VoteProgramInstrTypeUpdateValidatorIdentity:
+		{
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
+			if err != nil {
+				return err
+			}
+
+			nodePubkey, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramUpdateValidatorIdentity(me, nodePubkey, signers, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
@@ -696,5 +716,29 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 	}
 
 	err = VoteProgramAuthorize(voteAcct, newAuthority, authorizationType, expectedAuthorityKeys, clock, execCtx.GlobalCtx.Features)
+	return err
+}
+
+func VoteProgramUpdateValidatorIdentity(voteAcct *BorrowedAccount, nodePubkey solana.PublicKey, signers []solana.PublicKey, f features.Features) error {
+	voteStateVersions, err := unmarshalVersionedVoteState(voteAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	voteState := voteStateVersions.ConvertToCurrent()
+
+	err = verifySigner(voteState.AuthorizedWithdrawer, signers)
+	if err != nil {
+		return err
+	}
+
+	err = verifySigner(nodePubkey, signers)
+	if err != nil {
+		return err
+	}
+
+	voteState.NodePubkey = nodePubkey
+	err = setVoteAccountState(voteAcct, voteState, f)
+
 	return err
 }
