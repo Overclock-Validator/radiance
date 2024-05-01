@@ -530,6 +530,22 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramAuthorize(me, voteAuthorize.Pubkey, voteAuthorize.VoteAuthorize, signers, clock, execCtx.GlobalCtx.Features)
 		}
+
+	case VoteProgramInstrTypeAuthorizeWithSeed:
+		{
+			var voteAuthWithSeed VoteInstrAuthorizeWithSeed
+			err = voteAuthWithSeed.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(3)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramAuthorizeWithSeed(execCtx, instrCtx, me, voteAuthWithSeed.NewAuthority, voteAuthWithSeed.AuthorizationType, voteAuthWithSeed.CurrentAuthorityDerivedKeyOwner, voteAuthWithSeed.CurrentAuthorityDerivedKeySeed)
+		}
 	}
 
 	return err
@@ -594,7 +610,6 @@ func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey
 			if err != nil {
 				return err
 			}
-
 		}
 
 	case VoteAuthorizeTypeWithdrawer:
@@ -608,5 +623,43 @@ func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey
 	}
 
 	err = setVoteAccountState(voteAcct, voteState, f)
+	return err
+}
+
+func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCtx, voteAcct *BorrowedAccount, newAuthority solana.PublicKey, authorizationType uint32, currentAuthorityDerivedKeyOwner solana.PublicKey, currentAuthorityDerivedKeySeed string) error {
+	txCtx := execCtx.TransactionContext
+
+	// TODO: switch to using a sysvar cache
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	err := checkAcctForClockSysvar(txCtx, instrCtx, 1)
+	if err != nil {
+		return err
+	}
+
+	var expectedAuthorityKeys []solana.PublicKey
+
+	isSigner, err := instrCtx.IsInstructionAccountSigner(2)
+	if err != nil {
+		return err
+	}
+
+	if isSigner {
+		idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+		if err != nil {
+			return err
+		}
+		basePubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+		if err != nil {
+			return err
+		}
+
+		authKey, err := solana.CreateWithSeed(basePubkey, currentAuthorityDerivedKeySeed, currentAuthorityDerivedKeyOwner)
+		if err != nil {
+			return err
+		}
+		expectedAuthorityKeys = append(expectedAuthorityKeys, authKey)
+	}
+
+	err = VoteProgramAuthorize(voteAcct, newAuthority, authorizationType, expectedAuthorityKeys, clock, execCtx.GlobalCtx.Features)
 	return err
 }
