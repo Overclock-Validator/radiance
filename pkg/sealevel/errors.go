@@ -32,6 +32,7 @@ var (
 	InstrErrExecutableLamportChange     = errors.New("InstrErrExecutableLamportChange")
 	InstrErrInsufficientFunds           = errors.New("InstrErrInsufficientFunds")
 	InstrErrAccountAlreadyInitialized   = errors.New("InstrErrAccountAlreadyInitialized")
+	InstrErrUninitializedAccount        = errors.New("InstrErrUninitializedAccount")
 )
 
 // syscall errors

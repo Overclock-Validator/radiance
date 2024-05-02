@@ -9,6 +9,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -31,6 +32,12 @@ const (
 var (
 	VoteErrTooSoonToReauthorize    = errors.New("VoteErrTooSoonToReauthorize")
 	VoteErrCommissionUpdateTooLate = errors.New("VoteErrCommissionUpdateTooLate")
+	VoteErrEmptySlots              = errors.New("VoteErrEmptySlots")
+	VoteErrVotesTooOldAllFiltered  = errors.New("VoteErrVotesTooOldAllFiltered")
+	VoteErrVoteTooOld              = errors.New("VoteErrVoteTooOld")
+	VoteErrSlotsMismatch           = errors.New("VoteErrSlotsMismatch")
+	VoteErrSlotHashMismatch        = errors.New("VoteErrSlotHashMismatch")
+	VoteErrTimestampTooOld         = errors.New("VoteErrTimestampTooOld")
 )
 
 type VoteInstrVoteInit struct {
@@ -72,11 +79,6 @@ type VoteInstrVoteSwitch struct {
 type VoteInstrVoteAuthorizeChecked struct {
 	Pubkey        solana.PublicKey
 	VoteAuthorize uint32
-}
-
-type VoteLockout struct {
-	Slot              uint64
-	ConfirmationCount uint32
 }
 
 type VoteInstrUpdateVoteState struct {
@@ -484,6 +486,8 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidInstructionData
 	}
 
+	var isVoteSwitch bool
+
 	switch instructionType {
 	case VoteProgramInstrTypeInitializeAccount:
 		{
@@ -616,6 +620,40 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			epochSchedule := ReadEpochScheduleSysvar(&execCtx.Accounts)
 
 			err = VoteProgramUpdateCommission(me, updateCommission.Commission, signers, epochSchedule, clock, execCtx.GlobalCtx.Features)
+		}
+
+	case VoteProgramInstrTypeVoteSwitch:
+		isVoteSwitch = true
+		fallthrough
+	case VoteProgramInstrTypeVote:
+		{
+			var vote *VoteInstrVote
+			if isVoteSwitch {
+				var voteSwitch VoteInstrVoteSwitch
+				err = voteSwitch.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return InstrErrInvalidInstructionData
+				}
+				vote = &voteSwitch.Vote
+			} else {
+				err = vote.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return InstrErrInvalidInstructionData
+				}
+			}
+
+			// TODO: switch to using a sysvar cache
+
+			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+			checkAcctForSlotHashesSysvar(txCtx, instrCtx, 1)
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err := checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramProcessVote(me, slotHashes, clock, vote, signers, execCtx.GlobalCtx.Features)
 		}
 	}
 
@@ -802,6 +840,161 @@ func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, sig
 	}
 
 	voteState.Commission = commission
+	err = setVoteAccountState(voteAcct, voteState, f)
+
+	return err
+}
+
+func verifyAndGetVoteState(voteAcct *BorrowedAccount, clock SysvarClock, signers []solana.PublicKey) (*VoteState, error) {
+	versioned, err := unmarshalVersionedVoteState(voteAcct.Data())
+	if err != nil {
+		return nil, err
+	}
+
+	if !versioned.IsInitialized() {
+		return nil, InstrErrUninitializedAccount
+	}
+
+	voteState := versioned.ConvertToCurrent()
+	authVoter, err := voteState.GetAndUpdateAuthorizedVoter(clock.Epoch)
+	if err != nil {
+		return nil, err
+	}
+
+	err = verifySigner(authVoter, signers)
+	if err != nil {
+		return nil, err
+	}
+
+	return voteState, nil
+}
+
+func checkSlotsAreValid(voteState *VoteState, voteSlots []uint64, voteHash [32]byte, slotHashes SysvarSlotHashes) error {
+	var err error
+	i := uint64(0)
+	j := uint64(len(slotHashes))
+
+	for i < uint64(len(voteSlots)) && j > 0 {
+
+		// "1) increment `i` to find the smallest slot `s` in `vote_slots`
+		// where `s` >= `last_voted_slot`""
+		lastVotedSlot, ok := voteState.LastVotedSlot()
+		if ok && voteSlots[i] <= lastVotedSlot {
+			i, err = safemath.CheckedAddU64(i, 1)
+			if err != nil {
+				panic("`i` is bounded by `MAX_LOCKOUT_HISTORY` when finding larger slots")
+			}
+			continue
+		}
+
+		// "2) Find the hash for this slot `s`.""
+		k, err := safemath.CheckedSubU64(j, 1)
+		if err != nil {
+			panic("`j` is positive")
+		}
+		if voteSlots[i] != slotHashes[k].Slot {
+			// Decrement `j` to find newer slots
+			j, err = safemath.CheckedSubU64(j, 1)
+			if err != nil {
+				panic("`j` is positive when finding newer slots")
+			}
+			continue
+		}
+
+		// "3) Once the hash for `s` is found, bump `s` to the next slot
+		// in `vote_slots` and continue."
+		i, err = safemath.CheckedAddU64(i, 1)
+		if err != nil {
+			panic("`i` is bounded by `MAX_LOCKOUT_HISTORY` when hash is found")
+		}
+		j, err = safemath.CheckedSubU64(j, 1)
+		if err != nil {
+			panic("`j` is positive when hash is found")
+		}
+	}
+
+	if j == uint64(len(slotHashes)) {
+		klog.Errorf("%s dropped vote slots %#v, vote hash %s, slot hashes: %#v, too old ", voteState.NodePubkey, voteSlots, voteHash, slotHashes)
+		return VoteErrVoteTooOld
+	}
+
+	if i != uint64(len(voteSlots)) {
+		klog.Infof("%s dropped vote slots %#v failed to match slot hashes: %#v", voteState.NodePubkey, voteSlots, slotHashes)
+		return VoteErrSlotsMismatch
+	}
+
+	if slotHashes[j].Hash != voteHash {
+		klog.Warningf("%s dropped vote slots %#v failed to match hash %#v %#v", voteState.NodePubkey, voteSlots, voteHash, slotHashes[j].Hash)
+		return VoteErrSlotHashMismatch
+	}
+
+	return nil
+}
+
+func processVoteUnfiltered(voteState *VoteState, voteSlots []uint64, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64) error {
+	err := checkSlotsAreValid(voteState, voteSlots, vote.Hash, slotHashes)
+	if err != nil {
+		return err
+	}
+
+	for _, voteSlot := range voteSlots {
+		voteState.ProcessNextVoteSlot(voteSlot, epoch, currentSlot)
+	}
+
+	return nil
+}
+
+func processVote(voteState *VoteState, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64) error {
+	if len(vote.Slots) == 0 {
+		return VoteErrEmptySlots
+	}
+
+	var earliestSlotInHistory uint64
+	if len(slotHashes) != 0 {
+		earliestSlotInHistory = slotHashes[len(slotHashes)-1].Slot
+	}
+
+	var voteSlots []uint64
+	for _, slot := range vote.Slots {
+		if slot >= earliestSlotInHistory {
+			voteSlots = append(voteSlots, slot)
+		}
+	}
+
+	if len(voteSlots) == 0 {
+		return VoteErrVotesTooOldAllFiltered
+	}
+
+	return processVoteUnfiltered(voteState, voteSlots, vote, slotHashes, epoch, currentSlot)
+}
+
+func VoteProgramProcessVote(voteAcct *BorrowedAccount, slotHashes SysvarSlotHashes, clock SysvarClock, vote *VoteInstrVote, signers []solana.PublicKey, f features.Features) error {
+	voteState, err := verifyAndGetVoteState(voteAcct, clock, signers)
+	if err != nil {
+		return err
+	}
+
+	err = processVote(voteState, vote, slotHashes, clock.Epoch, clock.Slot)
+	if err != nil {
+		return err
+	}
+
+	if vote.Timestamp != nil {
+		if len(vote.Slots) == 0 {
+			return VoteErrEmptySlots
+		}
+		maxSlot := vote.Slots[0]
+		for _, slot := range vote.Slots {
+			if slot > maxSlot {
+				maxSlot = slot
+			}
+		}
+		err = voteState.ProcessTimestamp(maxSlot, *vote.Timestamp)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = setVoteAccountState(voteAcct, voteState, f)
 
 	return err

@@ -104,3 +104,19 @@ func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes
 		panic(err)
 	}
 }
+
+func checkAcctForSlotHashesSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return err
+	}
+	pk, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+	if pk == SysvarSlotHashesAddr {
+		return nil
+	} else {
+		return InstrErrInvalidArgument
+	}
+}

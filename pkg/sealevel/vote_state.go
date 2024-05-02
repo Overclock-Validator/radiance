@@ -3,12 +3,14 @@ package sealevel
 import (
 	"bytes"
 	"errors"
+	"math"
 
 	"github.com/edwingeng/deque/v2"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"github.com/tidwall/btree"
 	"go.firedancer.io/radiance/pkg/features"
+	"go.firedancer.io/radiance/pkg/safemath"
 )
 
 const (
@@ -66,6 +68,11 @@ type AuthorizedVoter struct {
 
 type AuthorizedVoters struct {
 	AuthorizedVoters btree.Map[uint64, solana.PublicKey]
+}
+
+type VoteLockout struct {
+	Slot              uint64
+	ConfirmationCount uint32
 }
 
 type LandedVote struct {
@@ -614,6 +621,24 @@ func (lockout *VoteLockout) MarshalWithEncoder(encoder *bin.Encoder) error {
 	return err
 }
 
+const InitialLockout = 2
+
+func (lockout *VoteLockout) Lockout() uint64 {
+	return uint64(math.Pow(InitialLockout, float64(lockout.ConfirmationCount)))
+}
+
+func (lockout *VoteLockout) LastLockedOutSlot() uint64 {
+	return safemath.SaturatingAddU64(lockout.Slot, lockout.Lockout())
+}
+
+func (lockout *VoteLockout) IsLockedOutAtSlot(slot uint64) bool {
+	return lockout.LastLockedOutSlot() >= slot
+}
+
+func (lockout *VoteLockout) IncreaseConfirmationCount(by uint32) {
+	lockout.ConfirmationCount = safemath.SaturatingAddU32(lockout.ConfirmationCount, by)
+}
+
 func (voteState *VoteState1_14_11) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	nodePk, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
@@ -936,6 +961,174 @@ func (voteState *VoteState) SetNewAuthorizedVoter(authorized solana.PublicKey, c
 	}
 
 	voteState.AuthorizedVoters.AuthorizedVoters.Set(targetEpoch, authorized)
+	return nil
+}
+
+func (voteState *VoteState) LastLockout() *VoteLockout {
+	landedVote, ok := voteState.Votes.Back()
+	if !ok {
+		return nil
+	}
+	return &landedVote.Lockout
+}
+
+func (voteState *VoteState) LastVotedSlot() (uint64, bool) {
+	lastLockout := voteState.LastLockout()
+	if lastLockout == nil {
+		return 0, false
+	} else {
+		return lastLockout.Slot, true
+	}
+}
+
+func (voteState *VoteState) PopExpiredVotes(nextVoteSlot uint64) {
+	var vote *VoteLockout
+	for {
+		vote = voteState.LastLockout()
+		if vote == nil {
+			break
+		}
+		if !vote.IsLockedOutAtSlot(nextVoteSlot) {
+			voteState.Votes.PopBack()
+		} else {
+			break
+		}
+	}
+}
+
+func (voteState *VoteState) DoubleLockouts() {
+	var indicesToIncreaseConfirmationCount []int
+	stackDepth := uint64(voteState.Votes.Len())
+	voteState.Votes.Range(func(idx int, landedVote LandedVote) bool {
+		j, err := safemath.CheckedAddU64(uint64(idx), uint64(landedVote.Lockout.ConfirmationCount))
+		if err != nil {
+			panic("`confirmation_count` and tower_size should be bounded by `MAX_LOCKOUT_HISTORY`")
+		}
+		if stackDepth > j {
+			indicesToIncreaseConfirmationCount = append(indicesToIncreaseConfirmationCount, idx)
+		}
+		return true
+	})
+
+	for _, idx := range indicesToIncreaseConfirmationCount {
+		landedVote := voteState.Votes.Peek(idx)
+		landedVote.Lockout.IncreaseConfirmationCount(1)
+		voteState.Votes.Replace(idx, landedVote)
+	}
+}
+
+func (voteState *VoteState) ComputeVoteLatency(votedForSlot uint64, currentSlot uint64) byte {
+	return byte(math.Min(float64(safemath.SaturatingSubU64(currentSlot, votedForSlot)), math.MaxUint8))
+}
+
+const (
+	MaxLockoutHistory         = 31
+	VoteCreditsGraceSlots     = 2
+	VoteCreditsMaximumPerSlot = 8
+	MaxEpochCreditsHistory    = 64
+)
+
+func (voteState *VoteState) CreditsForVoteAtIndex(index uint64) uint64 {
+	landedVote := voteState.Votes.Peek(int(index))
+	latency := landedVote.Latency
+
+	if latency == 0 {
+		return 1
+	} else {
+		diff, err := safemath.CheckedSubU8(latency, VoteCreditsGraceSlots)
+		if err != nil || diff == 0 {
+			return VoteCreditsMaximumPerSlot
+		} else {
+			credits, err := safemath.CheckedSubU8(VoteCreditsMaximumPerSlot, diff)
+			if err != nil || credits == 0 {
+				return 1
+			} else {
+				return uint64(credits)
+			}
+		}
+	}
+}
+
+/*
+	pub fn increment_credits(&mut self, epoch: Epoch, credits: u64) {
+	    // increment credits, record by epoch
+
+	    // never seen a credit
+	    if self.epoch_credits.is_empty() {
+	        self.epoch_credits.push((epoch, 0, 0));
+	    } else if epoch != self.epoch_credits.last().unwrap().0 {
+	        let (_, credits, prev_credits) = *self.epoch_credits.last().unwrap();
+
+	        if credits != prev_credits {
+	            // if credits were earned previous epoch
+	            // append entry at end of list for the new epoch
+	            self.epoch_credits.push((epoch, credits, credits));
+	        } else {
+	            // else just move the current epoch
+	            self.epoch_credits.last_mut().unwrap().0 = epoch;
+	        }
+
+	        // Remove too old epoch_credits
+	        if self.epoch_credits.len() > MAX_EPOCH_CREDITS_HISTORY {
+	            self.epoch_credits.remove(0);
+	        }
+	    }
+
+	    self.epoch_credits.last_mut().unwrap().1 =
+	        self.epoch_credits.last().unwrap().1.saturating_add(credits);
+	}
+*/
+func (voteState *VoteState) IncrementCredits(epoch uint64, credits uint64) {
+	if len(voteState.EpochCredits) == 0 {
+		voteState.EpochCredits = append(voteState.EpochCredits, EpochCredits{Epoch: 0, Credits: 0, PrevCredits: 0})
+	} else if epoch != voteState.EpochCredits[len(voteState.EpochCredits)-1].Epoch {
+		ec := voteState.EpochCredits[len(voteState.EpochCredits)-1]
+		if ec.Credits != ec.PrevCredits {
+			voteState.EpochCredits = append(voteState.EpochCredits, EpochCredits{Epoch: epoch, Credits: ec.Credits, PrevCredits: ec.Credits})
+		} else {
+			voteState.EpochCredits[len(voteState.EpochCredits)-1].Epoch = epoch
+		}
+
+		if len(voteState.EpochCredits) > MaxEpochCreditsHistory {
+			voteState.EpochCredits = voteState.EpochCredits[1:]
+		}
+	}
+
+	currentCredits := voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits
+	voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits = safemath.SaturatingAddU64(currentCredits, credits)
+}
+
+func (voteState *VoteState) ProcessNextVoteSlot(nextVoteSlot uint64, epoch uint64, currentSlot uint64) {
+	lastVotedSlot, ok := voteState.LastVotedSlot()
+	if ok && nextVoteSlot <= lastVotedSlot {
+		return
+	}
+
+	voteState.PopExpiredVotes(nextVoteSlot)
+
+	landedVote := LandedVote{Latency: voteState.ComputeVoteLatency(nextVoteSlot, currentSlot),
+		Lockout: VoteLockout{Slot: nextVoteSlot, ConfirmationCount: 1}}
+
+	if voteState.Votes.Len() == MaxLockoutHistory {
+		credits := voteState.CreditsForVoteAtIndex(0)
+		landedVote := voteState.Votes.PopFront()
+		voteState.RootSlot = &landedVote.Lockout.Slot
+
+		voteState.IncrementCredits(epoch, credits)
+	}
+
+	voteState.Votes.PushBack(landedVote)
+	voteState.DoubleLockouts()
+}
+
+func (voteState *VoteState) ProcessTimestamp(slot uint64, timestamp uint64) error {
+	if (slot < voteState.LastTimestamp.Slot || timestamp < voteState.LastTimestamp.Timestamp) ||
+		(slot == voteState.LastTimestamp.Slot && BlockTimestamp{Slot: slot, Timestamp: timestamp} != voteState.LastTimestamp &&
+			voteState.LastTimestamp.Slot != 0) {
+		return VoteErrTimestampTooOld
+	}
+
+	voteState.LastTimestamp = BlockTimestamp{Slot: slot, Timestamp: timestamp}
 	return nil
 }
 
