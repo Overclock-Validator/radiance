@@ -29,7 +29,8 @@ const (
 )
 
 var (
-	VoteErrTooSoonToReauthorize = errors.New("VoteErrTooSoonToReauthorize")
+	VoteErrTooSoonToReauthorize    = errors.New("VoteErrTooSoonToReauthorize")
+	VoteErrCommissionUpdateTooLate = errors.New("VoteErrCommissionUpdateTooLate")
 )
 
 type VoteInstrVoteInit struct {
@@ -601,6 +602,21 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramUpdateValidatorIdentity(me, nodePubkey, signers, execCtx.GlobalCtx.Features)
 		}
+
+	case VoteProgramInstrTypeUpdateCommission:
+		{
+			var updateCommission VoteInstrUpdateCommission
+			err = updateCommission.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			// TODO: switch to using a sysvar cache
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			epochSchedule := ReadEpochScheduleSysvar(&execCtx.Accounts)
+
+			err = VoteProgramUpdateCommission(me, updateCommission.Commission, signers, epochSchedule, clock, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
@@ -738,6 +754,54 @@ func VoteProgramUpdateValidatorIdentity(voteAcct *BorrowedAccount, nodePubkey so
 	}
 
 	voteState.NodePubkey = nodePubkey
+	err = setVoteAccountState(voteAcct, voteState, f)
+
+	return err
+}
+
+func isCommissionUpdateAllowed(slot uint64, epochSchedule SysvarEpochSchedule) bool {
+	relativeSlot := safemath.SaturatingSubU64(slot, epochSchedule.FirstNormalSlot) % epochSchedule.SlotsPerEpoch
+	return safemath.SaturatingMulU64(relativeSlot, 2) <= epochSchedule.SlotsPerEpoch
+}
+
+func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, signers []solana.PublicKey, epochSchedule SysvarEpochSchedule, clock SysvarClock, f features.Features) error {
+	var voteState *VoteState
+
+	var enforceCommissionUpdateRule bool
+	if f.IsActive(features.AllowCommissionDecreaseAtAnyTime) {
+		voteStateVersioned, err := unmarshalVersionedVoteState(voteAcct.Data())
+		if err == nil { // successfully deserialized
+			voteState = voteStateVersioned.ConvertToCurrent()
+			if commission > voteState.Commission {
+				enforceCommissionUpdateRule = true
+			}
+		} else { // failed to deserialize
+			enforceCommissionUpdateRule = true
+		}
+	} else {
+		enforceCommissionUpdateRule = true
+	}
+
+	if enforceCommissionUpdateRule && f.IsActive(features.CommissionUpdatesOnlyAllowedInFirstHalfOfEpoch) {
+		if !isCommissionUpdateAllowed(clock.Slot, epochSchedule) {
+			return VoteErrCommissionUpdateTooLate
+		}
+	}
+
+	if voteState == nil {
+		voteStateVersioned, err := unmarshalVersionedVoteState(voteAcct.Data())
+		if err != nil {
+			return err
+		}
+		voteState = voteStateVersioned.ConvertToCurrent()
+	}
+
+	err := verifySigner(voteState.AuthorizedWithdrawer, signers)
+	if err != nil {
+		return err
+	}
+
+	voteState.Commission = commission
 	err = setVoteAccountState(voteAcct, voteState, f)
 
 	return err
