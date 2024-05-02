@@ -1049,35 +1049,6 @@ func (voteState *VoteState) CreditsForVoteAtIndex(index uint64) uint64 {
 	}
 }
 
-/*
-	pub fn increment_credits(&mut self, epoch: Epoch, credits: u64) {
-	    // increment credits, record by epoch
-
-	    // never seen a credit
-	    if self.epoch_credits.is_empty() {
-	        self.epoch_credits.push((epoch, 0, 0));
-	    } else if epoch != self.epoch_credits.last().unwrap().0 {
-	        let (_, credits, prev_credits) = *self.epoch_credits.last().unwrap();
-
-	        if credits != prev_credits {
-	            // if credits were earned previous epoch
-	            // append entry at end of list for the new epoch
-	            self.epoch_credits.push((epoch, credits, credits));
-	        } else {
-	            // else just move the current epoch
-	            self.epoch_credits.last_mut().unwrap().0 = epoch;
-	        }
-
-	        // Remove too old epoch_credits
-	        if self.epoch_credits.len() > MAX_EPOCH_CREDITS_HISTORY {
-	            self.epoch_credits.remove(0);
-	        }
-	    }
-
-	    self.epoch_credits.last_mut().unwrap().1 =
-	        self.epoch_credits.last().unwrap().1.saturating_add(credits);
-	}
-*/
 func (voteState *VoteState) IncrementCredits(epoch uint64, credits uint64) {
 	if len(voteState.EpochCredits) == 0 {
 		voteState.EpochCredits = append(voteState.EpochCredits, EpochCredits{Epoch: 0, Credits: 0, PrevCredits: 0})
