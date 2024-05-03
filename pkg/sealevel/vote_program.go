@@ -30,14 +30,25 @@ const (
 )
 
 var (
-	VoteErrTooSoonToReauthorize    = errors.New("VoteErrTooSoonToReauthorize")
-	VoteErrCommissionUpdateTooLate = errors.New("VoteErrCommissionUpdateTooLate")
-	VoteErrEmptySlots              = errors.New("VoteErrEmptySlots")
-	VoteErrVotesTooOldAllFiltered  = errors.New("VoteErrVotesTooOldAllFiltered")
-	VoteErrVoteTooOld              = errors.New("VoteErrVoteTooOld")
-	VoteErrSlotsMismatch           = errors.New("VoteErrSlotsMismatch")
-	VoteErrSlotHashMismatch        = errors.New("VoteErrSlotHashMismatch")
-	VoteErrTimestampTooOld         = errors.New("VoteErrTimestampTooOld")
+	VoteErrTooSoonToReauthorize        = errors.New("VoteErrTooSoonToReauthorize")
+	VoteErrCommissionUpdateTooLate     = errors.New("VoteErrCommissionUpdateTooLate")
+	VoteErrEmptySlots                  = errors.New("VoteErrEmptySlots")
+	VoteErrVotesTooOldAllFiltered      = errors.New("VoteErrVotesTooOldAllFiltered")
+	VoteErrVoteTooOld                  = errors.New("VoteErrVoteTooOld")
+	VoteErrSlotsMismatch               = errors.New("VoteErrSlotsMismatch")
+	VoteErrSlotHashMismatch            = errors.New("VoteErrSlotHashMismatch")
+	VoteErrTimestampTooOld             = errors.New("VoteErrTimestampTooOld")
+	VoteErrSlotsNotOrdered             = errors.New("VoteErrSlotsNotOrdered")
+	VoteErrRootOnDifferentFork         = errors.New("VoteErrRootOnDifferentFork")
+	VoteErrTooManyVotes                = errors.New("VoteErrTooManyVotes")
+	VoteErrRootRollback                = errors.New("VoteErrRootRollback")
+	VoteErrZeroConfirmations           = errors.New("VoteErrZeroConfirmations")
+	VoteErrConfirmationTooLarge        = errors.New("VoteErrConfirmationTooLarge")
+	VoteErrSlotSmallerThanRoot         = errors.New("VoteErrSlotSmallerThanRoot")
+	VoteErrConfirmationsNotOrdered     = errors.New("VoteErrConfirmationsNotOrdered")
+	VoteErrNewVoteStateLockoutMismatch = errors.New("VoteErrNewVoteStateLockoutMismatch")
+	VoteErrLockoutConflict             = errors.New("VoteErrLockoutConflict")
+	VoteErrConfirmationRollback        = errors.New("VoteErrConfirmationRollback")
 )
 
 type VoteInstrVoteInit struct {
@@ -487,6 +498,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	}
 
 	var isVoteSwitch bool
+	var isUpdateVoteStateSwitch bool
 
 	switch instructionType {
 	case VoteProgramInstrTypeInitializeAccount:
@@ -654,6 +666,40 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = VoteProgramProcessVote(me, slotHashes, clock, vote, signers, execCtx.GlobalCtx.Features)
+		}
+	case VoteProgramInstrTypeUpdateVoteStateSwitch:
+		isUpdateVoteStateSwitch = true
+		fallthrough
+
+	case VoteProgramInstrTypeUpdateVoteState:
+		{
+			var updateVoteState *VoteInstrUpdateVoteState
+			if isUpdateVoteStateSwitch {
+				var updateVoteStateSwitch VoteInstrUpdateVoteStateSwitch
+				err = updateVoteStateSwitch.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return err
+				}
+				updateVoteState = &updateVoteStateSwitch.UpdateVoteState
+			} else {
+				err = updateVoteState.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return err
+				}
+			}
+
+			// TODO: switch to using a sysvar cache
+
+			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+			checkAcctForSlotHashesSysvar(txCtx, instrCtx, 1)
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err := checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
 		}
 	}
 
@@ -993,6 +1039,376 @@ func VoteProgramProcessVote(voteAcct *BorrowedAccount, slotHashes SysvarSlotHash
 		if err != nil {
 			return err
 		}
+	}
+
+	err = setVoteAccountState(voteAcct, voteState, f)
+
+	return err
+}
+
+func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate *VoteInstrUpdateVoteState, slotHashes SysvarSlotHashes) error {
+	if voteStateUpdate.Lockouts.IsEmpty() {
+		return VoteErrEmptySlots
+	}
+
+	lastVoteStateUpdateLockout, ok := voteStateUpdate.Lockouts.Back()
+	if !ok {
+		panic("must be nonempty, checked above")
+	}
+
+	lastVoteStateUpdateSlot := lastVoteStateUpdateLockout.Slot
+
+	lastLandedVote, ok := voteState.Votes.Back()
+	if ok {
+		lastVoteSlot := lastLandedVote.Lockout.Slot
+		if lastVoteStateUpdateSlot <= lastVoteSlot {
+			return VoteErrVoteTooOld
+		}
+	}
+
+	if len(slotHashes) == 0 {
+		return VoteErrSlotsMismatch
+	}
+
+	earliestSlotHashInHistory := slotHashes[len(slotHashes)-1].Slot
+
+	if lastVoteStateUpdateSlot < earliestSlotHashInHistory {
+		return VoteErrVoteTooOld
+	}
+
+	if voteStateUpdate.Root != nil {
+		proposedRoot := *voteStateUpdate.Root
+		if proposedRoot < earliestSlotHashInHistory {
+			voteStateUpdate.Root = voteState.RootSlot
+
+			// Agave iterates in reverse, so we collect all entries into a slice
+			// and then reverse the order
+			var landedVotes []LandedVote
+			voteState.Votes.Range(func(i int, v LandedVote) bool {
+				landedVotes = append(landedVotes, v)
+				return true
+			})
+			for i, j := 0, len(landedVotes)-1; i < j; i, j = i+1, j-1 {
+				landedVotes[i], landedVotes[j] = landedVotes[j], landedVotes[i]
+			}
+
+			for _, vote := range landedVotes {
+				if vote.Lockout.Slot <= proposedRoot {
+					voteStateUpdate.Root = &vote.Lockout.Slot
+					break
+				}
+			}
+		}
+	}
+
+	rootToCheck := voteStateUpdate.Root
+	voteStateUpdateIndex := uint64(0)
+	slotHashesIndex := uint64(len(slotHashes))
+	var voteStateUpdateIndicesToFilter []uint64
+
+	for voteStateUpdateIndex < uint64(voteStateUpdate.Lockouts.Len()) && slotHashesIndex > 0 {
+		var proposedVoteSlot uint64
+		if rootToCheck != nil {
+			proposedVoteSlot = *rootToCheck
+		} else {
+			proposedVoteSlot = voteStateUpdate.Lockouts.Peek(int(voteStateUpdateIndex)).Slot
+		}
+
+		i, err := safemath.CheckedSubU64(voteStateUpdateIndex, 1)
+		if err != nil {
+			panic("`vote_state_update_index` is positive when checking `SlotsNotOrdered`")
+		}
+		if rootToCheck == nil && voteStateUpdateIndex > 0 && proposedVoteSlot <= voteStateUpdate.Lockouts.Peek(int(i)).Slot {
+			return VoteErrSlotsNotOrdered
+		}
+
+		j, err := safemath.CheckedSubU64(slotHashesIndex, 1)
+		if err != nil {
+			panic("`slot_hashes_index` is positive when computing `ancestor_slot`")
+		}
+		ancestorSlot := slotHashes[j].Slot
+
+		if proposedVoteSlot < ancestorSlot {
+			if slotHashesIndex == uint64(len(slotHashes)) {
+				if proposedVoteSlot >= earliestSlotHashInHistory {
+					panic("proposed_vote_slot < earliest_slot_hash_in_history not true")
+				}
+				if !voteState.ContainsSlot(proposedVoteSlot) && rootToCheck == nil {
+					voteStateUpdateIndicesToFilter = append(voteStateUpdateIndicesToFilter, voteStateUpdateIndex)
+				}
+
+				if rootToCheck != nil {
+					newProposedRoot := *rootToCheck
+					if newProposedRoot != proposedVoteSlot {
+						panic("newProposedRoot != proposedVoteSlot")
+					}
+					if newProposedRoot >= earliestSlotHashInHistory {
+						panic("new_proposed_root < earliest_slot_hash_in_history not true")
+					}
+					rootToCheck = nil
+				} else {
+					voteStateUpdateIndex, err = safemath.CheckedAddU64(voteStateUpdateIndex, 1)
+					if err != nil {
+						panic("`vote_state_update_index` is bounded by `MAX_LOCKOUT_HISTORY` when `proposed_vote_slot` is too old to be in SlotHashes history")
+					}
+				}
+				continue
+			} else {
+				if rootToCheck != nil {
+					return VoteErrRootOnDifferentFork
+				} else {
+					return VoteErrSlotsMismatch
+				}
+			}
+		} else if proposedVoteSlot > ancestorSlot {
+			slotHashesIndex, err = safemath.CheckedSubU64(slotHashesIndex, 1)
+			if err != nil {
+				panic("`slot_hashes_index` is positive when finding newer slots in SlotHashes history")
+			}
+			continue
+
+		} else { // proposedVoteSlot == ancestorSlot
+			if rootToCheck != nil {
+				rootToCheck = nil
+			} else {
+				voteStateUpdateIndex, err = safemath.CheckedAddU64(voteStateUpdateIndex, 1)
+				if err != nil {
+					panic("`vote_state_update_index` is bounded by `MAX_LOCKOUT_HISTORY` when match is found in SlotHashes history")
+				}
+				slotHashesIndex, err = safemath.CheckedSubU64(slotHashesIndex, 1)
+				if err != nil {
+					panic("`slot_hashes_index` is positive when match is found in SlotHashes history")
+				}
+			}
+		}
+	}
+
+	if voteStateUpdateIndex != uint64(voteStateUpdate.Lockouts.Len()) {
+		return VoteErrSlotsMismatch
+	}
+
+	if lastVoteStateUpdateSlot != slotHashes[slotHashesIndex].Slot {
+		panic("lastVoteStateUpdateSlot != slotHashes[slotHashesIndex].Slot not true")
+	}
+
+	if slotHashes[slotHashesIndex].Hash != voteStateUpdate.Hash {
+		klog.Warningf("%s dropped vote %#v failed to match hash %#v %#v", voteState.NodePubkey, voteStateUpdate, voteStateUpdate.Hash, slotHashes[slotHashesIndex].Slot)
+		return VoteErrSlotHashMismatch
+	}
+
+	voteStateUpdateIndex = 0
+	filterVotesIndex := uint64(0)
+	var lockoutsToKeep []VoteLockout
+
+	voteStateUpdate.Lockouts.Range(func(i int, lockout VoteLockout) bool {
+		var err error
+		if filterVotesIndex == uint64(len(voteStateUpdateIndicesToFilter)) {
+			lockoutsToKeep = append(lockoutsToKeep, lockout)
+		} else if voteStateUpdateIndex == voteStateUpdateIndicesToFilter[filterVotesIndex] {
+			filterVotesIndex = filterVotesIndex + 1
+		} else {
+			lockoutsToKeep = append(lockoutsToKeep, lockout)
+		}
+		voteStateUpdateIndex, err = safemath.CheckedAddU64(voteStateUpdateIndex, 1)
+		if err != nil {
+			panic("`vote_state_update_index` is bounded by `MAX_LOCKOUT_HISTORY` when filtering out irrelevant votes")
+		}
+		return true
+	})
+
+	voteStateUpdate.Lockouts.Clear()
+
+	for _, lockout := range lockoutsToKeep {
+		voteStateUpdate.Lockouts.PushBack(lockout)
+	}
+
+	return nil
+}
+
+func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote], newRoot *uint64, timestamp *uint64, epoch uint64, currentSlot uint64, f features.Features) error {
+	if newState.IsEmpty() {
+		panic("newState should not be empty")
+	}
+
+	if newState.Len() > MaxLockoutHistory {
+		return VoteErrTooManyVotes
+	}
+
+	if newRoot != nil && voteState.RootSlot != nil {
+		currentRoot := *voteState.RootSlot
+		if *newRoot < currentRoot {
+			return VoteErrRootRollback
+		}
+	} else if newRoot == nil && voteState.RootSlot != nil {
+		return VoteErrRootRollback
+	}
+
+	var previousVote *LandedVote
+
+	var errToReturn error
+
+	newState.Range(func(i int, vote LandedVote) bool {
+		if vote.Lockout.ConfirmationCount == 0 {
+			errToReturn = VoteErrZeroConfirmations
+			return false
+		} else if vote.Lockout.ConfirmationCount > MaxLockoutHistory {
+			errToReturn = VoteErrConfirmationTooLarge
+			return false
+		} else if newRoot != nil {
+			if vote.Lockout.Slot <= *newRoot && *newRoot != 0 {
+				errToReturn = VoteErrSlotSmallerThanRoot
+				return false
+			}
+		}
+
+		if previousVote != nil {
+			if previousVote.Lockout.Slot >= vote.Lockout.Slot {
+				errToReturn = VoteErrSlotsNotOrdered
+				return false
+			} else if previousVote.Lockout.ConfirmationCount <= vote.Lockout.ConfirmationCount {
+				errToReturn = VoteErrConfirmationsNotOrdered
+				return false
+			} else if vote.Lockout.Slot > previousVote.Lockout.LastLockedOutSlot() {
+				errToReturn = VoteErrNewVoteStateLockoutMismatch
+				return false
+			}
+		}
+		previousVote = &vote
+		return true
+	})
+
+	if errToReturn != nil {
+		return errToReturn
+	}
+
+	currentVoteStateIndex := uint64(0)
+	newVoteStateIndex := uint64(0)
+
+	timelyVoteCreditsEnabled := f.IsActive(features.TimelyVoteCredits)
+
+	var earnedCredits uint64
+	if timelyVoteCreditsEnabled {
+		earnedCredits = 0
+	} else {
+		earnedCredits = 1
+	}
+
+	if newRoot != nil {
+		voteState.Votes.Range(func(i int, currentVote LandedVote) bool {
+			var err error
+			if currentVote.Lockout.Slot <= *newRoot {
+				if timelyVoteCreditsEnabled || currentVote.Lockout.Slot != *newRoot {
+					earnedCredits, err = safemath.CheckedAddU64(earnedCredits, voteState.CreditsForVoteAtIndex(currentVoteStateIndex))
+					if err != nil {
+						panic("`earned_credits` does not overflow")
+					}
+				}
+				currentVoteStateIndex, err = safemath.CheckedAddU64(currentVoteStateIndex, 1)
+				if err != nil {
+					panic("`current_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when processing new root")
+				}
+				return true
+			}
+			return false
+		})
+	}
+
+	for currentVoteStateIndex < uint64(voteState.Votes.Len()) && newVoteStateIndex < uint64(newState.Len()) {
+		var err error
+		currentVote := voteState.Votes.Peek(int(currentVoteStateIndex))
+		newVote := newState.Peek(int(newVoteStateIndex))
+
+		if currentVote.Lockout.Slot < newVote.Lockout.Slot {
+			if currentVote.Lockout.LastLockedOutSlot() >= newVote.Lockout.Slot {
+				return VoteErrLockoutConflict
+			}
+			currentVoteStateIndex, err = safemath.CheckedAddU64(currentVoteStateIndex, 1)
+			if err != nil {
+				panic("`current_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when slot is less than proposed")
+			}
+		} else if currentVote.Lockout.Slot == newVote.Lockout.Slot {
+			if newVote.Lockout.ConfirmationCount < currentVote.Lockout.ConfirmationCount {
+				return VoteErrConfirmationRollback
+			}
+			newVote.Latency = voteState.Votes.Peek(int(currentVoteStateIndex)).Latency
+
+			currentVoteStateIndex, err = safemath.CheckedAddU64(currentVoteStateIndex, 1)
+			if err != nil {
+				panic("`current_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when slot is equal to proposed")
+			}
+			newVoteStateIndex, err = safemath.CheckedAddU64(newVoteStateIndex, 1)
+			if err != nil {
+				panic("`new_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when slot is equal to proposed")
+			}
+		} else { // currentVote.Lockout.Slot > newVote.Lockout.Slot
+			newVoteStateIndex, err = safemath.CheckedAddU64(newVoteStateIndex, 1)
+			if err != nil {
+				panic("`new_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when slot is greater than proposed")
+			}
+
+		}
+	}
+
+	if timelyVoteCreditsEnabled {
+		var indicesToChange []int
+		var landedVotes []LandedVote
+		newState.Range(func(i int, newVote LandedVote) bool {
+			if newVote.Latency == 0 {
+				newLandedVote := newVote
+				newLandedVote.Latency = computeVoteLatency(newVote.Lockout.Slot, currentSlot)
+				landedVotes = append(landedVotes, newLandedVote)
+				indicesToChange = append(indicesToChange, i)
+			}
+			return true
+		})
+		for i, idx := range indicesToChange {
+			newState.Replace(idx, landedVotes[i])
+		}
+	}
+
+	if voteState.RootSlot != newRoot {
+		voteState.IncrementCredits(epoch, earnedCredits)
+	}
+
+	if timestamp != nil {
+		var err error
+		lastLandedVote, ok := newState.Back()
+		if !ok {
+			panic("newState should not be empty")
+		}
+		lastSlot := lastLandedVote.Lockout.Slot
+		err = voteState.ProcessTimestamp(lastSlot, *timestamp)
+		if err != nil {
+			return err
+		}
+	}
+
+	voteState.RootSlot = newRoot
+	voteState.Votes = newState
+
+	return nil
+}
+
+func VoteProgramProcessVoteStateUpdate(voteAcct *BorrowedAccount, slotHashes SysvarSlotHashes, clock SysvarClock, voteStateUpdate *VoteInstrUpdateVoteState, signers []solana.PublicKey, f features.Features) error {
+	voteState, err := verifyAndGetVoteState(voteAcct, clock, signers)
+	if err != nil {
+		return err
+	}
+
+	err = checkUpdateVoteStateAndSlotsAreValid(voteState, voteStateUpdate, slotHashes)
+	if err != nil {
+		return err
+	}
+
+	newState := new(deque.Deque[LandedVote])
+	voteStateUpdate.Lockouts.Range(func(i int, lockout VoteLockout) bool {
+		newState.PushBack(LandedVote{Latency: 0, Lockout: lockout})
+		return true
+	})
+
+	err = processNewVoteState(voteState, newState, voteStateUpdate.Root, voteStateUpdate.Timestamp, clock.Epoch, clock.Slot, f)
+	if err != nil {
+		return err
 	}
 
 	err = setVoteAccountState(voteAcct, voteState, f)
