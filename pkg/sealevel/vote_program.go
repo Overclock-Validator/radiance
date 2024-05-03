@@ -726,6 +726,48 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
 		}
+
+	case VoteProgramInstrTypeAuthorizeChecked:
+		{
+			var voteAuthorize VoteInstrVoteAuthorize
+			err = voteAuthorize.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			if err != nil {
+				return err
+			}
+
+			voterPubkey, err := txCtx.KeyOfAccountAtIndex(idx)
+			if err != nil {
+				return err
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				return InstrErrMissingRequiredSignature
+			}
+
+			// TODO: switch to using a sysvar cache
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramAuthorize(me, voterPubkey, voteAuthorize.VoteAuthorize, signers, clock, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
