@@ -691,13 +691,38 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			// TODO: switch to using a sysvar cache
 
 			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
-			checkAcctForSlotHashesSysvar(txCtx, instrCtx, 1)
-
 			clock := ReadClockSysvar(&execCtx.Accounts)
-			err := checkAcctForClockSysvar(txCtx, instrCtx, 2)
-			if err != nil {
-				return err
+
+			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
+		}
+
+	case VoteProgramInstrTypeCompactUpdateVoteStateSwitch:
+		isUpdateVoteStateSwitch = true
+		fallthrough
+
+	case VoteProgramInstrTypeCompactUpdateVoteState:
+		{
+			var updateVoteState *VoteInstrUpdateVoteState
+			if isUpdateVoteStateSwitch {
+				var compactUpdateVoteStateSwitch VoteInstrCompactUpdateVoteStateSwitch
+				err = compactUpdateVoteStateSwitch.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return err
+				}
+				updateVoteState = &compactUpdateVoteStateSwitch.UpdateVoteState
+			} else {
+				var compactUpdateVoteState VoteInstrCompactUpdateVoteState
+				err = compactUpdateVoteState.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					return err
+				}
+				updateVoteState = &compactUpdateVoteState.UpdateVoteState
 			}
+
+			// TODO: switch to using a sysvar cache
+
+			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+			clock := ReadClockSysvar(&execCtx.Accounts)
 
 			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
 		}
