@@ -49,6 +49,7 @@ var (
 	VoteErrNewVoteStateLockoutMismatch = errors.New("VoteErrNewVoteStateLockoutMismatch")
 	VoteErrLockoutConflict             = errors.New("VoteErrLockoutConflict")
 	VoteErrConfirmationRollback        = errors.New("VoteErrConfirmationRollback")
+	VoteErrActiveVoteAccountClose      = errors.New("VoteErrActiveVoteAccountClose")
 )
 
 type VoteInstrVoteInit struct {
@@ -725,6 +726,25 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			clock := ReadClockSysvar(&execCtx.Accounts)
 
 			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
+		}
+
+	case VoteProgramInstrTypeWithdraw:
+		{
+			var withdraw VoteInstrWithdraw
+			err = withdraw.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			rent := ReadRentSysvar(&execCtx.Accounts)
+			clock := ReadClockSysvar(&execCtx.Accounts)
+
+			err = VoteProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, signers, rent, clock, execCtx.GlobalCtx.Features)
 		}
 
 	case VoteProgramInstrTypeAuthorizeChecked:
@@ -1479,6 +1499,69 @@ func VoteProgramProcessVoteStateUpdate(voteAcct *BorrowedAccount, slotHashes Sys
 	}
 
 	err = setVoteAccountState(voteAcct, voteState, f)
+
+	return err
+}
+
+func VoteProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, voteAcctIdx uint64, lamports uint64, toAcctIdx uint64, signers []solana.PublicKey, rent SysvarRent, clock SysvarClock, f features.Features) error {
+	voteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, voteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	versionedVoteState, err := unmarshalVersionedVoteState(voteAcct.Data())
+	if err != nil {
+		return err
+	}
+	voteState := versionedVoteState.ConvertToCurrent()
+
+	err = verifySigner(voteState.AuthorizedWithdrawer, signers)
+	if err != nil {
+		return err
+	}
+
+	remainingBalance, err := safemath.CheckedSubU64(voteAcct.Lamports(), lamports)
+	if err != nil {
+		return InstrErrInsufficientFunds
+	}
+
+	if remainingBalance == 0 {
+		var rejectActiveVoteAcctClose bool
+		if len(voteState.EpochCredits) != 0 {
+			lastEpochWithCredits := voteState.EpochCredits[len(voteState.EpochCredits)-1].Epoch
+			currentEpoch := clock.Epoch
+			if safemath.SaturatingSubU64(currentEpoch, lastEpochWithCredits) < 2 {
+				rejectActiveVoteAcctClose = true
+			}
+		}
+
+		if rejectActiveVoteAcctClose {
+			return VoteErrActiveVoteAccountClose
+		} else {
+			newDefaultVoteState := new(VoteState)
+			err = setVoteAccountState(voteAcct, newDefaultVoteState, f)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		minRentExemptBalance := rent.MinimumBalance(uint64(len(voteAcct.Data())))
+		if remainingBalance < minRentExemptBalance {
+			return InstrErrInsufficientFunds
+		}
+	}
+
+	err = voteAcct.CheckedSubLamports(lamports, f)
+	if err != nil {
+		return err
+	}
+
+	toAcct, err := instrCtx.BorrowInstructionAccount(txCtx, toAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	err = toAcct.CheckedAddLamports(lamports, f)
 
 	return err
 }
