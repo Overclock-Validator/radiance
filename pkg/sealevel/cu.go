@@ -14,6 +14,7 @@ const (
 	CUConfigProcessorDefaultComputeUnits = 450
 	CUSystemProgramDefaultComputeUnits   = 150
 	CUVoteProgramDefaultComputeUnits     = 2100
+	CUStakeProgramDefaultComputeUnits    = 750
 	CUSha256MaxSlices                    = 20000
 	CUMaxCpiInstructionSize              = 1280
 )

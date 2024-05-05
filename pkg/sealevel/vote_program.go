@@ -788,6 +788,10 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = VoteProgramAuthorize(me, voterPubkey, voteAuthorize.VoteAuthorize, signers, clock, execCtx.GlobalCtx.Features)
 		}
+	default: // invalid instruction
+		{
+			err = InstrErrInvalidInstructionData
+		}
 	}
 
 	return err

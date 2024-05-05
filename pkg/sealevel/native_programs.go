@@ -26,6 +26,10 @@ const Ed25519PrecompileAddrStr = "KeccakSecp256k11111111111111111111111111111"
 
 var Ed25519PrecompileAddr = base58.MustDecodeFromString(Ed25519PrecompileAddrStr)
 
+var StakeProgramAddrStr = "Stake11111111111111111111111111111111111111"
+
+var StakeProgramAddr = base58.MustDecodeFromString(StakeProgramAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 func ResolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error, error) {
