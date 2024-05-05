@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"bytes"
+
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 )
@@ -49,6 +51,7 @@ const (
 type StakeStateV2Initialized struct {
 	Meta Meta
 }
+
 type StakeStateV2Stake struct {
 	Meta       Meta
 	Stake      Stake
@@ -76,6 +79,17 @@ func (authorized *Authorized) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	return nil
 }
 
+func (authorized *Authorized) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+	err = encoder.WriteBytes(authorized.Staker[:], false)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(authorized.Withdrawer[:], false)
+	return err
+}
+
 func (lockup *StakeLockup) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	lockup.UnixTimeStamp, err = decoder.ReadUint64(bin.LE)
@@ -97,6 +111,22 @@ func (lockup *StakeLockup) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	return nil
 }
 
+func (lockup *StakeLockup) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+	err = encoder.WriteUint64(lockup.UnixTimeStamp, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(lockup.Epoch, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(lockup.Custodian[:], false)
+	return err
+}
+
 func (meta *Meta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	meta.RentExemptReserve, err = decoder.ReadUint64(bin.LE)
@@ -110,6 +140,22 @@ func (meta *Meta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 
 	err = meta.Lockup.UnmarshalWithDecoder(decoder)
+	return err
+}
+
+func (meta *Meta) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+	encoder.WriteUint64(meta.RentExemptReserve, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = meta.Authorized.MarshalWithEncoder(encoder)
+	if err != nil {
+		return err
+	}
+
+	err = meta.Lockup.MarshalWithEncoder(encoder)
 	return err
 }
 
@@ -139,15 +185,50 @@ func (delegation *Delegation) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	return err
 }
 
+func (delegation *Delegation) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteBytes(delegation.VoterPubkey[:], false)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(delegation.Stake, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(delegation.ActivationEpoch, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(delegation.DeactivationEpoch, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteFloat64(delegation.WarmupCooldownRate, bin.LE)
+	return err
+}
+
 func (stakeFlags *StakeFlags) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	stakeFlags.Bits, err = decoder.ReadByte()
 	return err
 }
 
+func (stakeFlags *StakeFlags) MarshalWithEncoder(encoder *bin.Encoder) error {
+	return encoder.WriteByte(stakeFlags.Bits)
+}
+
 func (initialized *StakeStateV2Initialized) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	err := initialized.Meta.UnmarshalWithDecoder(decoder)
 	return err
+}
+
+func (initialized *StakeStateV2Initialized) MarshalWithEncoder(encoder *bin.Encoder) error {
+	return initialized.MarshalWithEncoder(encoder)
 }
 
 func (stake *Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -157,6 +238,17 @@ func (stake *Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 
 	stake.CreditsObserved, err = decoder.ReadUint64(bin.LE)
+	return err
+}
+
+func (stake *Stake) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+	err = stake.Delegation.MarshalWithEncoder(encoder)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(stake.CreditsObserved, bin.LE)
 	return err
 }
 
@@ -175,13 +267,32 @@ func (stake *StakeStateV2Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error
 	return err
 }
 
-func (state *StakeStateV2) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	status, err := decoder.ReadUint32(bin.LE)
+func (stake *StakeStateV2Stake) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = stake.Meta.MarshalWithEncoder(encoder)
 	if err != nil {
 		return err
 	}
 
-	switch status {
+	err = stake.Stake.MarshalWithEncoder(encoder)
+	if err != nil {
+		return err
+	}
+
+	err = stake.StakeFlags.MarshalWithEncoder(encoder)
+	return err
+}
+
+func (state *StakeStateV2) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+
+	state.Status, err = decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	switch state.Status {
 	case StakeStateV2StatusUninitialized:
 		{
 			// nothing to deserialize
@@ -209,4 +320,66 @@ func (state *StakeStateV2) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 
 	return err
+}
+
+func (state *StakeStateV2) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(state.Status, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	switch state.Status {
+	case StakeStateV2StatusUninitialized:
+		{
+			// nothing to serialize up
+		}
+
+	case StakeStateV2StatusInitialized:
+		{
+			err = state.Initialized.MarshalWithEncoder(encoder)
+		}
+
+	case StakeStateV2StatusStake:
+		{
+			err = state.Stake.MarshalWithEncoder(encoder)
+		}
+
+	case StakeStateV2StatusRewardsPool:
+		{
+			// nothing to serialize up
+		}
+
+	default:
+		{
+			panic("attempting to serialize up invalid stake state")
+		}
+	}
+
+	return err
+}
+
+func unmarshalStakeState(data []byte) (*StakeStateV2, error) {
+	state := new(StakeStateV2)
+	decoder := bin.NewBinDecoder(data)
+
+	err := state.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return nil, InstrErrInvalidAccountData
+	} else {
+		return state, nil
+	}
+}
+
+func marshalStakeStake(state *StakeStateV2) ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buffer)
+
+	err := state.MarshalWithEncoder(encoder)
+	if err != nil {
+		return nil, err
+	} else {
+		return buffer.Bytes(), nil
+	}
 }

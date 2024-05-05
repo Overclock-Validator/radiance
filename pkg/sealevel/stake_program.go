@@ -291,10 +291,55 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 	return nil
 }
 
+/*
+pub fn initialize(
+
+	stake_account: &mut BorrowedAccount,
+	authorized: &Authorized,
+	lockup: &Lockup,
+	rent: &Rent,
+	feature_set: &FeatureSet,
+
+	) -> Result<(), InstructionError> {
+	    if stake_account.get_data().len() != StakeStateV2::size_of() {
+	        return Err(InstructionError::InvalidAccountData);
+	    }
+
+	    if let StakeStateV2::Uninitialized = stake_account.get_state()? {
+	        let rent_exempt_reserve = rent.minimum_balance(stake_account.get_data().len());
+	        if stake_account.get_lamports() >= rent_exempt_reserve {
+	            stake_account.set_state(
+	                &StakeStateV2::Initialized(Meta {
+	                    rent_exempt_reserve,
+	                    authorized: *authorized,
+	                    lockup: *lockup,
+	                }),
+	                feature_set,
+	            )
+	        } else {
+	            Err(InstructionError::InsufficientFunds)
+	        }
+	    } else {
+	        Err(InstructionError::InvalidAccountData)
+	    }
+	}
+*/
 func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, lockup StakeLockup, rent SysvarRent, f features.Features) error {
 
 	if len(stakeAcct.Data()) != StakeStateV2Size {
 		return InstrErrInvalidAccountData
+	}
+
+	state, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if state.Status == StakeStateV2StatusUninitialized {
+		rentExemptReserve := rent.MinimumBalance(uint64(len(stakeAcct.Data())))
+		if stakeAcct.Lamports() >= rentExemptReserve {
+
+		}
 	}
 
 	return nil
