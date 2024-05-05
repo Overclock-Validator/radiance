@@ -1319,6 +1319,7 @@ func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features
 			// resized for other reasons.  So store the V1_14_11 version."
 			newVoteState := newVoteState1_14_11FromCurrent(voteState)
 			newVoteStateVersioned := new(VoteStateVersions)
+			newVoteStateVersioned.Type = VoteStateVersionV1_14_11
 			newVoteStateVersioned.V1_14_11 = *newVoteState
 			voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
 			if err != nil {
@@ -1329,6 +1330,7 @@ func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features
 		} else {
 			// "Vote account is large enough to store the newest version of vote state"
 			newVoteStateVersioned := new(VoteStateVersions)
+			newVoteStateVersioned.Type = VoteStateVersionCurrent
 			newVoteStateVersioned.Current = *voteState
 			voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
 			if err != nil {
@@ -1341,6 +1343,7 @@ func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features
 		// "Else when the vote_state_add_vote_latency feature is not enabled, then the V1_14_11 version is stored"
 		newVoteState := newVoteState1_14_11FromCurrent(voteState)
 		newVoteStateVersioned := new(VoteStateVersions)
+		newVoteStateVersioned.Type = VoteStateVersionV1_14_11
 		newVoteStateVersioned.V1_14_11 = *newVoteState
 		voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
 		if err != nil {

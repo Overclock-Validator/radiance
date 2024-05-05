@@ -5,6 +5,7 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/features"
 )
 
 type Authorized struct {
@@ -145,7 +146,7 @@ func (meta *Meta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 
 func (meta *Meta) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
-	encoder.WriteUint64(meta.RentExemptReserve, bin.LE)
+	err = encoder.WriteUint64(meta.RentExemptReserve, bin.LE)
 	if err != nil {
 		return err
 	}
@@ -382,4 +383,14 @@ func marshalStakeStake(state *StakeStateV2) ([]byte, error) {
 	} else {
 		return buffer.Bytes(), nil
 	}
+}
+
+func setStakeAccountState(acct *BorrowedAccount, stakeState *StakeStateV2, f features.Features) error {
+	stakeStateBytes, err := marshalStakeStake(stakeState)
+	if err != nil {
+		return err
+	}
+
+	err = acct.SetState(f, stakeStateBytes)
+	return err
 }
