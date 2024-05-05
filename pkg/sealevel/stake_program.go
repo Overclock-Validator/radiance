@@ -3,7 +3,12 @@ package sealevel
 import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/features"
 	"k8s.io/klog/v2"
+)
+
+const (
+	StakeStateV2Size = 200
 )
 
 const (
@@ -257,6 +262,40 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 	}
 
 	klog.Infof("stake program execute, instruction data: %#v, stake acct: %#v", data, me)
+
+	decoder := bin.NewBinDecoder(data)
+	instructionType, err := decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return InstrErrInvalidInstructionData
+	}
+
+	switch instructionType {
+	case StakeProgramInstrTypeInitialize:
+		{
+			var initialize StakeInstrInitialize
+			err = initialize.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			rent := ReadRentSysvar(&execCtx.Accounts)
+			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramInitialize(me, initialize.Authorized, initialize.Lockup, rent, execCtx.GlobalCtx.Features)
+		}
+	}
+
+	return nil
+}
+
+func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, lockup StakeLockup, rent SysvarRent, f features.Features) error {
+
+	if len(stakeAcct.Data()) != StakeStateV2Size {
+		return InstrErrInvalidAccountData
+	}
 
 	return nil
 }
