@@ -3,6 +3,7 @@ package sealevel
 import (
 	"errors"
 
+	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/base58"
 )
 
@@ -32,7 +33,9 @@ var StakeProgramAddr = base58.MustDecodeFromString(StakeProgramAddrStr)
 
 var IsPrecompile = errors.New("IsPrecompile")
 
-func ResolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error, error) {
+var invalidEnumValue = errors.New("invalid enum value")
+
+func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error, error) {
 
 	switch programId {
 	case ConfigProgramAddr:
@@ -44,4 +47,13 @@ func ResolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 	}
 
 	return nil, InstrErrUnsupportedProgramId
+}
+
+func verifySigner(authorized solana.PublicKey, signers []solana.PublicKey) error {
+	for _, signer := range signers {
+		if signer == authorized {
+			return nil
+		}
+	}
+	return InstrErrMissingRequiredSignature
 }

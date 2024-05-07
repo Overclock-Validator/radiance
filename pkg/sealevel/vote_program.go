@@ -170,6 +170,14 @@ func (voteAuthorize *VoteInstrVoteAuthorize) UnmarshalWithDecoder(decoder *bin.D
 	copy(voteAuthorize.Pubkey[:], pk)
 
 	voteAuthorize.VoteAuthorize, err = decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	if voteAuthorize.VoteAuthorize != VoteAuthorizeTypeVoter && voteAuthorize.VoteAuthorize != VoteAuthorizeTypeWithdrawer {
+		return invalidEnumValue
+	}
+
 	return err
 }
 
@@ -246,6 +254,14 @@ func (voteAuthChecked *VoteInstrVoteAuthorizeChecked) UnmarshalWithDecoder(decod
 	copy(voteAuthChecked.Pubkey[:], pk)
 
 	voteAuthChecked.VoteAuthorize, err = decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	if voteAuthChecked.VoteAuthorize != VoteAuthorizeTypeVoter && voteAuthChecked.VoteAuthorize != VoteAuthorizeTypeWithdrawer {
+		return invalidEnumValue
+	}
+
 	return err
 }
 
@@ -797,15 +813,6 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	return err
 }
 
-func verifySigner(authorized solana.PublicKey, signers []solana.PublicKey) error {
-	for _, signer := range signers {
-		if signer == authorized {
-			return nil
-		}
-	}
-	return InstrErrMissingRequiredSignature
-}
-
 func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteInstrVoteInit, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
 	if uint64(len(voteAccount.Data())) != sizeOfVersionedVoteState(f) {
 		return InstrErrInvalidAccountData
@@ -865,6 +872,11 @@ func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey
 				return err
 			}
 			voteState.AuthorizedWithdrawer = authorized
+		}
+
+	default:
+		{
+			panic("shouldn't be possible")
 		}
 	}
 

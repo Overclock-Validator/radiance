@@ -175,7 +175,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 		builtinId = ownerId
 	}
 
-	nativeProgramFn, err := ResolveNativeProgramById(builtinId)
+	nativeProgramFn, err := resolveNativeProgramById(builtinId)
 	if err == IsPrecompile {
 		// TODO: handle precompile calls (ed25519, secp256k)
 		return InstrErrUnsupportedProgramId

@@ -84,8 +84,6 @@ type StakeInstrSetLockupChecked struct {
 	Epoch         *uint64
 }
 
-var invalidEnumValue = errors.New("invalid enum value")
-
 func (initialize *StakeInstrInitialize) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	err = initialize.Authorized.UnmarshalWithDecoder(decoder)
