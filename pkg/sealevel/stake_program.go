@@ -378,6 +378,38 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramAuthorize(me, signers, authorize.Pubkey, authorize.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
 		}
+
+	case StakeProgramInstrTypeAuthorizeWithSeed:
+		{
+			var authorizeWithSeed StakeInstrAuthorizeWithSeed
+			authorizeWithSeed.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 3, false)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeWithSeed.AuthoritySeed, authorizeWithSeed.AuthorityOwner, authorizeWithSeed.NewAuthorizedPubkey, authorizeWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return nil
@@ -442,4 +474,32 @@ func StakeProgramAuthorize(stakeAcct *BorrowedAccount, signers []solana.PublicKe
 	}
 
 	return err
+}
+
+func StakeProgramAuthorizeWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, authorityBaseIndex uint64, authoritySeed string, authorityOwner solana.PublicKey, newAuthority solana.PublicKey, stakeAuthorize uint32, clock SysvarClock, custodian *solana.PublicKey, f features.Features) error {
+	var signers []solana.PublicKey
+
+	isSigner, err := instrCtx.IsInstructionAccountSigner(authorityBaseIndex)
+	if err != nil {
+		return err
+	}
+
+	if isSigner {
+		idx, err := instrCtx.IndexOfInstructionAccountInTransaction(authorityBaseIndex)
+		if err != nil {
+			return err
+		}
+
+		basePubkey, err := txCtx.KeyOfAccountAtIndex(idx)
+		if err != nil {
+			return err
+		}
+		pk, err := solana.CreateWithSeed(basePubkey, authoritySeed, authorityOwner)
+		if err != nil {
+			return err
+		}
+		signers = append(signers, pk)
+	}
+
+	return StakeProgramAuthorize(stakeAcct, signers, newAuthority, stakeAuthorize, clock, custodian, f)
 }
