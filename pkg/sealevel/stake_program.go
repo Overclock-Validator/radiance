@@ -1,10 +1,11 @@
 package sealevel
 
 import (
+	"errors"
+
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -28,6 +29,13 @@ const (
 	StakeProgramInstrTypeGetMinimumDelegation
 	StakeProgramInstrTypeDeactivateDelinquent
 	StakeProgramInstrTypeRedelegate
+)
+
+// stake errors
+var (
+	StakeErrCustodianMissing          = errors.New("StakeErrCustodianMissing")
+	StakeErrCustodianSignatureMissing = errors.New("StakeErrCustodianSignatureMissing")
+	StakeErrLockupInForce             = errors.New("StakeErrLockupInForce")
 )
 
 type StakeInstrInitialize struct {
@@ -76,6 +84,8 @@ type StakeInstrSetLockupChecked struct {
 	Epoch         *uint64
 }
 
+var invalidEnumValue = errors.New("invalid enum value")
+
 func (initialize *StakeInstrInitialize) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	err = initialize.Authorized.UnmarshalWithDecoder(decoder)
@@ -95,6 +105,14 @@ func (auth *StakeInstrAuthorize) UnmarshalWithDecoder(decoder *bin.Decoder) erro
 	copy(auth.Pubkey[:], pk)
 
 	auth.StakeAuthorize, err = decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	if auth.StakeAuthorize != StakeAuthorizeStaker && auth.StakeAuthorize != StakeAuthorizeWithdrawer {
+		return invalidEnumValue
+	}
+
 	return err
 }
 
@@ -163,6 +181,9 @@ func (authWithSeed *StakeInstrAuthorizeWithSeed) UnmarshalWithDecoder(decoder *b
 	if err != nil {
 		return err
 	}
+	if authWithSeed.StakeAuthorize != StakeAuthorizeStaker && authWithSeed.StakeAuthorize != StakeAuthorizeWithdrawer {
+		return invalidEnumValue
+	}
 
 	authWithSeed.AuthoritySeed, err = decoder.ReadRustString()
 	if err != nil {
@@ -180,7 +201,15 @@ func (authWithSeed *StakeInstrAuthorizeWithSeed) UnmarshalWithDecoder(decoder *b
 func (authChecked *StakeInstrAuthorizeChecked) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	authChecked.StakeAuthorize, err = decoder.ReadUint32(bin.LE)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if authChecked.StakeAuthorize != StakeAuthorizeStaker && authChecked.StakeAuthorize != StakeAuthorizeWithdrawer {
+		return invalidEnumValue
+	}
+
+	return nil
 }
 
 func (authCheckedWithSeed *StakeInstrAuthorizeCheckedWithSeed) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -188,6 +217,9 @@ func (authCheckedWithSeed *StakeInstrAuthorizeCheckedWithSeed) UnmarshalWithDeco
 	authCheckedWithSeed.StakeAuthorize, err = decoder.ReadUint32(bin.LE)
 	if err != nil {
 		return err
+	}
+	if authCheckedWithSeed.StakeAuthorize != StakeAuthorizeStaker && authCheckedWithSeed.StakeAuthorize != StakeAuthorizeWithdrawer {
+		return invalidEnumValue
 	}
 
 	authCheckedWithSeed.AuthoritySeed, err = decoder.ReadRustString()
@@ -231,6 +263,33 @@ func (lockup *StakeInstrSetLockupChecked) UnmarshalWithDecoder(decoder bin.Decod
 	return nil
 }
 
+func getOptionalPubkey(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64, mustBeSigner bool) (*solana.PublicKey, error) {
+	if instrAcctIdx < instrCtx.NumberOfInstructionAccounts() {
+		isSigner, err := instrCtx.IsInstructionAccountSigner(instrAcctIdx)
+		if err != nil {
+			return nil, err
+		}
+
+		if mustBeSigner && !isSigner {
+			return nil, InstrErrMissingRequiredSignature
+		}
+
+		idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+		if err != nil {
+			return nil, err
+		}
+
+		pubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+		if err != nil {
+			return nil, err
+		} else {
+			return &pubkey, nil
+		}
+	} else { // no pubkey, not an error
+		return nil, nil
+	}
+}
+
 func StakeProgramExecute(execCtx *ExecutionCtx) error {
 	err := execCtx.ComputeMeter.Consume(CUStakeProgramDefaultComputeUnits)
 	if err != nil {
@@ -256,12 +315,10 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 		return acct, nil
 	}
 
-	me, err := getStakeAccount()
+	signers, err := instrCtx.Signers(txCtx)
 	if err != nil {
 		return err
 	}
-
-	klog.Infof("stake program execute, instruction data: %#v, stake acct: %#v", data, me)
 
 	decoder := bin.NewBinDecoder(data)
 	instructionType, err := decoder.ReadUint32(bin.LE)
@@ -278,6 +335,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
 			rent := ReadRentSysvar(&execCtx.Accounts)
 			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
 			if err != nil {
@@ -286,13 +348,44 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramInitialize(me, initialize.Authorized, initialize.Lockup, rent, execCtx.GlobalCtx.Features)
 		}
+
+	case StakeProgramInstrTypeAuthorize:
+		{
+			var authorize StakeInstrAuthorize
+			err = authorize.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(3)
+			if err != nil {
+				return err
+			}
+
+			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 3, false)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramAuthorize(me, signers, authorize.Pubkey, authorize.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return nil
 }
 
 func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, lockup StakeLockup, rent SysvarRent, f features.Features) error {
-
 	if len(stakeAcct.Data()) != StakeStateV2Size {
 		return InstrErrInvalidAccountData
 	}
@@ -315,4 +408,40 @@ func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, l
 	} else {
 		return InstrErrInvalidAccountData
 	}
+}
+
+func StakeProgramAuthorize(stakeAcct *BorrowedAccount, signers []solana.PublicKey, newAuthority solana.PublicKey, stakeAuthorize uint32, clock SysvarClock, custodianPubkey *solana.PublicKey, f features.Features) error {
+	state, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	switch state.Status {
+	case StakeStateV2StatusStake:
+		{
+			err = state.Stake.Meta.Authorized.Authorize(signers, newAuthority, stakeAuthorize, state.Stake.Meta.Lockup, clock, custodianPubkey)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, state, f)
+		}
+
+	case StakeStateV2StatusInitialized:
+		{
+			err = state.Initialized.Meta.Authorized.Authorize(signers, newAuthority, stakeAuthorize, state.Stake.Meta.Lockup, clock, custodianPubkey)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, state, f)
+		}
+
+	default:
+		{
+			err = InstrErrInvalidAccountData
+		}
+	}
+
+	return err
 }

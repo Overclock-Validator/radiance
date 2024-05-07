@@ -49,6 +49,11 @@ const (
 	StakeStateV2StatusRewardsPool
 )
 
+const (
+	StakeAuthorizeStaker = iota
+	StakeAuthorizeWithdrawer
+)
+
 type StakeStateV2Initialized struct {
 	Meta Meta
 }
@@ -91,6 +96,85 @@ func (authorized *Authorized) MarshalWithEncoder(encoder *bin.Encoder) error {
 	return err
 }
 
+func (authorized *Authorized) Check(signers []solana.PublicKey, stakeAuthorize uint32) error {
+	switch stakeAuthorize {
+	case StakeAuthorizeStaker:
+		{
+			err := verifySigner(authorized.Withdrawer, signers)
+			if err != nil {
+				return InstrErrMissingRequiredSignature
+			} else {
+				return nil
+			}
+		}
+
+	case StakeAuthorizeWithdrawer:
+		{
+			err := verifySigner(authorized.Withdrawer, signers)
+			if err != nil {
+				return InstrErrMissingRequiredSignature
+			} else {
+				return nil
+			}
+		}
+
+	default:
+		{
+			panic("shouldn't be possible")
+		}
+	}
+
+}
+
+func (authorized *Authorized) Authorize(signers []solana.PublicKey, newAuthorized solana.PublicKey, stakeAuthorize uint32, lockup StakeLockup, clock SysvarClock, custodian *solana.PublicKey) error {
+
+	switch stakeAuthorize {
+	case StakeAuthorizeStaker:
+		{
+			err1 := verifySigner(authorized.Staker, signers)
+			err2 := verifySigner(authorized.Withdrawer, signers)
+
+			if err1 != nil && err2 != nil {
+				return InstrErrMissingRequiredSignature
+			}
+
+			authorized.Staker = newAuthorized
+		}
+
+	case StakeAuthorizeWithdrawer:
+		{
+			if lockup.IsInForce(clock, nil) {
+				if custodian == nil {
+					return StakeErrCustodianMissing
+				} else {
+					err := verifySigner(*custodian, signers)
+					if err != nil {
+						return StakeErrCustodianSignatureMissing
+					}
+
+					if lockup.IsInForce(clock, custodian) {
+						return StakeErrLockupInForce
+					}
+				}
+			}
+
+			err := authorized.Check(signers, stakeAuthorize)
+			if err != nil {
+				return err
+			}
+
+			authorized.Withdrawer = newAuthorized
+		}
+
+	default:
+		{
+			panic("shouldn't be possible")
+		}
+	}
+
+	return nil
+}
+
 func (lockup *StakeLockup) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	lockup.UnixTimeStamp, err = decoder.ReadUint64(bin.LE)
@@ -126,6 +210,14 @@ func (lockup *StakeLockup) MarshalWithEncoder(encoder *bin.Encoder) error {
 
 	err = encoder.WriteBytes(lockup.Custodian[:], false)
 	return err
+}
+
+func (lockup *StakeLockup) IsInForce(clock SysvarClock, custodian *solana.PublicKey) bool {
+	if custodian != nil && *custodian == lockup.Custodian {
+		return false
+	}
+
+	return lockup.UnixTimeStamp > uint64(clock.UnixTimestamp) || lockup.Epoch > clock.Epoch
 }
 
 func (meta *Meta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
