@@ -10,11 +10,11 @@ import (
 // enable and disable features work correctly.
 func TestFflags_EnableAndDisable(t *testing.T) {
 	f := NewFeaturesDefault()
-	f.EnableFeature(StopTruncatingStringsInSyscalls)
+	f.EnableFeature(StopTruncatingStringsInSyscalls, 0)
 	assert.Equal(t, f.IsActive(StopTruncatingStringsInSyscalls), true)
 	f.DisableFeature(StopTruncatingStringsInSyscalls)
 	assert.Equal(t, f.IsActive(StopTruncatingStringsInSyscalls), false)
-	f.EnableFeature(StopTruncatingStringsInSyscalls)
+	f.EnableFeature(StopTruncatingStringsInSyscalls, 0)
 	assert.Equal(t, f.IsActive(StopTruncatingStringsInSyscalls), true)
 }
 
@@ -22,6 +22,6 @@ func TestFflags_EnableAndDisable(t *testing.T) {
 // as expected.
 func TestFflags_ListEnabled(t *testing.T) {
 	f := NewFeaturesDefault()
-	f.EnableFeature(StopTruncatingStringsInSyscalls)
+	f.EnableFeature(StopTruncatingStringsInSyscalls, 0)
 	assert.Equal(t, f.AllEnabled(), []string{"feature StopTruncatingStringsInSyscalls (16FMCmgLzCNNz6eTwGanbyN2ZxvTBSLuQ6DZhgeMshg) enabled"})
 }

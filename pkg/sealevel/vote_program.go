@@ -498,7 +498,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 		return err
 	}
 
-	if me.Owner() != solana.VoteProgramID {
+	if me.Owner() != VoteProgramAddr {
 		return InstrErrInvalidAccountOwner
 	}
 

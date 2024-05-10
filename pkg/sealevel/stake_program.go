@@ -2,10 +2,12 @@ package sealevel
 
 import (
 	"errors"
+	"math"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
+	"go.firedancer.io/radiance/pkg/safemath"
 )
 
 const (
@@ -36,6 +38,8 @@ var (
 	StakeErrCustodianMissing          = errors.New("StakeErrCustodianMissing")
 	StakeErrCustodianSignatureMissing = errors.New("StakeErrCustodianSignatureMissing")
 	StakeErrLockupInForce             = errors.New("StakeErrLockupInForce")
+	StakeErrInsufficientDelegation    = errors.New("StakeErrInsufficientDelegation")
+	StakeErrTooSoonToRedelegate       = errors.New("StakeErrTooSoonToRedelegate")
 )
 
 type StakeInstrInitialize struct {
@@ -410,9 +414,56 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeWithSeed.AuthoritySeed, authorizeWithSeed.AuthorityOwner, authorizeWithSeed.NewAuthorizedPubkey, authorizeWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
 		}
+
+	case StakeProgramInstrTypeDelegateStake:
+		{
+			_, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(5)
+			if err != nil {
+				return err
+			}
+
+			if execCtx.GlobalCtx.Features.IsActive(features.ReduceStakeWarmupCooldown) {
+				configAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 4)
+				if err != nil {
+					return err
+				}
+				if configAcct.Key() != StakeProgramConfigAddr {
+					return InstrErrInvalidArgument
+				}
+
+				_, err = unmarshalStakeConfig(configAcct.Data())
+				if err != nil {
+					return InstrErrInvalidArgument
+				}
+			}
+
+			err = StakeProgramDelegate(execCtx, txCtx, instrCtx, 0, 1, clock, stakeHistory, signers, execCtx.GlobalCtx.Features)
+		}
 	}
 
-	return nil
+	return err
 }
 
 func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, lockup StakeLockup, rent SysvarRent, f features.Features) error {
@@ -438,6 +489,27 @@ func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, l
 	} else {
 		return InstrErrInvalidAccountData
 	}
+}
+
+func determineMinimumDelegation(f features.Features) uint64 {
+	if f.IsActive(features.StakeRaiseMinimumDelegationTo1Sol) {
+		minimumDelegationSol := 1
+		lamportsPerSol := 1000000000
+		return uint64(minimumDelegationSol * lamportsPerSol)
+	} else {
+		return 1
+	}
+}
+
+func validateAndReturnDelegatedAmount(stakeAcct *BorrowedAccount, meta Meta, f features.Features) (uint64, error) {
+	stakeAmount := safemath.SaturatingSubU64(stakeAcct.Lamports(), meta.RentExemptReserve)
+	minimumDelegation := determineMinimumDelegation(f)
+
+	if stakeAmount < minimumDelegation {
+		return 0, StakeErrInsufficientDelegation
+	}
+
+	return stakeAmount, nil
 }
 
 func StakeProgramAuthorize(stakeAcct *BorrowedAccount, signers []solana.PublicKey, newAuthority solana.PublicKey, stakeAuthorize uint32, clock SysvarClock, custodianPubkey *solana.PublicKey, f features.Features) error {
@@ -502,4 +574,104 @@ func StakeProgramAuthorizeWithSeed(txCtx *TransactionCtx, instrCtx *InstructionC
 	}
 
 	return StakeProgramAuthorize(stakeAcct, signers, newAuthority, stakeAuthorize, clock, custodian, f)
+}
+
+var DefaultWarmupCooldownRate float64 = 0.25
+var NewWarmupCooldownRate float64 = 0.09
+
+func warmupCooldownRate(currentEpoch uint64, newRateActivationEpoch *uint64) float64 {
+	if newRateActivationEpoch == nil {
+		e := uint64(math.MaxUint64)
+		newRateActivationEpoch = &e
+	}
+	if currentEpoch < *newRateActivationEpoch {
+		return DefaultWarmupCooldownRate
+	} else {
+		return NewWarmupCooldownRate
+	}
+}
+
+func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, voteAcctIdx uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, signers []solana.PublicKey, f features.Features) error {
+	voteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, voteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if voteAcct.Owner() != VoteProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	votePubkey := voteAcct.Key()
+	versionedVoteState, voteUnmarshalErr := unmarshalVersionedVoteState(voteAcct.Data())
+
+	stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	switch stakeState.Status {
+	case StakeStateV2StatusInitialized:
+		{
+			err = stakeState.Initialized.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
+			if err != nil {
+				return err
+			}
+			stakeAmount, err := validateAndReturnDelegatedAmount(stakeAcct, stakeState.Initialized.Meta, f)
+			if err != nil {
+				return err
+			}
+
+			if voteUnmarshalErr != nil {
+				return voteUnmarshalErr
+			}
+
+			credits := versionedVoteState.ConvertToCurrent().Credits()
+			stake := Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch},
+				CreditsObserved: credits}
+
+			stakeState.Stake = StakeStateV2Stake{Meta: stakeState.Initialized.Meta, Stake: stake}
+			err = setStakeAccountState(stakeAcct, stakeState, f)
+			if err != nil {
+				return err
+			}
+		}
+
+	case StakeStateV2StatusStake:
+		{
+			err = stakeState.Stake.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
+			if err != nil {
+				return err
+			}
+			stakeAmount, err := validateAndReturnDelegatedAmount(stakeAcct, stakeState.Stake.Meta, f)
+			if err != nil {
+				return err
+			}
+
+			if voteUnmarshalErr != nil {
+				return voteUnmarshalErr
+			}
+
+			err = modifyStakeForRedelegation(execCtx, &stakeState.Stake.Stake, stakeAmount, votePubkey, versionedVoteState.ConvertToCurrent(), clock, stakeHistory)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, stakeState, f)
+			if err != nil {
+				return err
+			}
+		}
+
+	default:
+		{
+			return InstrErrInvalidAccountData
+		}
+	}
+
+	return nil
 }

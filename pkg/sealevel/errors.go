@@ -33,6 +33,7 @@ var (
 	InstrErrInsufficientFunds           = errors.New("InstrErrInsufficientFunds")
 	InstrErrAccountAlreadyInitialized   = errors.New("InstrErrAccountAlreadyInitialized")
 	InstrErrUninitializedAccount        = errors.New("InstrErrUninitializedAccount")
+	InstrErrIncorrectProgramId          = errors.New("InstrErrIncorrectProgramId")
 )
 
 // syscall errors

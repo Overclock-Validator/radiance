@@ -3,6 +3,8 @@ package sealevel
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"math/bits"
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
@@ -14,6 +16,8 @@ const SysvarEpochScheduleAddrStr = "SysvarEpochSchedu1e111111111111111111111111"
 var SysvarEpochScheduleAddr = base58.MustDecodeFromString(SysvarEpochScheduleAddrStr)
 
 const SysvarEpochScheduleStructLen = 33
+
+const MinimumSlotsPerEpoch = 32
 
 type SysvarEpochSchedule struct {
 	SlotsPerEpoch            uint64
@@ -61,6 +65,30 @@ func (sr *SysvarEpochSchedule) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	err := sr.UnmarshalWithDecoder(decoder)
 	if err != nil {
 		panic(err.Error())
+	}
+}
+
+func (sr *SysvarEpochSchedule) GetEpoch(slot uint64) uint64 {
+	epoch, _ := sr.GetEpochAndSlotIndex(slot)
+	return epoch
+}
+
+func (sr *SysvarEpochSchedule) GetEpochAndSlotIndex(slot uint64) (uint64, uint64) {
+	if slot < sr.FirstNormalSlot {
+		nextPowerOfTwo := func(n uint64) uint64 {
+			shift := uint64(bits.Len(uint(n)))
+			return 1 << shift
+		}
+
+		epoch := uint64(bits.TrailingZeros64(nextPowerOfTwo(slot+MinimumSlotsPerEpoch+1)) - bits.TrailingZeros64(MinimumSlotsPerEpoch) - 1)
+		epochLen := uint64(math.Pow(2, float64(bits.TrailingZeros64(uint64(epoch+MinimumSlotsPerEpoch)))))
+		return epoch, slot - (epochLen - MinimumSlotsPerEpoch)
+	} else {
+		normalSlotIndex := slot - sr.FirstNormalSlot
+		normalEpochIndex := normalSlotIndex / sr.SlotsPerEpoch
+		epoch := sr.FirstNormalEpoch + normalEpochIndex
+		slotIndex := normalSlotIndex % sr.SlotsPerEpoch
+		return epoch, slotIndex
 	}
 }
 

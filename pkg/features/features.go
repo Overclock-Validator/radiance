@@ -2,34 +2,49 @@ package features
 
 import "fmt"
 
-type Features map[FeatureGate]bool
-
-func NewFeaturesDefault() Features {
-	return Features{}
+type FeatureGate struct {
+	Name    string
+	Address [32]byte
 }
 
-func (f Features) EnableFeature(gate FeatureGate) Features {
-	f[gate] = true
-	return f
+type FeatureActivationInfo struct {
+	Enabled        bool
+	ActivationSlot uint64
 }
 
-func (f Features) DisableFeature(gate FeatureGate) Features {
-	f[gate] = false
-	return f
+type Features map[FeatureGate]FeatureActivationInfo
+
+func NewFeaturesDefault() *Features {
+	return new(Features)
 }
 
-func (f Features) IsActive(gate FeatureGate) bool {
-	if enabled, found := f[gate]; found {
-		return enabled
+func (f *Features) EnableFeature(gate FeatureGate, activationSlot uint64) {
+	(*f)[gate] = FeatureActivationInfo{Enabled: true, ActivationSlot: activationSlot}
+}
+
+func (f *Features) DisableFeature(gate FeatureGate) {
+	(*f)[gate] = FeatureActivationInfo{Enabled: false}
+}
+
+func (f *Features) IsActive(gate FeatureGate) bool {
+	if info, found := (*f)[gate]; found {
+		return info.Enabled
 	} else {
 		return false
 	}
 }
 
-func (f Features) AllEnabled() []string {
+func (f *Features) ActivationSlot(gate FeatureGate) (uint64, bool) {
+	if !f.IsActive(gate) {
+		return 0, false
+	}
+	return (*f)[gate].ActivationSlot, true
+}
+
+func (f *Features) AllEnabled() []string {
 	enabledFeatureStrs := make([]string, 0)
-	for feat, enabled := range f {
-		if enabled {
+	for feat, enabled := range *f {
+		if enabled.Enabled {
 			enabledFeatureStrs = append(enabledFeatureStrs, fmt.Sprintf("feature %s (%s) enabled", feat.Name, feat.Address))
 		}
 	}

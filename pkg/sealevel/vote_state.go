@@ -921,6 +921,14 @@ func (voteState *VoteState) GetAndUpdateAuthorizedVoter(currentEpoch uint64) (so
 	return pubkey, nil
 }
 
+func (voteState *VoteState) Credits() uint64 {
+	if len(voteState.EpochCredits) == 0 {
+		return 0
+	} else {
+		return voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits
+	}
+}
+
 func (voteState *VoteState) SetNewAuthorizedVoter(authorized solana.PublicKey, currentEpoch uint64, targetEpoch uint64, verify func(epochAuthorizedVoter solana.PublicKey) error) error {
 	epochAuthorizedVoter, err := voteState.GetAndUpdateAuthorizedVoter(currentEpoch)
 	if err != nil {

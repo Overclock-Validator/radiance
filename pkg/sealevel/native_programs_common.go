@@ -31,6 +31,14 @@ var StakeProgramAddrStr = "Stake11111111111111111111111111111111111111"
 
 var StakeProgramAddr = base58.MustDecodeFromString(StakeProgramAddrStr)
 
+var StakeProgramConfigAddrStr = "StakeConfig11111111111111111111111111111111"
+
+var StakeProgramConfigAddr = base58.MustDecodeFromString(StakeProgramConfigAddrStr)
+
+var VoteProgramAddrStr = "Vote111111111111111111111111111111111111111"
+
+var VoteProgramAddr = base58.MustDecodeFromString(VoteProgramAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")

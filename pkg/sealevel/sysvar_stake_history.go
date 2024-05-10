@@ -70,6 +70,15 @@ func (sh *SysvarStakeHistory) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
+func (sh *SysvarStakeHistory) Get(epoch uint64) *StakeHistoryEntry {
+	for _, pair := range *sh {
+		if pair.Epoch == epoch {
+			return &pair.Entry
+		}
+	}
+	return nil
+}
+
 func ReadStakeHistorySysvar(accts *accounts.Accounts) SysvarStakeHistory {
 	stakeHistorySysvarAcct, err := (*accts).GetAccount(&SysvarStakeHistoryAddr)
 	if err != nil {
@@ -134,5 +143,21 @@ func WriteStakeHistorySysvar(accts *accounts.Accounts, stakeHistory SysvarStakeH
 	if err != nil {
 		err = fmt.Errorf("failed to write newly serialized StakeHistory sysvar to sysvar account: %w", err)
 		panic(err)
+	}
+}
+
+func checkAcctForStakeHistorySysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
+	if err != nil {
+		return err
+	}
+	pk, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+	if pk == SysvarStakeHistoryAddr {
+		return nil
+	} else {
+		return InstrErrInvalidArgument
 	}
 }

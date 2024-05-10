@@ -18,5 +18,5 @@ type GlobalCtx struct {
 
 func NewGlobalCtxDefault() *GlobalCtx {
 	features := features.NewFeaturesDefault()
-	return &GlobalCtx{Features: features}
+	return &GlobalCtx{Features: *features}
 }
