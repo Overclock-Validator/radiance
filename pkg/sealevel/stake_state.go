@@ -480,6 +480,18 @@ func (stake *Stake) Stake(epoch uint64, stakeHistory SysvarStakeHistory, newRate
 	return stake.Delegation.Stake(epoch, stakeHistory, newRateActivationEpoch)
 }
 
+func (stake *Stake) Split(remainingStakeDelta uint64, splitStakeAmount uint64) (Stake, error) {
+	if remainingStakeDelta > stake.Delegation.StakeLamports {
+		return Stake{}, StakeErrInsufficientStake
+	}
+	stake.Delegation.StakeLamports -= remainingStakeDelta
+
+	stakeObj := *stake
+	newStake := stakeObj
+	newStake.Delegation.StakeLamports = splitStakeAmount
+	return newStake, nil
+}
+
 func (stake *StakeStateV2Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	err := stake.Meta.UnmarshalWithDecoder(decoder)
 	if err != nil {

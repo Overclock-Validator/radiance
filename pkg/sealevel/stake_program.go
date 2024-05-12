@@ -40,6 +40,7 @@ var (
 	StakeErrLockupInForce             = errors.New("StakeErrLockupInForce")
 	StakeErrInsufficientDelegation    = errors.New("StakeErrInsufficientDelegation")
 	StakeErrTooSoonToRedelegate       = errors.New("StakeErrTooSoonToRedelegate")
+	StakeErrInsufficientStake         = errors.New("StakeErrInsufficientStake")
 )
 
 type StakeInstrInitialize struct {
@@ -386,7 +387,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 	case StakeProgramInstrTypeAuthorizeWithSeed:
 		{
 			var authorizeWithSeed StakeInstrAuthorizeWithSeed
-			authorizeWithSeed.UnmarshalWithDecoder(decoder)
+			err = authorizeWithSeed.UnmarshalWithDecoder(decoder)
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
@@ -460,6 +461,27 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = StakeProgramDelegate(execCtx, txCtx, instrCtx, 0, 1, clock, stakeHistory, signers, execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeSplit:
+		{
+			var split StakeInstrSplit
+			err = split.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			_, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramSplit(execCtx, txCtx, instrCtx, 0, split.Lamports, 1, signers)
 		}
 	}
 
@@ -674,4 +696,219 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 	}
 
 	return nil
+}
+
+type validatedSplitInfo struct {
+	SrcRemainingBalance   uint64
+	DestRentExemptReserve uint64
+}
+
+func validateSplitAmount(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, srcAcctIdx uint64, destAcctIdx uint64, lamports uint64, sourceMeta Meta, additionalRequiredLamports uint64, srcIsActive bool) (validatedSplitInfo, error) {
+	srcAcct, err := instrCtx.BorrowInstructionAccount(txCtx, srcAcctIdx)
+	if err != nil {
+		return validatedSplitInfo{}, err
+	}
+	srcLamports := srcAcct.Lamports()
+
+	dstAcct, err := instrCtx.BorrowInstructionAccount(txCtx, destAcctIdx)
+	if err != nil {
+		return validatedSplitInfo{}, err
+	}
+	dstLamports := dstAcct.Lamports()
+	dstDataLen := uint64(len(dstAcct.Data()))
+
+	if lamports == 0 {
+		return validatedSplitInfo{}, InstrErrInsufficientFunds
+	}
+
+	if lamports > srcLamports {
+		return validatedSplitInfo{}, InstrErrInsufficientFunds
+	}
+
+	srcMinimumBalance := safemath.SaturatingAddU64(sourceMeta.RentExemptReserve, additionalRequiredLamports)
+	srcRemainingBalance := safemath.SaturatingSubU64(srcLamports, lamports)
+	if srcRemainingBalance != 0 && srcRemainingBalance < srcMinimumBalance {
+		return validatedSplitInfo{}, InstrErrInsufficientFunds
+	}
+
+	rent := ReadRentSysvar(&execCtx.Accounts)
+	dstRentExemptReserve := rent.MinimumBalance(dstDataLen)
+
+	if execCtx.GlobalCtx.Features.IsActive(features.RequireRentExemptSplitDestination) &&
+		srcIsActive && srcRemainingBalance != 0 && dstLamports < dstRentExemptReserve {
+		return validatedSplitInfo{}, InstrErrInsufficientFunds
+	}
+
+	dstMinimumBalance := safemath.SaturatingAddU64(dstRentExemptReserve, additionalRequiredLamports)
+	dstBalanceDeficit := safemath.SaturatingSubU64(dstMinimumBalance, dstLamports)
+	if lamports < dstBalanceDeficit {
+		return validatedSplitInfo{}, InstrErrInsufficientFunds
+	}
+
+	return validatedSplitInfo{SrcRemainingBalance: srcRemainingBalance, DestRentExemptReserve: dstRentExemptReserve}, nil
+}
+
+func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, lamports uint64, splitIdx uint64, signers []solana.PublicKey) error {
+	split, err := instrCtx.BorrowInstructionAccount(txCtx, splitIdx)
+	if err != nil {
+		return err
+	}
+
+	if split.Owner() != StakeProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	if len(split.Data()) != StakeStateV2Size {
+		return InstrErrInvalidAccountData
+	}
+
+	splitStakeState, err := unmarshalStakeState(split.Data())
+	if err != nil {
+		return err
+	}
+
+	if splitStakeState.Status != StakeStateV2StatusUninitialized {
+		return InstrErrInvalidAccountData
+	}
+
+	splitLamportBalance := split.Lamports()
+
+	stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if lamports > stakeAcct.Lamports() {
+		return InstrErrInsufficientFunds
+	}
+
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	switch stakeState.Status {
+	case StakeStateV2StatusStake:
+		{
+			err = stakeState.Stake.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
+			if err != nil {
+				return err
+			}
+
+			minimumDelegation := determineMinimumDelegation(execCtx.GlobalCtx.Features)
+
+			var isActive bool
+			if execCtx.GlobalCtx.Features.IsActive(features.RequireRentExemptSplitDestination) {
+				clock := ReadClockSysvar(&execCtx.Accounts)
+				stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+				stakeHistoryEntry := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+				if stakeHistoryEntry.Effective > 0 {
+					isActive = true
+				}
+			}
+
+			validatedSplitInfo, err := validateSplitAmount(execCtx, txCtx, instrCtx, stakeAcctIdx, splitIdx, lamports, stakeState.Stake.Meta, minimumDelegation, isActive)
+			if err != nil {
+				return err
+			}
+
+			var remainingStakeDelta uint64
+			var splitStakeAmount uint64
+
+			if validatedSplitInfo.SrcRemainingBalance == 0 {
+				remainingStakeDelta = safemath.SaturatingSubU64(lamports, stakeState.Stake.Meta.RentExemptReserve)
+				splitStakeAmount = remainingStakeDelta
+			} else {
+				if safemath.SaturatingSubU64(stakeState.Stake.Stake.Delegation.StakeLamports, lamports) < minimumDelegation {
+					return StakeErrInsufficientDelegation
+				}
+				remainingStakeDelta = lamports
+				splitStakeAmount = safemath.SaturatingSubU64(lamports, safemath.SaturatingSubU64(validatedSplitInfo.DestRentExemptReserve, splitLamportBalance))
+			}
+
+			if splitStakeAmount < minimumDelegation {
+				return StakeErrInsufficientDelegation
+			}
+
+			splitStake, err := stakeState.Stake.Stake.Split(remainingStakeDelta, splitStakeAmount)
+			if err != nil {
+				return err
+			}
+
+			splitMeta := stakeState.Stake.Meta
+			splitMeta.RentExemptReserve = validatedSplitInfo.DestRentExemptReserve
+
+			stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, stakeState, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+
+			split, err := instrCtx.BorrowInstructionAccount(txCtx, splitIdx)
+			if err != nil {
+				return err
+			}
+
+			newSplitStakeState := StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: splitMeta, Stake: splitStake, StakeFlags: stakeState.Stake.StakeFlags}}
+			err = setStakeAccountState(split, &newSplitStakeState, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+		}
+
+	case StakeStateV2StatusInitialized:
+		{
+			err = stakeState.Initialized.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
+			if err != nil {
+				return err
+			}
+
+			validatedSplitInfo, err := validateSplitAmount(execCtx, txCtx, instrCtx, stakeAcctIdx, splitIdx, lamports, stakeState.Initialized.Meta, 0, false)
+			if err != nil {
+				return err
+			}
+
+			splitMeta := stakeState.Initialized.Meta
+			splitMeta.RentExemptReserve = validatedSplitInfo.DestRentExemptReserve
+
+			split, err := instrCtx.BorrowInstructionAccount(txCtx, splitIdx)
+			if err != nil {
+				return err
+			}
+
+			newStakeState := StakeStateV2{Status: StakeStateV2StatusInitialized, Initialized: StakeStateV2Initialized{Meta: splitMeta}}
+			err = setStakeAccountState(split, &newStakeState, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+		}
+
+	case StakeStateV2StatusUninitialized:
+		{
+			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(stakeAcctIdx)
+			if err != nil {
+				return err
+			}
+			stakePubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			if err != nil {
+				return err
+			}
+
+			err = verifySigner(stakePubkey, signers)
+			if err != nil {
+				return err
+			}
+		}
+
+	default:
+		{
+			err = InstrErrInvalidAccountData
+		}
+	}
+
+	return err
 }
