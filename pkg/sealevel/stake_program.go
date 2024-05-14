@@ -592,6 +592,57 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramSetLockup(me, lockup, signers, clock, execCtx.GlobalCtx.Features)
 		}
+
+	case StakeProgramInstrTypeInitializeChecked:
+		{
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			idxInTxStaker, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+			if err != nil {
+				return err
+			}
+
+			stakerPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTxStaker)
+			if err != nil {
+				return err
+			}
+
+			idxInTxWithdrawer, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			if err != nil {
+				return err
+			}
+
+			withdrawerPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTxWithdrawer)
+			if err != nil {
+				return err
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			if err != nil {
+				return err
+			}
+			if !isSigner {
+				return InstrErrMissingRequiredSignature
+			}
+
+			authorized := Authorized{Staker: stakerPubkey, Withdrawer: withdrawerPubkey}
+
+			rent := ReadRentSysvar(&execCtx.Accounts)
+			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramInitialize(me, authorized, StakeLockup{}, rent, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
