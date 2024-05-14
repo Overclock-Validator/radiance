@@ -21,7 +21,7 @@ const (
 	StakeProgramInstrTypeSplit
 	StakeProgramInstrTypeWithdraw
 	StakeProgramInstrTypeDeactivate
-	StakeprogramInstrTypeSetLockup
+	StakeProgramInstrTypeSetLockup
 	StakeProgramInstrTypeMerge
 	StakeProgramInstrTypeAuthorizeWithSeed
 	StakeProgramInstrTypeInitializeChecked
@@ -135,7 +135,7 @@ func (withdraw *StakeInstrWithdraw) UnmarshalWithDecoder(decoder *bin.Decoder) e
 	return err
 }
 
-func (lockup *StakeInstrSetLockup) UnmarshalWithDecoder(decoder bin.Decoder) error {
+func (lockup *StakeInstrSetLockup) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	timeStampExists, err := decoder.ReadBool()
 	if err != nil {
 		return err
@@ -573,6 +573,24 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = StakeProgramDeactivate(execCtx, me, clock, signers)
+		}
+
+	case StakeProgramInstrTypeSetLockup:
+		{
+			var lockup StakeInstrSetLockup
+			err = lockup.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return err
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+
+			err = StakeProgramSetLockup(me, lockup, signers, clock, execCtx.GlobalCtx.Features)
 		}
 	}
 
@@ -1253,5 +1271,41 @@ func StakeProgramDeactivate(execCtx *ExecutionCtx, stakeAcct *BorrowedAccount, c
 		return err
 	} else {
 		return InstrErrInvalidAccountData
+	}
+}
+
+func StakeProgramSetLockup(stakeAcct *BorrowedAccount, lockup StakeInstrSetLockup, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	switch stakeState.Status {
+	case StakeStateV2StatusInitialized:
+		{
+			err = stakeState.Initialized.Meta.SetLockup(lockup, signers, clock)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, stakeState, f)
+			return err
+		}
+
+	case StakeStateV2StatusStake:
+		{
+			err = stakeState.Stake.Meta.SetLockup(lockup, signers, clock)
+			if err != nil {
+				return err
+			}
+
+			err = setStakeAccountState(stakeAcct, stakeState, f)
+			return err
+		}
+
+	default:
+		{
+			return InstrErrInvalidAccountData
+		}
 	}
 }

@@ -295,6 +295,31 @@ func (meta *Meta) MarshalWithEncoder(encoder *bin.Encoder) error {
 	return err
 }
 
+func (meta *Meta) SetLockup(lockup StakeInstrSetLockup, signers []solana.PublicKey, clock SysvarClock) error {
+	if meta.Lockup.IsInForce(clock, nil) {
+		err := verifySigner(meta.Lockup.Custodian, signers)
+		if err != nil {
+			return err
+		}
+	} else if err := verifySigner(meta.Authorized.Withdrawer, signers); err != nil {
+		return err
+	}
+
+	if lockup.UnixTimestamp != nil {
+		meta.Lockup.UnixTimeStamp = *lockup.UnixTimestamp
+	}
+
+	if lockup.Epoch != nil {
+		meta.Lockup.Epoch = *lockup.Epoch
+	}
+
+	if lockup.Custodian != nil {
+		meta.Lockup.Custodian = *lockup.Custodian
+	}
+
+	return nil
+}
+
 func (delegation *Delegation) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	voterPubkey, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
