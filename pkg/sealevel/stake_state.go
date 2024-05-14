@@ -797,9 +797,9 @@ func getMergeKindIfMergeable(execCtx *ExecutionCtx, stakeState *StakeStateV2, st
 			status := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
 			if status.Effective == 0 && status.Activating == 0 && status.Deactivating == 0 {
 				return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Stake.Meta, StakeLamports: stakeLamports, StakeFlags: stakeState.Stake.StakeFlags}}, nil
-			} else if status.Effective == 0 && status.Activating != 0 && status.Deactivating != 0 {
+			} else if status.Effective == 0 {
 				return &MergeKind{Status: MergeKindStatusActivationEpoch, ActivationEpoch: MergeKindActivationEpoch{Meta: stakeState.Stake.Meta, Stake: stakeState.Stake.Stake, StakeFlags: stakeState.Stake.StakeFlags}}, nil
-			} else if status.Effective != 0 && status.Activating == 0 && status.Deactivating == 0 {
+			} else if status.Activating == 0 && status.Deactivating == 0 {
 				return &MergeKind{Status: MergeKindStatusFullyActive, FullyActive: MergeKindFullyActive{Meta: stakeState.Stake.Meta, Stake: stakeState.Stake.Stake}}, nil
 			} else {
 				return nil, StakeErrMergeTransientStake
