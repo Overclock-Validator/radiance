@@ -1,6 +1,7 @@
 package sealevel
 
 import (
+	"encoding/binary"
 	"errors"
 	"math"
 
@@ -242,7 +243,7 @@ func (authCheckedWithSeed *StakeInstrAuthorizeCheckedWithSeed) UnmarshalWithDeco
 	return nil
 }
 
-func (lockup *StakeInstrSetLockupChecked) UnmarshalWithDecoder(decoder bin.Decoder) error {
+func (lockup *StakeInstrSetLockupChecked) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	timeStampExists, err := decoder.ReadBool()
 	if err != nil {
 		return err
@@ -747,6 +748,38 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeCheckedWithSeed.AuthoritySeed, authorizeCheckedWithSeed.AuthorityOwner, authorizedPubkey, authorizeCheckedWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeSetLockupChecked:
+		{
+			var setLockupChecked StakeInstrSetLockupChecked
+			err = setLockupChecked.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return err
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 2, true)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			lockup := StakeInstrSetLockup{UnixTimestamp: setLockupChecked.UnixTimestamp, Epoch: setLockupChecked.Epoch, Custodian: custodianPubkey}
+
+			err = StakeProgramSetLockup(me, lockup, signers, clock, execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeGetMinimumDelegation:
+		{
+			minimumDelegation := determineMinimumDelegation(execCtx.GlobalCtx.Features)
+			minimumDelegationBytes := make([]byte, 8)
+			binary.LittleEndian.PutUint64(minimumDelegationBytes, minimumDelegation)
+			txCtx.SetReturnData(StakeProgramAddr, minimumDelegationBytes)
 		}
 	}
 
