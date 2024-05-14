@@ -693,6 +693,61 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramAuthorize(me, signers, authorizedPubkey, authorizeChecked.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
 		}
+
+	case StakeProgramInstrTypeAuthorizeCheckedWithSeed:
+		{
+			var authorizeCheckedWithSeed StakeInstrAuthorizeCheckedWithSeed
+			err = authorizeCheckedWithSeed.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			if err != nil {
+				return err
+			}
+
+			authorizedPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			if err != nil {
+				return err
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			if err != nil {
+				return err
+			}
+			if !isSigner {
+				return InstrErrMissingRequiredSignature
+			}
+
+			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 4, false)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeCheckedWithSeed.AuthoritySeed, authorizeCheckedWithSeed.AuthorityOwner, authorizedPubkey, authorizeCheckedWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
