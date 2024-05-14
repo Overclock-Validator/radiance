@@ -181,3 +181,21 @@ func CheckedAddU128(a, b wide.Uint128) (wide.Uint128, error) {
 	}
 	return result, nil
 }
+
+// CheckedMulU128 multiplies two uint128's together, returning an error in the event of an overflow.
+func CheckedMulU128(a, b wide.Uint128) (wide.Uint128, error) {
+	result := a.Mul(b)
+	if result.Cmp(a) == -1 {
+		return wide.NewUint128(0, 0), ErrOverflowMul
+	}
+	return result, nil
+}
+
+// CheckedDivU128 multiplies two uint128's together, returning an error in the event of a would-be div-by-0
+func CheckedDivU128(a, b wide.Uint128) (wide.Uint128, error) {
+	if b.Cmp(wide.Uint128FromUint64(0)) == 0 {
+		return wide.NewUint128(0, 0), ErrDivByZero
+	}
+	result := a.Div(b)
+	return result, nil
+}

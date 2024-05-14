@@ -6,8 +6,10 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"github.com/ryanavella/wide"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 type Authorized struct {
@@ -75,6 +77,36 @@ type StakeStateV2 struct {
 	Status      uint32
 	Initialized StakeStateV2Initialized
 	Stake       StakeStateV2Stake
+}
+
+const (
+	MergeKindStatusInactive = iota
+	MergeKindStatusActivationEpoch
+	MergeKindStatusFullyActive
+)
+
+type MergeKindInactive struct {
+	Meta          Meta
+	StakeLamports uint64
+	StakeFlags    StakeFlags
+}
+
+type MergeKindActivationEpoch struct {
+	Meta       Meta
+	Stake      Stake
+	StakeFlags StakeFlags
+}
+
+type MergeKindFullyActive struct {
+	Meta  Meta
+	Stake Stake
+}
+
+type MergeKind struct {
+	Status          uint64
+	Inactive        MergeKindInactive
+	ActivationEpoch MergeKindActivationEpoch
+	FullyActive     MergeKindFullyActive
 }
 
 func (authorized *Authorized) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -446,6 +478,10 @@ func (stakeFlags *StakeFlags) MarshalWithEncoder(encoder *bin.Encoder) error {
 	return encoder.WriteByte(stakeFlags.Bits)
 }
 
+func (stakeFlags *StakeFlags) Union(other StakeFlags) StakeFlags {
+	return StakeFlags{Bits: stakeFlags.Bits | other.Bits}
+}
+
 func (initialized *StakeStateV2Initialized) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	err := initialized.Meta.UnmarshalWithDecoder(decoder)
 	return err
@@ -490,6 +526,83 @@ func (stake *Stake) Split(remainingStakeDelta uint64, splitStakeAmount uint64) (
 	newStake := stakeObj
 	newStake.Delegation.StakeLamports = splitStakeAmount
 	return newStake, nil
+}
+
+/*fn stake_weighted_credits_observed(
+    stake: &Stake,
+    absorbed_lamports: u64,
+    absorbed_credits_observed: u64,
+) -> Option<u64> {
+    if stake.credits_observed == absorbed_credits_observed {
+        Some(stake.credits_observed)
+    } else {
+        let total_stake = u128::from(stake.delegation.stake.checked_add(absorbed_lamports)?);
+        let stake_weighted_credits =
+            u128::from(stake.credits_observed).checked_mul(u128::from(stake.delegation.stake))?;
+        let absorbed_weighted_credits =
+            u128::from(absorbed_credits_observed).checked_mul(u128::from(absorbed_lamports))?;
+        // Discard fractional credits as a merge side-effect friction by taking
+        // the ceiling, done by adding `denominator - 1` to the numerator.
+        let total_weighted_credits = stake_weighted_credits
+            .checked_add(absorbed_weighted_credits)?
+            .checked_add(total_stake)?
+            .checked_sub(1)?;
+        u64::try_from(total_weighted_credits.checked_div(total_stake)?).ok()
+    }
+}*/
+
+func (stake *Stake) StakeWeightCreditsObserved(absorbedLamports uint64, absorbedCreditsObserved uint64) (uint64, error) {
+	if stake.CreditsObserved == absorbedCreditsObserved {
+		return stake.CreditsObserved, nil
+	} else {
+		totalStake, err := safemath.CheckedAddU64(stake.Delegation.StakeLamports, absorbedLamports)
+		if err != nil {
+			return 0, err
+		}
+		totalStakeU128 := wide.Uint128FromUint64(totalStake)
+
+		stakeWeightedCredits, err := safemath.CheckedMulU128(wide.Uint128FromUint64(stake.CreditsObserved), wide.Uint128FromUint64(stake.Delegation.StakeLamports))
+		if err != nil {
+			return 0, err
+		}
+
+		absorbedWeightedCredits, err := safemath.CheckedMulU128(wide.Uint128FromUint64(absorbedCreditsObserved), wide.Uint128FromUint64(absorbedLamports))
+		if err != nil {
+			return 0, err
+		}
+
+		x, err := safemath.CheckedAddU128(stakeWeightedCredits, absorbedWeightedCredits)
+		if err != nil {
+			return 0, err
+		}
+
+		x, err = safemath.CheckedAddU128(x, totalStakeU128)
+		if err != nil {
+			return 0, err
+		}
+
+		totalWeightedCredits, err := safemath.CheckedAddU128(x, wide.Uint128FromUint64(1))
+		if err != nil {
+			return 0, err
+		}
+
+		y, err := safemath.CheckedDivU128(totalWeightedCredits, totalStakeU128)
+		if err != nil {
+			return 0, err
+		}
+
+		return y.Uint64(), nil
+	}
+}
+
+func (stake *Stake) MergeDelegationStakeAndCreditsObserved(absorbedLamports uint64, absorbedCreditsObserved uint64) error {
+	var err error
+	stake.CreditsObserved, err = stake.StakeWeightCreditsObserved(absorbedLamports, absorbedCreditsObserved)
+	if err != nil {
+		return InstrErrArithmeticOverflow
+	}
+	stake.Delegation.StakeLamports, err = safemath.CheckedAddU64(stake.Delegation.StakeLamports, absorbedLamports)
+	return err
 }
 
 func (stake *StakeStateV2Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -695,4 +808,150 @@ func modifyStakeForRedelegation(execCtx *ExecutionCtx, stake *Stake, stakeLampor
 	stake.Delegation.VoterPubkey = voterPubkey
 	stake.CreditsObserved = voteState.Credits()
 	return nil
+}
+
+func getMergeKindIfMergeable(execCtx *ExecutionCtx, stakeState *StakeStateV2, stakeLamports uint64, clock SysvarClock, stakeHistory SysvarStakeHistory) (*MergeKind, error) {
+	switch stakeState.Status {
+	case StakeStateV2StatusStake:
+		{
+			status := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+			if status.Effective == 0 && status.Activating == 0 && status.Deactivating == 0 {
+				return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Stake.Meta, StakeLamports: stakeLamports, StakeFlags: stakeState.Stake.StakeFlags}}, nil
+			} else if status.Effective == 0 && status.Activating != 0 && status.Deactivating != 0 {
+				return &MergeKind{Status: MergeKindStatusActivationEpoch, ActivationEpoch: MergeKindActivationEpoch{Meta: stakeState.Stake.Meta, Stake: stakeState.Stake.Stake, StakeFlags: stakeState.Stake.StakeFlags}}, nil
+			} else if status.Effective != 0 && status.Activating == 0 && status.Deactivating == 0 {
+				return &MergeKind{Status: MergeKindStatusFullyActive, FullyActive: MergeKindFullyActive{Meta: stakeState.Stake.Meta, Stake: stakeState.Stake.Stake}}, nil
+			} else {
+				return nil, StakeErrMergeTransientStake
+			}
+		}
+
+	case StakeStateV2StatusInitialized:
+		{
+			return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Stake.Meta, StakeLamports: stakeLamports}}, nil
+
+		}
+
+	default:
+		{
+			return nil, InstrErrInvalidAccountData
+		}
+	}
+}
+
+func metasCanMerge(stakeMeta *Meta, srcMeta *Meta, clock SysvarClock) error {
+	canMergeLockups := stakeMeta.Lockup == srcMeta.Lockup ||
+		(!stakeMeta.Lockup.IsInForce(clock, nil) && !srcMeta.Lockup.IsInForce(clock, nil))
+
+	if stakeMeta.Authorized == srcMeta.Authorized && canMergeLockups {
+		return nil
+	} else {
+		klog.Errorf("unable to merge due to metadata mismatch")
+		return StakeErrMergeMismatch
+	}
+
+}
+
+func (mergeKind *MergeKind) Meta() *Meta {
+	switch mergeKind.Status {
+	case MergeKindStatusInactive:
+		{
+			return &mergeKind.Inactive.Meta
+		}
+	case MergeKindStatusActivationEpoch:
+		{
+			return &mergeKind.ActivationEpoch.Meta
+		}
+
+	case MergeKindStatusFullyActive:
+		{
+			return &mergeKind.FullyActive.Meta
+		}
+	default:
+		{
+			panic("MergeKind in invalid state - shouldn't be possible")
+		}
+	}
+}
+
+func (mergeKind *MergeKind) ActiveStake() *Stake {
+	switch mergeKind.Status {
+	case MergeKindStatusInactive:
+		{
+			return nil
+		}
+
+	case MergeKindStatusActivationEpoch:
+		{
+			return &mergeKind.ActivationEpoch.Stake
+		}
+
+	case MergeKindStatusFullyActive:
+		{
+			return &mergeKind.FullyActive.Stake
+		}
+	default:
+		{
+			panic("MergeKind in invalid state - shouldn't be possible")
+		}
+	}
+}
+
+func activeDelegationsCanMerge(stake *Delegation, src *Delegation) error {
+	if stake.VoterPubkey != src.VoterPubkey {
+		klog.Errorf("unable to merge due to voter mismatch")
+		return StakeErrMergeMismatch
+	} else if stake.DeactivationEpoch == math.MaxUint64 && src.DeactivationEpoch == math.MaxUint64 {
+		return nil
+	} else {
+		klog.Errorf("unable to merge due to stake deactivation")
+		return StakeErrMergeMismatch
+	}
+}
+
+func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock SysvarClock) (*StakeStateV2, error) {
+	err := metasCanMerge(mergeKind.Meta(), src.Meta(), clock)
+	if err != nil {
+		return nil, err
+	}
+
+	stakeStake := mergeKind.ActiveStake()
+	srcStake := src.ActiveStake()
+
+	if stakeStake != nil || srcStake != nil {
+		err = activeDelegationsCanMerge(&stakeStake.Delegation, &srcStake.Delegation)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusInactive {
+		mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, err = safemath.CheckedAddU64(mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, src.Inactive.StakeLamports)
+		if err != nil {
+			return nil, err
+		}
+
+		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake, StakeFlags: mergeKind.ActivationEpoch.StakeFlags.Union(src.Inactive.StakeFlags)}}, nil
+	} else if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusActivationEpoch {
+		srcLamports, err := safemath.CheckedAddU64(src.ActivationEpoch.Meta.RentExemptReserve, src.ActivationEpoch.Stake.Delegation.StakeLamports)
+		if err != nil {
+			return nil, err
+		}
+
+		err = mergeKind.ActivationEpoch.Stake.MergeDelegationStakeAndCreditsObserved(srcLamports, src.ActivationEpoch.Stake.CreditsObserved)
+		if err != nil {
+			return nil, err
+		}
+
+		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake, StakeFlags: mergeKind.ActivationEpoch.StakeFlags.Union(src.ActivationEpoch.StakeFlags)}}, nil
+	} else if mergeKind.Status == MergeKindStatusFullyActive && src.Status == MergeKindStatusFullyActive {
+		err = mergeKind.FullyActive.Stake.MergeDelegationStakeAndCreditsObserved(src.FullyActive.Stake.Delegation.StakeLamports, src.FullyActive.Stake.CreditsObserved)
+		if err != nil {
+			return nil, err
+		}
+
+		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake}}, nil
+	} else {
+		return nil, StakeErrMergeMismatch
+	}
 }

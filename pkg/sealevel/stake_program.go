@@ -41,6 +41,8 @@ var (
 	StakeErrInsufficientDelegation    = errors.New("StakeErrInsufficientDelegation")
 	StakeErrTooSoonToRedelegate       = errors.New("StakeErrTooSoonToRedelegate")
 	StakeErrInsufficientStake         = errors.New("StakeErrInsufficientStake")
+	StakeErrMergeTransientStake       = errors.New("StakeErrMergeTransientStake")
+	StakeErrMergeMismatch             = errors.New("StakeErrMergeMismatch")
 )
 
 type StakeInstrInitialize struct {
@@ -483,6 +485,33 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramSplit(execCtx, txCtx, instrCtx, 0, split.Lamports, 1, signers)
 		}
+
+	case StakeProgramInstrTypeMerge:
+		{
+			_, err = getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramMerge(execCtx, txCtx, instrCtx, 0, 1, clock, stakeHistory, signers)
+		}
 	}
 
 	return err
@@ -911,4 +940,88 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	}
 
 	return err
+}
+
+func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, srcAcctIdx uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, signers []solana.PublicKey) error {
+	srcAcct, err := instrCtx.BorrowInstructionAccount(txCtx, srcAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if srcAcct.Owner() != StakeProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	idxInTxStakeAcct, err := instrCtx.IndexOfInstructionAccountInTransaction(stakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	idxInTxSrcAcct, err := instrCtx.IndexOfInstructionAccountInTransaction(srcAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if idxInTxStakeAcct == idxInTxSrcAcct {
+		return InstrErrInvalidArgument
+	}
+
+	stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	stakeAcctState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	stakeAcctMergeKind, err := getMergeKindIfMergeable(execCtx, stakeAcctState, stakeAcct.Lamports(), clock, stakeHistory)
+	if err != nil {
+		return err
+	}
+
+	err = stakeAcctMergeKind.Meta().Authorized.Check(signers, StakeAuthorizeStaker)
+	if err != nil {
+		return err
+	}
+
+	sourceAcctState, err := unmarshalStakeState(srcAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	sourceAcctMergeKind, err := getMergeKindIfMergeable(execCtx, sourceAcctState, srcAcct.Lamports(), clock, stakeHistory)
+	if err != nil {
+		return err
+	}
+
+	mergedState, err := stakeAcctMergeKind.Merge(execCtx, sourceAcctMergeKind, clock)
+	if err != nil {
+		return err
+	}
+
+	err = setStakeAccountState(stakeAcct, mergedState, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	uninitializedState := &StakeStateV2{Status: StakeStateV2StatusUninitialized}
+	err = setStakeAccountState(srcAcct, uninitializedState, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	lamports := srcAcct.Lamports()
+	err = srcAcct.CheckedSubLamports(lamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	err = stakeAcct.CheckedAddLamports(lamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
