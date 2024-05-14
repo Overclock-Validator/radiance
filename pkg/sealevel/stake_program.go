@@ -580,7 +580,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			var lockup StakeInstrSetLockup
 			err = lockup.UnmarshalWithDecoder(decoder)
 			if err != nil {
-				return err
+				return InstrErrInvalidInstructionData
 			}
 
 			me, err := getStakeAccount()
@@ -642,6 +642,56 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = StakeProgramInitialize(me, authorized, StakeLockup{}, rent, execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeAuthorizeChecked:
+		{
+			var authorizeChecked StakeInstrAuthorizeChecked
+			err = authorizeChecked.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			if err != nil {
+				return err
+			}
+
+			authorizedPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			if err != nil {
+				return err
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			if err != nil {
+				return err
+			}
+			if !isSigner {
+				return InstrErrMissingRequiredSignature
+			}
+
+			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 4, false)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramAuthorize(me, signers, authorizedPubkey, authorizeChecked.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
 		}
 	}
 
