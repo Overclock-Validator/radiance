@@ -528,29 +528,6 @@ func (stake *Stake) Split(remainingStakeDelta uint64, splitStakeAmount uint64) (
 	return newStake, nil
 }
 
-/*fn stake_weighted_credits_observed(
-    stake: &Stake,
-    absorbed_lamports: u64,
-    absorbed_credits_observed: u64,
-) -> Option<u64> {
-    if stake.credits_observed == absorbed_credits_observed {
-        Some(stake.credits_observed)
-    } else {
-        let total_stake = u128::from(stake.delegation.stake.checked_add(absorbed_lamports)?);
-        let stake_weighted_credits =
-            u128::from(stake.credits_observed).checked_mul(u128::from(stake.delegation.stake))?;
-        let absorbed_weighted_credits =
-            u128::from(absorbed_credits_observed).checked_mul(u128::from(absorbed_lamports))?;
-        // Discard fractional credits as a merge side-effect friction by taking
-        // the ceiling, done by adding `denominator - 1` to the numerator.
-        let total_weighted_credits = stake_weighted_credits
-            .checked_add(absorbed_weighted_credits)?
-            .checked_add(total_stake)?
-            .checked_sub(1)?;
-        u64::try_from(total_weighted_credits.checked_div(total_stake)?).ok()
-    }
-}*/
-
 func (stake *Stake) StakeWeightCreditsObserved(absorbedLamports uint64, absorbedCreditsObserved uint64) (uint64, error) {
 	if stake.CreditsObserved == absorbedCreditsObserved {
 		return stake.CreditsObserved, nil
