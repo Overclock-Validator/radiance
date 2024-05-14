@@ -512,6 +512,50 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			err = StakeProgramMerge(execCtx, txCtx, instrCtx, 0, 1, clock, stakeHistory, signers)
 		}
+
+	case StakeProgramInstrTypeWithdraw:
+		{
+			var withdraw StakeInstrWithdraw
+			err = withdraw.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			_, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(5)
+			if err != nil {
+				return err
+			}
+
+			var custodianIndex *uint64
+			if instrCtx.NumberOfInstructionAccounts() >= 6 {
+				i := uint64(5)
+				custodianIndex = &i
+			}
+
+			err = StakeProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, clock, stakeHistory, 4, custodianIndex, newWarmupCooldownRateEpoch(execCtx), execCtx.GlobalCtx.Features)
+		}
 	}
 
 	return err
@@ -1024,4 +1068,148 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	}
 
 	return nil
+}
+
+func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, lamports uint64, toIndex uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, withdrawAuthorityIdx uint64, custodianIdx *uint64, newRateActivationEpoch *uint64, f features.Features) error {
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(withdrawAuthorityIdx)
+	if err != nil {
+		return err
+	}
+	withdrawAuthorityPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+
+	isSigner, err := instrCtx.IsInstructionAccountSigner(withdrawAuthorityIdx)
+	if err != nil {
+		return err
+	}
+	if !isSigner {
+		return InstrErrMissingRequiredSignature
+	}
+
+	var signers []solana.PublicKey
+	signers = append(signers, withdrawAuthorityPubkey)
+
+	stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	var lockup StakeLockup
+	var reserve uint64
+	var isStaked bool
+
+	switch stakeState.Status {
+	case StakeStateV2StatusStake:
+		{
+			err = stakeState.Stake.Meta.Authorized.Check(signers, StakeAuthorizeWithdrawer)
+			if err != nil {
+				return err
+			}
+
+			var staked uint64
+			if clock.Epoch >= stakeState.Stake.Stake.Delegation.DeactivationEpoch {
+				staked = stakeState.Stake.Stake.Stake(clock.Epoch, stakeHistory, newRateActivationEpoch)
+			} else {
+				staked = stakeState.Stake.Stake.Delegation.StakeLamports
+			}
+
+			stakedAndReserve, err := safemath.CheckedAddU64(staked, stakeState.Stake.Meta.RentExemptReserve)
+			if err != nil {
+				return InstrErrInsufficientFunds
+			}
+
+			lockup = stakeState.Stake.Meta.Lockup
+			reserve = stakedAndReserve
+			isStaked = staked != 0
+		}
+
+	case StakeStateV2StatusInitialized:
+		{
+			err = stakeState.Initialized.Meta.Authorized.Check(signers, StakeAuthorizeWithdrawer)
+			if err != nil {
+				return err
+			}
+			lockup = stakeState.Initialized.Meta.Lockup
+			reserve = stakeState.Initialized.Meta.RentExemptReserve
+			isStaked = false
+		}
+
+	case StakeStateV2StatusUninitialized:
+		{
+			err = verifySigner(stakeAcct.Key(), signers)
+			if err != nil {
+				return err
+			}
+			lockup = StakeLockup{}
+			reserve = 0
+			isStaked = false
+		}
+
+	default:
+		{
+			return InstrErrInvalidAccountData
+		}
+	}
+
+	var custodianPubkey *solana.PublicKey
+	if custodianIdx != nil {
+		isSigner, err = instrCtx.IsInstructionAccountSigner(*custodianIdx)
+		if err != nil {
+			return err
+		}
+
+		if isSigner {
+			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(*custodianIdx)
+			if err != nil {
+				return err
+			}
+			pk, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			custodianPubkey = &pk
+		}
+	}
+
+	if lockup.IsInForce(clock, custodianPubkey) {
+		return StakeErrLockupInForce
+	}
+
+	lamportsAndReserve, err := safemath.CheckedAddU64(lamports, reserve)
+	if err != nil {
+		return InstrErrInsufficientFunds
+	}
+
+	if isStaked && lamportsAndReserve > stakeAcct.Lamports() {
+		return InstrErrInsufficientFunds
+	}
+
+	if lamports != stakeAcct.Lamports() && lamportsAndReserve > stakeAcct.Lamports() {
+		return InstrErrInsufficientFunds
+	}
+
+	if lamports == stakeAcct.Lamports() {
+		uninitializedState := &StakeStateV2{Status: StakeStateV2StatusUninitialized}
+		err = setStakeAccountState(stakeAcct, uninitializedState, f)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = stakeAcct.CheckedSubLamports(lamports, f)
+	if err != nil {
+		return err
+	}
+
+	to, err := instrCtx.BorrowInstructionAccount(txCtx, toIndex)
+	if err != nil {
+		return err
+	}
+
+	err = to.CheckedAddLamports(lamports, f)
+	return err
 }

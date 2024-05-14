@@ -579,7 +579,10 @@ func (stake *Stake) MergeDelegationStakeAndCreditsObserved(absorbedLamports uint
 		return InstrErrArithmeticOverflow
 	}
 	stake.Delegation.StakeLamports, err = safemath.CheckedAddU64(stake.Delegation.StakeLamports, absorbedLamports)
-	return err
+	if err != nil {
+		return InstrErrInsufficientFunds
+	}
+	return nil
 }
 
 func (stake *StakeStateV2Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -905,14 +908,14 @@ func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock S
 	if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusInactive {
 		mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, err = safemath.CheckedAddU64(mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, src.Inactive.StakeLamports)
 		if err != nil {
-			return nil, err
+			return nil, InstrErrInsufficientFunds
 		}
 
 		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake, StakeFlags: mergeKind.ActivationEpoch.StakeFlags.Union(src.Inactive.StakeFlags)}}, nil
 	} else if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusActivationEpoch {
 		srcLamports, err := safemath.CheckedAddU64(src.ActivationEpoch.Meta.RentExemptReserve, src.ActivationEpoch.Stake.Delegation.StakeLamports)
 		if err != nil {
-			return nil, err
+			return nil, InstrErrInsufficientFunds
 		}
 
 		err = mergeKind.ActivationEpoch.Stake.MergeDelegationStakeAndCreditsObserved(srcLamports, src.ActivationEpoch.Stake.CreditsObserved)
