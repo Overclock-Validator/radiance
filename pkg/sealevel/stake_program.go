@@ -35,14 +35,16 @@ const (
 
 // stake errors
 var (
-	StakeErrCustodianMissing          = errors.New("StakeErrCustodianMissing")
-	StakeErrCustodianSignatureMissing = errors.New("StakeErrCustodianSignatureMissing")
-	StakeErrLockupInForce             = errors.New("StakeErrLockupInForce")
-	StakeErrInsufficientDelegation    = errors.New("StakeErrInsufficientDelegation")
-	StakeErrTooSoonToRedelegate       = errors.New("StakeErrTooSoonToRedelegate")
-	StakeErrInsufficientStake         = errors.New("StakeErrInsufficientStake")
-	StakeErrMergeTransientStake       = errors.New("StakeErrMergeTransientStake")
-	StakeErrMergeMismatch             = errors.New("StakeErrMergeMismatch")
+	StakeErrCustodianMissing                                               = errors.New("StakeErrCustodianMissing")
+	StakeErrCustodianSignatureMissing                                      = errors.New("StakeErrCustodianSignatureMissing")
+	StakeErrLockupInForce                                                  = errors.New("StakeErrLockupInForce")
+	StakeErrInsufficientDelegation                                         = errors.New("StakeErrInsufficientDelegation")
+	StakeErrTooSoonToRedelegate                                            = errors.New("StakeErrTooSoonToRedelegate")
+	StakeErrInsufficientStake                                              = errors.New("StakeErrInsufficientStake")
+	StakeErrMergeTransientStake                                            = errors.New("StakeErrMergeTransientStake")
+	StakeErrMergeMismatch                                                  = errors.New("StakeErrMergeMismatch")
+	StakeErrAlreadyDeactivated                                             = errors.New("StakeErrAlreadyDeactivated")
+	StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted = errors.New("StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted")
 )
 
 type StakeInstrInitialize struct {
@@ -555,6 +557,22 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			err = StakeProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, clock, stakeHistory, 4, custodianIndex, newWarmupCooldownRateEpoch(execCtx), execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeDeactivate:
+		{
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramDeactivate(execCtx, me, clock, signers)
 		}
 	}
 
@@ -1212,4 +1230,28 @@ func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stake
 
 	err = to.CheckedAddLamports(lamports, f)
 	return err
+}
+
+func StakeProgramDeactivate(execCtx *ExecutionCtx, stakeAcct *BorrowedAccount, clock SysvarClock, signers []solana.PublicKey) error {
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if stakeState.Status == StakeStateV2StatusStake {
+		err = stakeState.Stake.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
+		if err != nil {
+			return err
+		}
+
+		err = deactivateStake(execCtx, &stakeState.Stake.Stake, &stakeState.Stake.StakeFlags, clock.Epoch)
+		if err != nil {
+			return err
+		}
+
+		err = setStakeAccountState(stakeAcct, stakeState, execCtx.GlobalCtx.Features)
+		return err
+	} else {
+		return InstrErrInvalidAccountData
+	}
 }

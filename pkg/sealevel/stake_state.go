@@ -37,6 +37,10 @@ type Delegation struct {
 	WarmupCooldownRate float64
 }
 
+var (
+	StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted = StakeFlags{Bits: 0b0000_0001}
+)
+
 type StakeFlags struct {
 	Bits byte
 }
@@ -482,6 +486,14 @@ func (stakeFlags *StakeFlags) Union(other StakeFlags) StakeFlags {
 	return StakeFlags{Bits: stakeFlags.Bits | other.Bits}
 }
 
+func (stakeFlags *StakeFlags) Contains(other StakeFlags) bool {
+	return (stakeFlags.Bits & other.Bits) == other.Bits
+}
+
+func (stakeFlags *StakeFlags) Remove(other StakeFlags) {
+	stakeFlags.Bits &= ^other.Bits
+}
+
 func (initialized *StakeStateV2Initialized) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	err := initialized.Meta.UnmarshalWithDecoder(decoder)
 	return err
@@ -583,6 +595,15 @@ func (stake *Stake) MergeDelegationStakeAndCreditsObserved(absorbedLamports uint
 		return InstrErrInsufficientFunds
 	}
 	return nil
+}
+
+func (stake *Stake) Deactivate(epoch uint64) error {
+	if stake.Delegation.DeactivationEpoch != math.MaxUint64 {
+		return StakeErrAlreadyDeactivated
+	} else {
+		stake.Delegation.DeactivationEpoch = epoch
+		return nil
+	}
 }
 
 func (stake *StakeStateV2Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -933,5 +954,32 @@ func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock S
 		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake}}, nil
 	} else {
 		return nil, StakeErrMergeMismatch
+	}
+}
+
+func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags, epoch uint64) error {
+	var err error
+	if execCtx.GlobalCtx.Features.IsActive(features.StakeRedelegateInstruction) {
+		if stakeFlags.Contains(StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted) {
+			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+
+			status := stake.Delegation.StakeActivatingAndDeactivating(epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+			if status.Activating != 0 {
+				return StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted
+			} else {
+				err = stake.Deactivate(epoch)
+				if err != nil {
+					return err
+				}
+				stakeFlags.Remove(StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted)
+				return nil
+			}
+		} else {
+			stake.Deactivate(epoch)
+			return nil
+		}
+	} else {
+		stake.Deactivate(epoch)
+		return nil
 	}
 }
