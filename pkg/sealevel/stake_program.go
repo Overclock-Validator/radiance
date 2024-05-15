@@ -49,6 +49,8 @@ var (
 	StakeErrInsufficientReferenceVotes                                     = errors.New("StakeErrInsufficientReferenceVotes")
 	StakeErrVoteAddressMismatch                                            = errors.New("StakeErrVoteAddressMismatch")
 	StakeErrMinimumDelinquentEpochsForDeactivationNotMet                   = errors.New("StakeErrMinimumDelinquentEpochsForDeactivationNotMet")
+	StakeErrRedelegateTransientOrInactiveStake                             = errors.New("StakeErrRedelegateTransientOrInactiveStake")
+	StakeErrRedelegateToSameVoteAccount                                    = errors.New("StakeErrRedelegateToSameVoteAccount")
 )
 
 type StakeInstrInitialize struct {
@@ -800,6 +802,46 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			clock := ReadClockSysvar(&execCtx.Accounts)
 
 			err = StakeProgramDeactivateDelinquent(execCtx, txCtx, instrCtx, me, 1, 2, clock.Epoch)
+		}
+
+	case StakeProgramInstrTypeRedelegate:
+		{
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			if execCtx.GlobalCtx.Features.IsActive(features.StakeRedelegateInstruction) {
+				err = instrCtx.CheckNumOfInstructionAccounts(3)
+				if err != nil {
+					return err
+				}
+
+				if !execCtx.GlobalCtx.Features.IsActive(features.ReduceStakeWarmupCooldown) {
+					configAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
+					if err != nil {
+						return err
+					}
+					if configAcct.Key() != StakeProgramConfigAddr {
+						return InstrErrInvalidArgument
+					}
+
+					_, err = unmarshalStakeConfig(configAcct.Data())
+					if err != nil {
+						return InstrErrInvalidArgument
+					}
+				}
+
+				err = StakeProgramRedelegate(execCtx, txCtx, instrCtx, me, 1, 2, signers)
+
+			} else {
+				return InstrErrInvalidInstructionData
+			}
+		}
+
+	default:
+		{
+			err = InstrErrInvalidInstructionData
 		}
 	}
 
@@ -1627,5 +1669,100 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 	} else {
 		return InstrErrInvalidAccountData
 	}
+}
 
+func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, uninitializedStakeAcctIdx uint64, voteAcctIdx uint64, signers []solana.PublicKey) error {
+	clock := ReadClockSysvar(&execCtx.Accounts)
+
+	uninitializedStakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, uninitializedStakeAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if uninitializedStakeAcct.Owner() != StakeProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	if len(uninitializedStakeAcct.Data()) != StakeStateV2Size {
+		return InstrErrInvalidAccountData
+	}
+
+	uninitStakeState, err := unmarshalStakeState(uninitializedStakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if uninitStakeState.Status != StakeStateV2StatusUninitialized {
+		return InstrErrAccountAlreadyInitialized
+	}
+
+	voteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, voteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if voteAcct.Owner() != VoteProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	votePubkey := voteAcct.Key()
+	versionedVoteState, err := unmarshalVersionedVoteState(voteAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	var stakeMeta *Meta
+	var effectiveStake uint64
+	if stakeState.Status == StakeStateV2StatusStake {
+		status := getStakeStatus(execCtx, &stakeState.Stake.Stake, clock)
+		if status.Effective == 0 || status.Activating != 0 || status.Deactivating != 0 {
+			return StakeErrRedelegateTransientOrInactiveStake
+		}
+		if stakeState.Stake.Stake.Delegation.VoterPubkey == votePubkey {
+			return StakeErrRedelegateToSameVoteAccount
+		}
+		stakeMeta = &stakeState.Stake.Meta
+		effectiveStake = status.Effective
+	} else {
+		return InstrErrInvalidAccountData
+	}
+
+	err = StakeProgramDeactivate(execCtx, stakeAcct, clock, signers)
+	if err != nil {
+		return err
+	}
+
+	err = stakeAcct.CheckedSubLamports(effectiveStake, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+	err = uninitializedStakeAcct.CheckedAddLamports(effectiveStake, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	rent := ReadRentSysvar(&execCtx.Accounts)
+
+	uninitializedStakeMeta := *stakeMeta
+	uninitializedStakeMeta.RentExemptReserve = rent.MinimumBalance(uint64(len(uninitializedStakeAcct.Data())))
+
+	stakeAmount, err := validateAndReturnDelegatedAmount(uninitializedStakeAcct, uninitializedStakeMeta, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	credits := versionedVoteState.ConvertToCurrent().Credits()
+	newState := StakeStateV2{Status: StakeStateV2StatusStake,
+		Stake: StakeStateV2Stake{Meta: uninitializedStakeMeta,
+			Stake: Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch},
+				CreditsObserved: credits}}}
+
+	err = setStakeAccountState(uninitializedStakeAcct, &newState, execCtx.GlobalCtx.Features)
+
+	return err
 }

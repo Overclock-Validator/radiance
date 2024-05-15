@@ -1008,3 +1008,8 @@ func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags
 		return nil
 	}
 }
+
+func getStakeStatus(execCtx *ExecutionCtx, stake *Stake, clock SysvarClock) StakeHistoryEntry {
+	stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+	return stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+}
