@@ -46,6 +46,9 @@ var (
 	StakeErrMergeMismatch                                                  = errors.New("StakeErrMergeMismatch")
 	StakeErrAlreadyDeactivated                                             = errors.New("StakeErrAlreadyDeactivated")
 	StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted = errors.New("StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted")
+	StakeErrInsufficientReferenceVotes                                     = errors.New("StakeErrInsufficientReferenceVotes")
+	StakeErrVoteAddressMismatch                                            = errors.New("StakeErrVoteAddressMismatch")
+	StakeErrMinimumDelinquentEpochsForDeactivationNotMet                   = errors.New("StakeErrMinimumDelinquentEpochsForDeactivationNotMet")
 )
 
 type StakeInstrInitialize struct {
@@ -781,6 +784,23 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			binary.LittleEndian.PutUint64(minimumDelegationBytes, minimumDelegation)
 			txCtx.SetReturnData(StakeProgramAddr, minimumDelegationBytes)
 		}
+
+	case StakeProgramInstrTypeDeactivateDelinquent:
+		{
+			me, err := getStakeAccount()
+			if err != nil {
+				return err
+			}
+
+			err = instrCtx.CheckNumOfInstructionAccounts(3)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+
+			err = StakeProgramDeactivateDelinquent(execCtx, txCtx, instrCtx, me, 1, 2, clock.Epoch)
+		}
 	}
 
 	return err
@@ -1497,4 +1517,115 @@ func StakeProgramSetLockup(stakeAcct *BorrowedAccount, lockup StakeInstrSetLocku
 			return InstrErrInvalidAccountData
 		}
 	}
+}
+
+const MinimumDelinquentEpochsForDeactivation = 5
+
+func acceptableReferenceEpochCredits(epochCredits []EpochCredits, currentEpoch uint64) bool {
+	epochIndex, err := safemath.CheckedSubU64(uint64(len(epochCredits)), MinimumDelinquentEpochsForDeactivation)
+	if err != nil {
+		return false
+	} else {
+		epoch := currentEpoch
+
+		relevantEpochCredits := epochCredits[epochIndex:]
+		for i, j := 0, len(relevantEpochCredits)-1; i < j; i, j = i+1, j-1 {
+			relevantEpochCredits[i], relevantEpochCredits[j] = relevantEpochCredits[j], relevantEpochCredits[i]
+		}
+
+		for _, epochCreditsVal := range relevantEpochCredits {
+			if epochCreditsVal.Epoch != epoch {
+				return false
+			}
+			epoch = safemath.SaturatingSubU64(epoch, 1)
+		}
+		return true
+	}
+}
+
+func eligibleForDeactivateDelinquent(epochCredits []EpochCredits, currentEpoch uint64) bool {
+	if len(epochCredits) == 0 {
+		return true
+	}
+
+	lastElement := epochCredits[len(epochCredits)-1]
+	minimumEpoch, err := safemath.CheckedSubU64(currentEpoch, MinimumDelinquentEpochsForDeactivation)
+	if err != nil {
+		return false
+	}
+
+	return lastElement.Epoch <= minimumEpoch
+
+}
+
+func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, delinquentVoteAcctIdx uint64, referenceVoteAcctIdx uint64, currentEpoch uint64) error {
+	delinquentVoteAcctIdxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(delinquentVoteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	delinquentVoteAcctPubkey, err := txCtx.KeyOfAccountAtIndex(delinquentVoteAcctIdxInTx)
+	if err != nil {
+		return err
+	}
+
+	delinquentVoteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, delinquentVoteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if delinquentVoteAcct.Owner() != VoteProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	delinquentVoteStateVersioned, err := unmarshalVersionedVoteState(delinquentVoteAcct.Data())
+	if err != nil {
+		return err
+	}
+	delinquentVoteState := delinquentVoteStateVersioned.ConvertToCurrent()
+
+	referenceVoteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, referenceVoteAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if referenceVoteAcct.Owner() != VoteProgramAddr {
+		return InstrErrIncorrectProgramId
+	}
+
+	referenceVoteStateVersioned, err := unmarshalVersionedVoteState(referenceVoteAcct.Data())
+	if err != nil {
+		return err
+	}
+	referenceVoteState := referenceVoteStateVersioned.ConvertToCurrent()
+
+	if !acceptableReferenceEpochCredits(referenceVoteState.EpochCredits, currentEpoch) {
+		return StakeErrInsufficientReferenceVotes
+	}
+
+	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if stakeState.Status == StakeStateV2StatusStake {
+		if stakeState.Stake.Stake.Delegation.VoterPubkey != delinquentVoteAcctPubkey {
+			return StakeErrVoteAddressMismatch
+		}
+
+		if eligibleForDeactivateDelinquent(delinquentVoteState.EpochCredits, currentEpoch) {
+			err = deactivateStake(execCtx, &stakeState.Stake.Stake, &stakeState.Stake.StakeFlags, currentEpoch)
+			if err != nil {
+				return err
+			}
+			err = setStakeAccountState(stakeAcct, stakeState, execCtx.GlobalCtx.Features)
+			return err
+		} else {
+			return StakeErrMinimumDelinquentEpochsForDeactivationNotMet
+		}
+
+	} else {
+		return InstrErrInvalidAccountData
+	}
+
 }
