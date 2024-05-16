@@ -34,6 +34,8 @@ var (
 	InstrErrAccountAlreadyInitialized   = errors.New("InstrErrAccountAlreadyInitialized")
 	InstrErrUninitializedAccount        = errors.New("InstrErrUninitializedAccount")
 	InstrErrIncorrectProgramId          = errors.New("InstrErrIncorrectProgramId")
+	InstrErrImmutable                   = errors.New("InstrErrImmutable")
+	InstrErrIncorrectAuthority          = errors.New("InstrErrIncorrectAuthority")
 )
 
 // syscall errors
