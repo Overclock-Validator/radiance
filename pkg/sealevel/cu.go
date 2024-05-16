@@ -17,4 +17,7 @@ const (
 	CUStakeProgramDefaultComputeUnits    = 750
 	CUSha256MaxSlices                    = 20000
 	CUMaxCpiInstructionSize              = 1280
+	CUUpgradeableLoaderComputeUnits      = 2370
+	CUDeprecatedLoaderComputeUnits       = 1140
+	CUDefaultLoaderComputeUnits          = 570
 )

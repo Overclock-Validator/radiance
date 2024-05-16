@@ -7,9 +7,17 @@ import (
 	"go.firedancer.io/radiance/pkg/base58"
 )
 
+const BpfLoaderUpgradeableAddrStr = "BPFLoaderUpgradeab1e11111111111111111111111"
+
+var BpfLoaderUpgradeableAddr = base58.MustDecodeFromString(BpfLoaderUpgradeableAddrStr)
+
+const BpfLoaderAddrStr = "BPFLoader2111111111111111111111111111111111"
+
+var BpfLoaderAddr = base58.MustDecodeFromString(BpfLoaderAddrStr)
+
 const BpfLoaderDeprecatedAddrStr = "BPFLoader1111111111111111111111111111111111"
 
-var BpfLoaderDeprecatedAddr = base58.MustDecodeFromString("BPFLoader1111111111111111111111111111111111")
+var BpfLoaderDeprecatedAddr = base58.MustDecodeFromString(BpfLoaderDeprecatedAddrStr)
 
 const NativeLoaderAddrStr = "NativeLoader1111111111111111111111111111111"
 
