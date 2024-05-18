@@ -599,7 +599,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 			return nil, err
 		}
 
-		if calleeAcct.IsExecutable(execCtx.GlobalCtx.Features) {
+		if calleeAcct.IsExecutable() {
 			cost := uint64(len(calleeAcct.Data()) / CUCpiBytesPerUnit)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
@@ -670,7 +670,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 			return nil, err
 		}
 
-		if calleeAcct.IsExecutable(execCtx.GlobalCtx.Features) {
+		if calleeAcct.IsExecutable() {
 			cost := uint64(len(calleeAcct.Data()) / CUCpiBytesPerUnit)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {

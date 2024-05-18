@@ -98,7 +98,7 @@ func (acct *BorrowedAccount) SetOwner(f features.Features, owner solana.PublicKe
 		return InstrErrModifiedProgramId
 	}
 
-	if acct.IsExecutable(f) {
+	if acct.IsExecutable() {
 		return InstrErrModifiedProgramId
 	}
 
@@ -141,8 +141,8 @@ func (acct *BorrowedAccount) Key() solana.PublicKey {
 	return key
 }
 
-func (acct *BorrowedAccount) IsExecutable(features features.Features) bool {
-	return acct.Account.IsBuiltin() || acct.Account.IsExecutable(features)
+func (acct *BorrowedAccount) IsExecutable() bool {
+	return acct.Account.IsBuiltin() || acct.Account.IsExecutable()
 }
 
 func (acct *BorrowedAccount) IsWritable() bool {
@@ -169,7 +169,7 @@ func (acct *BorrowedAccount) IsOwnedByCurrentProgram() bool {
 }
 
 func (acct *BorrowedAccount) DataCanBeChanged(features features.Features) error {
-	if acct.IsExecutable(features) {
+	if acct.IsExecutable() {
 		return InstrErrExecutableDataModified
 	}
 	if !acct.IsWritable() {
@@ -233,7 +233,7 @@ func (acct *BorrowedAccount) SetLamports(lamports uint64, f features.Features) e
 		return InstrErrReadonlyLamportChange
 	}
 
-	if acct.IsExecutable(f) {
+	if acct.IsExecutable() {
 		return InstrErrExecutableLamportChange
 	}
 
@@ -247,6 +247,37 @@ func (acct *BorrowedAccount) SetLamports(lamports uint64, f features.Features) e
 	}
 
 	acct.Account.SetLamports(lamports)
+	return nil
+}
+
+func (acct *BorrowedAccount) SetExecutable(isExecutable bool) error {
+	if !acct.TxCtx.Rent.IsExempt(acct.Lamports(), uint64(len(acct.Data()))) {
+		return InstrErrExecutableAccountNotRentExempt
+	}
+
+	if !acct.IsOwnedByCurrentProgram() {
+		return InstrErrExecutableModified
+	}
+
+	if !acct.IsWritable() {
+		return InstrErrExecutableModified
+	}
+
+	// can't remove executable flag
+	if acct.Account.Executable && !isExecutable {
+		return InstrErrExecutableModified
+	}
+
+	if acct.Account.Executable == isExecutable {
+		return nil
+	}
+
+	err := acct.Touch()
+	if err != nil {
+		return err
+	}
+
+	acct.Account.SetExecutable(isExecutable)
 	return nil
 }
 

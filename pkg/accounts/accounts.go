@@ -5,7 +5,6 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/features"
 )
 
 type Accounts interface {
@@ -26,7 +25,7 @@ const NativeLoaderAddrStr = "NativeLoader1111111111111111111111111111111"
 
 var NativeLoaderAddr = base58.MustDecodeFromString(NativeLoaderAddrStr)
 
-func (a *Account) IsExecutable(features features.Features) bool {
+func (a *Account) IsExecutable() bool {
 	return a.Executable
 }
 
@@ -41,6 +40,10 @@ func (a *Account) SetData(data []byte) {
 
 func (a *Account) SetLamports(lamports uint64) {
 	a.Lamports = lamports
+}
+
+func (a *Account) SetExecutable(isExecutable bool) {
+	a.Executable = isExecutable
 }
 
 func (a *Account) Resize(newLen uint64, fillVal byte) {

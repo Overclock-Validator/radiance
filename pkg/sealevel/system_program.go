@@ -143,6 +143,41 @@ func (instr *SystemInstrCreateAccount) UnmarshalWithDecoder(decoder *bin.Decoder
 	return checkWithinDeserializationLimit(decoder)
 }
 
+func (instr *SystemInstrCreateAccount) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint64(instr.Lamports, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(instr.Space, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(instr.Owner[:], false)
+	return err
+}
+
+func newCreateAccountInstruction(from solana.PublicKey, to solana.PublicKey, lamports uint64, space uint64, owner solana.PublicKey) *Instruction {
+	var accountMetas []AccountMeta
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: from, IsSigner: true, IsWritable: true})
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: to, IsSigner: true, IsWritable: true})
+
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	createAcctInstr := SystemInstrCreateAccount{Lamports: lamports, Space: space, Owner: owner}
+	err := createAcctInstr.MarshalWithEncoder(encoder)
+	if err != nil {
+		panic("shouldn't fail")
+	}
+
+	instr := &Instruction{Accounts: accountMetas, Data: buf.Bytes(), ProgramId: SystemProgramAddr}
+	return instr
+}
+
 func (instr *SystemInstrAssign) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 
@@ -851,7 +886,7 @@ func SystemProgramAllocate(execCtx *ExecutionCtx, acct *BorrowedAccount, address
 		return InstrErrMissingRequiredSignature
 	}
 
-	if len(acct.Data()) != 0 || acct.Owner() != solana.SystemProgramID {
+	if len(acct.Data()) != 0 || acct.Owner() != SystemProgramAddr {
 		klog.Errorf("Allocate: account %s already in use", address)
 		return SystemProgErrAccountAlreadyInUse
 	}
@@ -1058,7 +1093,7 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 }
 
 func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount) error {
-	if acct.Owner() != solana.SystemProgramID {
+	if acct.Owner() != SystemProgramAddr {
 		return InstrErrInvalidAccountOwner
 	}
 

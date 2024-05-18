@@ -47,6 +47,10 @@ var VoteProgramAddrStr = "Vote111111111111111111111111111111111111111"
 
 var VoteProgramAddr = base58.MustDecodeFromString(VoteProgramAddrStr)
 
+var SystemProgramAddrStr = "11111111111111111111111111111111"
+
+var SystemProgramAddr = base58.MustDecodeFromString(SystemProgramAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")
@@ -56,6 +60,12 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 	switch programId {
 	case ConfigProgramAddr:
 		return ConfigProgramExecute, nil
+	case SystemProgramAddr:
+		return SystemProgramExecute, nil
+	case StakeProgramAddr:
+		return StakeProgramExecute, nil
+	case VoteProgramAddr:
+		return VoteProgramExecute, nil
 	case Secp256kPrecompileAddr:
 		return nil, IsPrecompile
 	case Ed25519PrecompileAddr:

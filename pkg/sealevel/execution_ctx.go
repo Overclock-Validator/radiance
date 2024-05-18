@@ -118,7 +118,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 		return nil, nil, err
 	}
 
-	if !borrowedProgramAcct.IsExecutable(execCtx.GlobalCtx.Features) {
+	if !borrowedProgramAcct.IsExecutable() {
 		klog.Errorf("account %s is not executable", calleeProgramId)
 		return nil, nil, InstrErrAccountNotExecutable
 	}
@@ -246,4 +246,13 @@ func (execCtx *ExecutionCtx) Pop() error {
 
 func (execCtx *ExecutionCtx) StackHeight() uint64 {
 	return execCtx.TransactionContext.InstructionCtxStackHeight()
+}
+
+func (execCtx *ExecutionCtx) NativeInvoke(instruction Instruction, signers []solana.PublicKey) error {
+	instrAccts, programIndices, err := execCtx.PrepareInstruction(instruction, signers)
+	if err != nil {
+		return err
+	}
+	err = execCtx.ProcessInstruction(instruction.Data, instrAccts, programIndices)
+	return err
 }
