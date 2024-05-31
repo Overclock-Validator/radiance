@@ -670,6 +670,207 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 }
 
 func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	err := instrCtx.CheckNumOfInstructionAccounts(3)
+	if err != nil {
+		return err
+	}
+
+	programDataKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
+	if err != nil {
+		return err
+	}
+	programDataKey, err := txCtx.KeyOfAccountAtIndex(programDataKeyIdx)
+	if err != nil {
+		return err
+	}
+
+	rent := ReadRentSysvar(&execCtx.Accounts)
+	err = checkAcctForRentSysvar(txCtx, instrCtx, 4)
+	if err != nil {
+		return err
+	}
+
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	err = checkAcctForClockSysvar(txCtx, instrCtx, 5)
+	if err != nil {
+		return err
+	}
+
+	err = instrCtx.CheckNumOfInstructionAccounts(7)
+	if err != nil {
+		return err
+	}
+
+	authorityKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(6)
+	if err != nil {
+		return err
+	}
+	authorityKey, err := txCtx.KeyOfAccountAtIndex(authorityKeyIdx)
+	if err != nil {
+		return err
+	}
+
+	program, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+
+	if !program.IsExecutable() {
+		return InstrErrAccountNotExecutable
+	}
+
+	if !program.IsWritable() {
+		return InstrErrInvalidArgument
+	}
+
+	programId, err := instrCtx.LastProgramKey(txCtx)
+	if err != nil {
+		return err
+	}
+	if program.Owner() != programId {
+		return InstrErrIncorrectProgramId
+	}
+
+	programState, err := unmarshalUpgradeableLoaderState(program.Data())
+	if err != nil {
+		return err
+	}
+
+	if programState.Type == UpgradeableLoaderStateTypeProgram {
+		if programState.Program.ProgramDataAddress != programDataKey {
+			return InstrErrInvalidArgument
+		}
+	} else {
+		return InstrErrInvalidAccountData
+	}
+
+	buffer, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
+
+	bufferState, err := unmarshalUpgradeableLoaderState(buffer.Data())
+	if bufferState.Type == UpgradeableLoaderStateTypeBuffer {
+		if bufferState.Buffer.AuthorityAddress == nil || *bufferState.Buffer.AuthorityAddress != authorityKey {
+			return InstrErrIncorrectAuthority
+		}
+		isSigner, err := instrCtx.IsInstructionAccountSigner(6)
+		if err != nil {
+			return err
+		}
+		if !isSigner {
+			return InstrErrMissingRequiredSignature
+		}
+	} else {
+		return InstrErrInvalidArgument
+	}
+
+	bufferLamports := buffer.Lamports()
+	bufferDataOffset := uint64(upgradeableLoaderSizeOfBufferMetaData)
+	bufferDataLen := safemath.SaturatingSubU64(uint64(len(buffer.Data())), bufferDataOffset)
+	if len(buffer.Data()) < upgradeableLoaderSizeOfBufferMetaData || bufferDataLen == 0 {
+		return InstrErrInvalidAccountData
+	}
+
+	programData, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	var programDataBalanceRequired uint64
+	minBalance := rent.MinimumBalance(uint64(len(programData.Data())))
+	if minBalance > 1 {
+		programDataBalanceRequired = minBalance
+	} else {
+		programDataBalanceRequired = 1
+	}
+
+	if len(programData.Data()) < int(upgradeableLoaderSizeOfProgramData(bufferDataLen)) {
+		return InstrErrAccountDataTooSmall
+	}
+
+	if safemath.SaturatingAddU64(programData.Lamports(), bufferLamports) < programDataBalanceRequired {
+		return InstrErrInsufficientFunds
+	}
+
+	programDataState, err := unmarshalUpgradeableLoaderState(programData.Data())
+	if err != nil {
+		return err
+	}
+
+	if programDataState.Type == UpgradeableLoaderStateTypeProgramData {
+		if clock.Slot == programDataState.ProgramData.Slot {
+			return InstrErrInvalidArgument
+		}
+		if programDataState.ProgramData.UpgradeAuthorityAddress == nil {
+			return InstrErrImmutable
+		}
+		if *programDataState.ProgramData.UpgradeAuthorityAddress != authorityKey {
+			return InstrErrIncorrectAuthority
+		}
+		isSigner, err := instrCtx.IsInstructionAccountSigner(6)
+		if err != nil {
+			return err
+		}
+		if !isSigner {
+			return InstrErrMissingRequiredSignature
+		}
+	} else {
+		return InstrErrInvalidAccountData
+	}
+
+	// deploy_program! ...
+
+	programDataNewState := &UpgradeableLoaderState{ProgramData: UpgradeableLoaderStateProgramData{Slot: clock.Slot, UpgradeAuthorityAddress: &authorityKey}}
+	err = setUpgradeableLoaderAccountState(programData, programDataNewState, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	programDataDataOffset := uint64(upgradeableLoaderSizeOfProgramDataMetaData)
+	dstEnd := safemath.SaturatingAddU64(programDataDataOffset, bufferDataLen)
+	if uint64(len(programData.Data())) < dstEnd {
+		return InstrErrAccountDataTooSmall
+	}
+	if uint64(len(programData.Data())) < bufferDataOffset {
+		return InstrErrAccountDataTooSmall
+	}
+
+	dstSlice := programData.Account.Data[programDataDataOffset:dstEnd]
+	srcSlice := buffer.Account.Data[bufferDataOffset:]
+	copy(dstSlice, srcSlice)
+
+	programDataFillSlice := programData.Account.Data[dstEnd:]
+	for i := range programDataFillSlice {
+		programDataFillSlice[i] = 0
+	}
+
+	spill, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
+	if err != nil {
+		return err
+	}
+
+	spillLamports := safemath.SaturatingSubU64(safemath.SaturatingAddU64(programData.Lamports(), bufferLamports), programDataBalanceRequired)
+	err = spill.CheckedAddLamports(spillLamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	err = buffer.SetLamports(0, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+	err = programData.SetLamports(programDataBalanceRequired, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	err = buffer.SetDataLength(upgradeableLoaderSizeOfBuffer(0), execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	klog.Infof("upgraded program %s", program.Key())
 	return nil
 }
 
