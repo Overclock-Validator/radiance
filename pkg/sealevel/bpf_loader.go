@@ -66,6 +66,7 @@ type UpgradeableLoaderState struct {
 const upgradeableLoaderSizeOfBufferMetaData = 37
 const upgradeableLoaderSizeOfProgram = 36
 const upgradeableLoaderSizeOfProgramDataMetaData = 45
+const upgradeableLoaderSizeOfUninitialized = 4
 
 func upgradeableLoaderSizeOfProgramData(programLen uint64) uint64 {
 	return safemath.SaturatingAddU64(upgradeableLoaderSizeOfProgramDataMetaData, programLen)
@@ -1122,6 +1123,222 @@ func UpgradeableLoaderSetAuthorityChecked(execCtx *ExecutionCtx, txCtx *Transact
 	return nil
 }
 
+func closeAcctCommon(authorityAddr *solana.PublicKey, txCtx *TransactionCtx, instrCtx *InstructionCtx, f features.Features) error {
+	if authorityAddr == nil {
+		klog.Infof("Account is immutable")
+		return InstrErrImmutable
+	}
+
+	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+	if err != nil {
+		return err
+	}
+
+	auth, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+	if err != nil {
+		return err
+	}
+
+	if *authorityAddr != auth {
+		klog.Infof("Incorrect authority provided")
+		return InstrErrIncorrectAuthority
+	}
+
+	isSigner, err := instrCtx.IsInstructionAccountSigner(2)
+	if err != nil {
+		return err
+	}
+
+	if !isSigner {
+		klog.Infof("Authority did not sign")
+		return InstrErrMissingRequiredSignature
+	}
+
+	closeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	recipientAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+
+	err = recipientAcct.CheckedAddLamports(closeAcct.Lamports(), f)
+	if err != nil {
+		return err
+	}
+
+	err = closeAcct.SetLamports(0, f)
+	if err != nil {
+		return err
+	}
+
+	newUninitialized := &UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeUninitialized}
+	err = setUpgradeableLoaderAccountState(closeAcct, newUninitialized, f)
+
+	return err
+}
+
+func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	err := instrCtx.CheckNumOfInstructionAccounts(2)
+	if err != nil {
+		return err
+	}
+
+	idx1, err1 := instrCtx.IndexOfInstructionAccountInTransaction(0)
+	if err1 != nil {
+		return err1
+	}
+
+	idx2, err2 := instrCtx.IndexOfInstructionAccountInTransaction(1)
+	if err2 != nil {
+		return err2
+	}
+
+	if idx1 == idx2 {
+		klog.Infof("recipient is the same as the account being closed")
+		return InstrErrInvalidArgument
+	}
+
+	closeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	closeKey := closeAcct.Key()
+
+	closeAcctState, err := unmarshalUpgradeableLoaderState(closeAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	err = closeAcct.SetDataLength(upgradeableLoaderSizeOfUninitialized, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	switch closeAcctState.Type {
+	case UpgradeableLoaderStateTypeUninitialized:
+		{
+			recipientAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			err = recipientAcct.CheckedAddLamports(closeAcct.Lamports(), execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+
+			err = closeAcct.SetLamports(0, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+
+			klog.Infof("closed uninitialized %s", closeKey)
+		}
+
+	case UpgradeableLoaderStateTypeBuffer:
+		{
+			err = instrCtx.CheckNumOfInstructionAccounts(3)
+			if err != nil {
+				return err
+			}
+
+			err = closeAcctCommon(closeAcctState.Buffer.AuthorityAddress, txCtx, instrCtx, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+
+			klog.Infof("closed buffer %s", closeKey)
+		}
+
+	case UpgradeableLoaderStateTypeProgramData:
+		{
+			err = instrCtx.CheckNumOfInstructionAccounts(4)
+			if err != nil {
+				return err
+			}
+
+			programAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
+			if err != nil {
+				return err
+			}
+
+			programKey := programAcct.Key()
+
+			if !programAcct.IsWritable() {
+				klog.Infof("program account is not writable")
+				return InstrErrInvalidArgument
+			}
+
+			programId, err := instrCtx.LastProgramKey(txCtx)
+			if err != nil {
+				return err
+			}
+
+			if programAcct.Owner() != programId {
+				klog.Infof("program account not owned by loader")
+				return InstrErrIncorrectProgramId
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			if clock.Slot == closeAcctState.ProgramData.Slot {
+				klog.Infof("program was deployed in this block already")
+				return InstrErrInvalidArgument
+			}
+
+			programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
+			if err != nil {
+				return err
+			}
+
+			switch programAcctState.Type {
+			case UpgradeableLoaderStateTypeProgram:
+				{
+					if programAcctState.Program.ProgramDataAddress != closeKey {
+						klog.Infof("ProgramData account does not match ProgramData account")
+						return InstrErrInvalidArgument
+					}
+
+					err = closeAcctCommon(closeAcctState.ProgramData.UpgradeAuthorityAddress, txCtx, instrCtx, execCtx.GlobalCtx.Features)
+					if err != nil {
+						return err
+					}
+
+					/* TODO?:
+						let clock = invoke_context.get_sysvar_cache().get_clock()?;
+					    invoke_context.programs_modified_by_tx.replenish(
+					            program_key,
+					            Arc::new(LoadedProgram::new_tombstone(
+					                            clock.slot,
+					                            LoadedProgramType::Closed,
+					            )),
+					    );
+					*/
+				}
+
+			default:
+				{
+					klog.Infof("Invalid Program account")
+					return InstrErrInvalidArgument
+				}
+			}
+
+			klog.Infof("Closed program %s", programKey)
+		}
+
+	default:
+		{
+			klog.Infof("Account does not support closing")
+			return InstrErrInvalidArgument
+		}
+	}
+
+	return nil
+}
+
 func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -1130,6 +1347,12 @@ func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	}
 
 	instrData := instrCtx.Data
+
+	_, err = instrCtx.LastProgramKey(txCtx)
+	if err != nil {
+		return err
+	}
+
 	decoder := bin.NewBinDecoder(instrData)
 
 	instrType, err := decoder.ReadUint32(bin.LE)
@@ -1178,6 +1401,11 @@ func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	case UpgradeableLoaderInstrTypeSetAuthorityChecked:
 		{
 			err = UpgradeableLoaderSetAuthorityChecked(execCtx, txCtx, instrCtx)
+		}
+
+	case UpgradeableLoaderInstrTypeClose:
+		{
+			err = UpgradeableLoaderClose(execCtx, txCtx, instrCtx)
 		}
 	default:
 		{
