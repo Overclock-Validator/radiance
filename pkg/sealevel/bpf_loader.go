@@ -990,6 +990,138 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 	return nil
 }
 
+func UpgradeableLoaderSetAuthorityChecked(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+
+	if !execCtx.GlobalCtx.Features.IsActive(features.EnableBpfLoaderSetAuthorityCheckedIx) {
+		return InstrErrInvalidInstructionData
+	}
+
+	err := instrCtx.CheckNumOfInstructionAccounts(3)
+	if err != nil {
+		return err
+	}
+
+	account, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	presentAuthorityKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
+	if err != nil {
+		return err
+	}
+
+	presentAuthorityKey, err := txCtx.KeyOfAccountAtIndex(presentAuthorityKeyIdx)
+	if err != nil {
+		return err
+	}
+
+	newAuthorityIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+	if err != nil {
+		return err
+	}
+
+	newAuthority, err := txCtx.KeyOfAccountAtIndex(newAuthorityIdx)
+	if err != nil {
+		return err
+	}
+
+	accountState, err := unmarshalUpgradeableLoaderState(account.Data())
+	if err != nil {
+		return err
+	}
+
+	switch accountState.Type {
+	case UpgradeableLoaderStateTypeBuffer:
+		{
+			if accountState.Buffer.AuthorityAddress == nil {
+				klog.Infof("buffer is immutable")
+				return InstrErrImmutable
+			}
+
+			if *accountState.Buffer.AuthorityAddress != presentAuthorityKey {
+				klog.Infof("incorrect buffer authority provided")
+				return InstrErrIncorrectAuthority
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(1)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				klog.Infof("buffer authority did not sign")
+				return InstrErrMissingRequiredSignature
+			}
+
+			isSigner, err = instrCtx.IsInstructionAccountSigner(2)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				klog.Infof("new authority did not sign")
+				return InstrErrMissingRequiredSignature
+			}
+
+			accountState.Buffer.AuthorityAddress = &newAuthority
+			err = setUpgradeableLoaderAccountState(account, accountState, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+		}
+
+	case UpgradeableLoaderStateTypeProgramData:
+		{
+			if accountState.ProgramData.UpgradeAuthorityAddress == nil {
+				klog.Infof("program not upgradeable")
+				return InstrErrImmutable
+			}
+
+			if *accountState.ProgramData.UpgradeAuthorityAddress != presentAuthorityKey {
+				klog.Infof("incorrect upgrade authority provided")
+				return InstrErrIncorrectAuthority
+			}
+
+			isSigner, err := instrCtx.IsInstructionAccountSigner(1)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				klog.Infof("buffer authority did not sign")
+				return InstrErrMissingRequiredSignature
+			}
+
+			isSigner, err = instrCtx.IsInstructionAccountSigner(2)
+			if err != nil {
+				return err
+			}
+
+			if !isSigner {
+				klog.Infof("new authority did not sign")
+				return InstrErrMissingRequiredSignature
+			}
+
+			accountState.ProgramData.UpgradeAuthorityAddress = &newAuthority
+			err = setUpgradeableLoaderAccountState(account, accountState, execCtx.GlobalCtx.Features)
+			if err != nil {
+				return err
+			}
+		}
+
+	default:
+		{
+			klog.Infof("account does not support authorities")
+			return InstrErrInvalidArgument
+		}
+	}
+
+	klog.Infof("new authority: %s", newAuthority)
+
+	return nil
+}
+
 func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -1041,6 +1173,11 @@ func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	case UpgradeableLoaderInstrTypeSetAuthority:
 		{
 			err = UpgradeableLoaderSetAuthority(execCtx, txCtx, instrCtx)
+		}
+
+	case UpgradeableLoaderInstrTypeSetAuthorityChecked:
+		{
+			err = UpgradeableLoaderSetAuthorityChecked(execCtx, txCtx, instrCtx)
 		}
 	default:
 		{
