@@ -178,6 +178,24 @@ func newCreateAccountInstruction(from solana.PublicKey, to solana.PublicKey, lam
 	return instr
 }
 
+func newTransferInstruction(from solana.PublicKey, to solana.PublicKey, lamports uint64) *Instruction {
+	var accountMetas []AccountMeta
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: from, IsSigner: true, IsWritable: true})
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: to, IsSigner: false, IsWritable: true})
+
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	txInstr := SystemInstrTransfer{Lamports: lamports}
+	err := txInstr.MarshalWithEncoder(encoder)
+	if err != nil {
+		panic("shouldn't fail")
+	}
+
+	instr := &Instruction{Accounts: accountMetas, Data: buf.Bytes(), ProgramId: SystemProgramAddr}
+	return instr
+}
+
 func (instr *SystemInstrAssign) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 
@@ -199,6 +217,11 @@ func (instr *SystemInstrTransfer) UnmarshalWithDecoder(decoder *bin.Decoder) err
 	}
 
 	return checkWithinDeserializationLimit(decoder)
+}
+
+func (instr *SystemInstrTransfer) MarshalWithEncoder(encoder *bin.Encoder) error {
+	err := encoder.WriteUint64(instr.Lamports, bin.LE)
+	return err
 }
 
 func (instr *SystemInstrCreateAccountWithSeed) UnmarshalWithDecoder(decoder *bin.Decoder) error {

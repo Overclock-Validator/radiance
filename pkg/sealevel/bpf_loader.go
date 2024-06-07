@@ -1339,6 +1339,147 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	return nil
 }
 
+func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, additionalBytes uint32) error {
+	if additionalBytes == 0 {
+		klog.Infof("Additional bytes must be greater than 0")
+		return InstrErrInvalidInstructionData
+	}
+
+	programDataAcctIdx := uint64(0)
+	programAcctIdx := uint64(1)
+	optionalPayerAcctIdx := uint64(3)
+
+	programDataAcct, err := instrCtx.BorrowInstructionAccount(txCtx, programDataAcctIdx)
+	if err != nil {
+		return err
+	}
+	programDataKey := programDataAcct.Key()
+
+	programId, err := instrCtx.LastProgramKey(txCtx)
+	if err != nil {
+		return err
+	}
+
+	if programId != programDataAcct.Owner() {
+		klog.Infof("ProgramData owner is invalid")
+		return InstrErrInvalidAccountOwner
+	}
+
+	if programDataAcct.IsWritable() {
+		klog.Infof("ProgramData is not writable")
+		return InstrErrInvalidArgument
+	}
+
+	programAcct, err := instrCtx.BorrowInstructionAccount(txCtx, programAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if !programAcct.IsWritable() {
+		klog.Infof("Program account is not writable")
+		return InstrErrInvalidArgument
+	}
+
+	if programAcct.Owner() != programId {
+		klog.Infof("Program account is not owned by the loader")
+		return InstrErrInvalidAccountOwner
+	}
+
+	//programKey := programAcct.Key()
+
+	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	switch programAcctState.Type {
+	case UpgradeableLoaderStateTypeProgram:
+		{
+			if programAcctState.Program.ProgramDataAddress != programDataKey {
+				klog.Infof("Program account does not match ProgramData account")
+				return InstrErrInvalidArgument
+			}
+		}
+	default:
+		{
+			klog.Infof("Invalid Program account")
+			return InstrErrInvalidAccountData
+		}
+	}
+
+	oldLen := uint64(len(programDataAcct.Data()))
+	newLen := safemath.SaturatingAddU64(oldLen, uint64(additionalBytes))
+	if newLen > MaxPermittedDataLength {
+		klog.Infof("Extended ProgramData length of %d bytes exceeds max account data length of %d bytes", newLen, MaxPermittedDataLength)
+		return InstrErrInvalidRealloc
+	}
+
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	clockSlot := clock.Slot
+
+	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if programDataAcctState.Type == UpgradeableLoaderStateTypeProgramData {
+		if clockSlot == programDataAcctState.ProgramData.Slot {
+			klog.Infof("Program was extended in this block already")
+			return InstrErrInvalidArgument
+		}
+
+		if programDataAcctState.ProgramData.UpgradeAuthorityAddress == nil {
+			klog.Infof("Cannot extend ProgramData accounts that are not upgradeable")
+			return InstrErrImmutable
+		}
+	} else {
+		klog.Infof("ProgramData state is invalid")
+		return InstrErrInvalidAccountData
+	}
+
+	rent := ReadRentSysvar(&execCtx.Accounts)
+	balance := programDataAcct.Lamports()
+	minBalance := rent.MinimumBalance(newLen)
+	if minBalance > 1 {
+		minBalance = 1
+	}
+	requiredPayment := safemath.SaturatingSubU64(minBalance, balance)
+
+	if requiredPayment > 0 {
+		payerKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(optionalPayerAcctIdx)
+		if err != nil {
+			return err
+		}
+		payerKey, err := txCtx.KeyOfAccountAtIndex(payerKeyIdx)
+		if err != nil {
+			return err
+		}
+
+		txInstr := newTransferInstruction(payerKey, programDataKey, requiredPayment)
+		err = execCtx.NativeInvoke(*txInstr, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = programDataAcct.SetDataLength(newLen, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	// TODO: deploy_program!
+
+	programDataAcctState.ProgramData.Slot = clockSlot
+	err = setUpgradeableLoaderAccountState(programDataAcct, programDataAcctState, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	klog.Infof("Extended ProgramData account by %d bytes", additionalBytes)
+
+	return nil
+}
+
 func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -1406,6 +1547,17 @@ func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
 	case UpgradeableLoaderInstrTypeClose:
 		{
 			err = UpgradeableLoaderClose(execCtx, txCtx, instrCtx)
+		}
+
+	case UpgradeableLoaderInstrTypeExtendProgram:
+		{
+			var extend UpgradeableLoaderInstrExtendProgram
+			err = extend.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
+
+			err = UpgradeableLoaderExtendProgram(execCtx, txCtx, instrCtx, extend.AdditionalBytes)
 		}
 	default:
 		{
