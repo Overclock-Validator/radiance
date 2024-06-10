@@ -21,6 +21,9 @@ type Loader struct {
 	rd       io.ReaderAt
 	fileSize uint64
 
+	syscalls        *sbpf.SyscallRegistry
+	elfDeployChecks bool
+
 	// ELF data structures
 	eh         elf.Header64
 	phLoad     elf.Prog64
@@ -73,6 +76,19 @@ func NewLoaderFromBytes(buf []byte) (*Loader, error) {
 	l := &Loader{
 		rd:       bytes.NewReader(buf),
 		fileSize: uint64(len(buf)),
+	}
+	return l, nil
+}
+
+func NewLoaderWithSyscalls(buf []byte, syscalls *sbpf.SyscallRegistry, elfDeployChecks bool) (*Loader, error) {
+	if len(buf) > maxFileLen {
+		return nil, fmt.Errorf("ELF file too large")
+	}
+	l := &Loader{
+		rd:              bytes.NewReader(buf),
+		fileSize:        uint64(len(buf)),
+		syscalls:        syscalls,
+		elfDeployChecks: elfDeployChecks,
 	}
 	return l, nil
 }

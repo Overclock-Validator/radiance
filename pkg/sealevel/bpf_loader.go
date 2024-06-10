@@ -7,6 +7,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"go.firedancer.io/radiance/pkg/sbpf/loader"
 	"k8s.io/klog/v2"
 )
 
@@ -302,6 +303,28 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 
 	copy(program.Account.Data[programDataOffset:writeOffset], bytes)
 	return nil
+}
+
+func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
+
+	// 1. register syscalls
+	// 2. load program bytes as ELF
+	// 3. verify program
+
+	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
+
+	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
+	if err != nil {
+		return err
+	}
+
+	program, err := loader.Load()
+	if err != nil {
+		return err
+	}
+
+	err = program.Verify()
+	return err
 }
 
 func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
@@ -621,7 +644,14 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
-	// TODO: deploy_program!
+	bufferData := buffer.Data()
+	if uint64(len(bufferData)) < bufferDataOffset {
+		return InstrErrAccountDataTooSmall
+	}
+	err = deployProgram(execCtx, bufferData[bufferDataOffset:])
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
 
 	programData, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -820,7 +850,14 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return InstrErrInvalidAccountData
 	}
 
-	// deploy_program! ...
+	bufferData := buffer.Data()
+	if uint64(len(bufferData)) < bufferDataOffset {
+		return InstrErrAccountDataTooSmall
+	}
+	err = deployProgram(execCtx, bufferData[bufferDataOffset:])
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
 
 	programDataNewState := &UpgradeableLoaderState{ProgramData: UpgradeableLoaderStateProgramData{Slot: clock.Slot, UpgradeAuthorityAddress: &authorityKey}}
 	err = setUpgradeableLoaderAccountState(programData, programDataNewState, execCtx.GlobalCtx.Features)
@@ -1467,7 +1504,14 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return err
 	}
 
-	// TODO: deploy_program!
+	programBytes := programDataAcct.Data()
+	if uint64(len(programBytes)) < upgradeableLoaderSizeOfProgramDataMetaData {
+		return InstrErrAccountDataTooSmall
+	}
+	err = deployProgram(execCtx, programBytes[upgradeableLoaderSizeOfProgramDataMetaData:])
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
 
 	programDataAcctState.ProgramData.Slot = clockSlot
 	err = setUpgradeableLoaderAccountState(programDataAcct, programDataAcctState, execCtx.GlobalCtx.Features)

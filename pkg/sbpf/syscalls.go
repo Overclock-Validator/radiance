@@ -47,6 +47,11 @@ func (s SyscallRegistry) Register(name string, syscall Syscall) (hash uint32, ok
 	return
 }
 
+func (s SyscallRegistry) ExistsByHash(hash uint32) bool {
+	_, exists := s[hash]
+	return exists
+}
+
 // Convenience Methods
 
 type SyscallFunc0 func(vm VM) (r0 uint64, err error)

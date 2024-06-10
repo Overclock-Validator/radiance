@@ -55,10 +55,16 @@ func (l *Loader) fixupRelativeCalls() error {
 
 func (l *Loader) registerFunc(target uint64) (uint32, error) {
 	hash := sbpf.PCHash(target)
-	// TODO check for collision with syscalls
+
+	// check for collision with syscall
+	if l.syscalls.ExistsByHash(hash) {
+		return 0, fmt.Errorf("symbol hash collision with syscall")
+	}
+
 	//if _, ok := l.funcs[hash]; ok {
 	//	return 0, fmt.Errorf("symbol hash collision for func at=%d hash=%#08x", target, hash)
 	//}
+
 	l.funcs[hash] = int64(target)
 	return hash, nil
 }
@@ -156,7 +162,11 @@ func (l *Loader) applyReloc(reloc *elf.Rel64) error {
 		} else {
 			// Syscall
 			hash = sbpf.SymbolHash(name)
-			// TODO check whether syscall is known
+			if l.elfDeployChecks {
+				if !l.syscalls.ExistsByHash(hash) {
+					return fmt.Errorf("deployment check failure - hash did not exist in syscall registry")
+				}
+			}
 		}
 
 		binary.LittleEndian.PutUint32(l.program[rOff+4:rOff+8], hash)
