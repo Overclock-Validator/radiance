@@ -4,7 +4,7 @@ Mithril is a Solana full node client written in Golang with the goal of serving 
 
 This project is under active development. Our aim is to move rapidly with Mithril's development, hence all code is likely to be incomplete, buggy, and/or improperly tested at any particular point in time. Please check the dev branch for the latest version of the codebase. We'll begin to add documentation as Mithril begins to approach a useable state. We are currently approaching the end of Milestone 1.
 
-Milestone 1 (Nearing completion): Full program execution capability achieved, with fully operational Solana runtime
+Milestone 1 (Nearing completion): Reimplementation of the Solana Virtual Machine in Golang
 - Reimplementation of all syscalls, with a comprehensive test suite developed and exercised; bugs found as a result fixed.
 - Reimplementation of all native programs, with a comprehensive test suite developed and exercised; bugs found as a result fixed.
 - Implementation of the remainder of the runtime and VM, with a comprehensive test suite also developed. Any bugs found as a result of testing and review to be fixed.
