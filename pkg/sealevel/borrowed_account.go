@@ -23,6 +23,10 @@ func (acct *BorrowedAccount) Lamports() uint64 {
 	return acct.Account.Lamports
 }
 
+func (acct *BorrowedAccount) RentEpoch() uint64 {
+	return acct.Account.RentEpoch
+}
+
 func (acct *BorrowedAccount) Touch() error {
 	err := acct.TxCtx.Accounts.Touch(acct.IndexInTransaction)
 	if err != nil {
@@ -143,6 +147,13 @@ func (acct *BorrowedAccount) Key() solana.PublicKey {
 
 func (acct *BorrowedAccount) IsExecutable() bool {
 	return acct.Account.IsBuiltin() || acct.Account.IsExecutable()
+}
+
+func (acct *BorrowedAccount) AccountExists() bool {
+	defaultPubkey := solana.PublicKey{}
+	hasOwner := acct.Owner() == defaultPubkey
+
+	return acct.Lamports() > 0 || len(acct.Data()) > 0 || hasOwner
 }
 
 func (acct *BorrowedAccount) IsWritable() bool {

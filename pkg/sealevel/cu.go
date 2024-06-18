@@ -20,4 +20,5 @@ const (
 	CUUpgradeableLoaderComputeUnits      = 2370
 	CUDeprecatedLoaderComputeUnits       = 1140
 	CUDefaultLoaderComputeUnits          = 570
+	CUHeapCostDefault                    = 8
 )

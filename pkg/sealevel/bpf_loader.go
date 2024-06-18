@@ -2,11 +2,14 @@ package sealevel
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/binary"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/sbpf/loader"
 	"k8s.io/klog/v2"
 )
@@ -306,11 +309,6 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 }
 
 func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
-
-	// 1. register syscalls
-	// 2. load program bytes as ELF
-	// 3. verify program
-
 	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
 
 	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
@@ -327,12 +325,385 @@ func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
 	return err
 }
 
+func calculateHeapCost(heapSize uint32, heapCost uint64) uint64 {
+	roundedHeapSize := uint64(heapSize)
+	roundedHeapSize = roundedHeapSize + ((1024 * 32) - 1)
+	roundedHeapSize = ((roundedHeapSize / (32 * 1024)) - 1) * heapCost
+	return roundedHeapSize
+}
+
+const MaxInstructionAccounts = 255
+const MaxPermittedDataIncrease = 1024 * 10
+
+type serializeAcct struct {
+	isDuplicate bool
+	indexOfAcct uint64
+	acct        *BorrowedAccount
+}
+
+type serializedAcctMetadata struct {
+	originalDataLen uint64
+	vmDataAddr      uint64
+	vmKeyAddr       uint64
+	vmLamportsAddr  uint64
+	vmOwnerAddr     uint64
+}
+
+func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	numIxAccts := instrCtx.NumberOfInstructionAccounts()
+	if numIxAccts > MaxInstructionAccounts {
+		return nil, nil, InstrErrMaxAccountsExceeded
+	}
+
+	programAcct, err := instrCtx.BorrowLastProgramAccount(txCtx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	instrData := instrCtx.Data
+	programId := programAcct.Key()
+	var preLens []uint64
+
+	accts := make([]serializeAcct, 0)
+	for instrAcctIdx := uint64(0); instrAcctIdx < instrCtx.NumberOfInstructionAccounts(); instrAcctIdx++ {
+		isDupe, idxInCallee, err := instrCtx.IsInstructionAccountDuplicate(instrAcctIdx)
+		if err != nil {
+			return nil, nil, err
+		}
+		if isDupe {
+			sa := serializeAcct{isDuplicate: true, indexOfAcct: idxInCallee}
+			accts = append(accts, sa)
+		} else {
+			acct, err := instrCtx.BorrowInstructionAccount(txCtx, instrAcctIdx)
+			if err != nil {
+				return nil, nil, err
+			}
+			sa := serializeAcct{indexOfAcct: instrAcctIdx, acct: acct}
+			accts = append(accts, sa)
+		}
+	}
+
+	acctsMetaData := make([]serializedAcctMetadata, len(accts))
+
+	size := uint64(8)
+
+	for _, acct := range accts {
+		size += 1 // dup
+
+		if acct.isDuplicate {
+			size += 7 // padding to 64-bit aligned
+		} else {
+			dataLen := uint64(len(acct.acct.Data()))
+			alignmentMask := uint64(7) // (alignment - 1)
+			alignedDataLen := dataLen + (-dataLen & alignmentMask)
+
+			size += 1                      // is_signer
+			size += 1                      // is_writable
+			size += 1                      // executable
+			size += 4                      // original_data_len
+			size += solana.PublicKeyLength // key
+			size += solana.PublicKeyLength // owner
+			size += 8                      // lamports
+			size += 8                      // data len
+			size += MaxPermittedDataIncrease
+			size += 8 // rent epoch
+			size += alignedDataLen
+		}
+	}
+
+	size += 8 + uint64(len(instrData)) // data len
+	size += solana.PublicKeyLength     // program id
+
+	var serializedData []byte
+	serializedData = binary.LittleEndian.AppendUint64(serializedData, uint64(len(accts)))
+
+	for _, acct := range accts {
+		borrowedAcct := acct.acct
+		if acct.isDuplicate { // duplicate
+			position := acct.indexOfAcct
+			acctsMetaData = append(acctsMetaData, acctsMetaData[position])
+			serializedData = append(serializedData, byte(position))
+			for count := 0; count < 7; count++ {
+				serializedData = append(serializedData, 0)
+			}
+		} else { // not a duplicate
+			serializedData = append(serializedData, 0xff)
+
+			if borrowedAcct.IsSigner() {
+				serializedData = append(serializedData, 1)
+			} else {
+				serializedData = append(serializedData, 0)
+			}
+
+			if borrowedAcct.IsWritable() {
+				serializedData = append(serializedData, 1)
+			} else {
+				serializedData = append(serializedData, 0)
+			}
+
+			if borrowedAcct.IsExecutable() {
+				serializedData = append(serializedData, 1)
+			} else {
+				serializedData = append(serializedData, 0)
+			}
+
+			for count := 0; count < 4; count++ {
+				serializedData = append(serializedData, 0)
+			}
+
+			// acct key
+			acctKey := [32]byte(borrowedAcct.Key())
+			acctKeySlice := acctKey[:]
+			serializedData = append(serializedData, acctKeySlice...)
+
+			// owner
+			owner := [32]byte(borrowedAcct.Key())
+			ownerSlice := owner[:]
+			serializedData = append(serializedData, ownerSlice...)
+
+			// lamports
+			serializedData = binary.LittleEndian.AppendUint64(serializedData, borrowedAcct.Lamports())
+
+			// acct data len
+			dataLen := uint64(len(borrowedAcct.Data()))
+			preLens = append(preLens, dataLen)
+			serializedData = binary.LittleEndian.AppendUint64(serializedData, dataLen)
+
+			// data in account
+			serializedData = append(serializedData, borrowedAcct.Data()...)
+
+			alignmentMask := uint64(7) // (alignment - 1)
+			numFillBytes := (-dataLen & alignmentMask) + MaxPermittedDataIncrease
+			zeroFillBytes := make([]byte, numFillBytes, numFillBytes)
+			serializedData = append(serializedData, zeroFillBytes...)
+
+			// acct data len
+			serializedData = binary.LittleEndian.AppendUint64(serializedData, borrowedAcct.RentEpoch())
+		}
+	}
+
+	// instr data len
+	serializedData = binary.LittleEndian.AppendUint64(serializedData, uint64(len(instrData)))
+
+	// instr data
+	serializedData = append(serializedData, instrData...)
+
+	// program id
+	programIdSlice := programId[:]
+	serializedData = append(serializedData, programIdSlice...)
+
+	// sanity check for expected len vs. serialized data size
+	if uint64(len(serializedData)) != size {
+		panic("mismatch between serialized data and expected length")
+	}
+
+	return serializedData, preLens, nil
+}
+
+func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens []uint64) error {
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	var off uint64
+
+	off += 8 // number of accounts
+	for instrAcctIdx := uint64(0); instrAcctIdx < instrCtx.NumberOfInstructionAccounts(); instrAcctIdx++ {
+		preLen := preLens[instrAcctIdx]
+
+		isDupe, _, err := instrCtx.IsInstructionAccountDuplicate(instrAcctIdx)
+		if err != nil {
+			return err
+		}
+		off += 1 // position
+		if isDupe {
+			off += 7 // padding to 64-bit aligned
+		} else {
+			borrowedAcct, err := instrCtx.BorrowInstructionAccount(txCtx, instrAcctIdx)
+			if err != nil {
+				return err
+			}
+			off += 1                      // is_signer
+			off += 1                      // is_writable
+			off += 1                      // executable
+			off += 4                      // original_data_len
+			off += solana.PublicKeyLength // key
+
+			if uint64(len(parameterBytes)) < (off + solana.PublicKeyLength) {
+				return InstrErrInvalidArgument
+			}
+
+			owner := parameterBytes[off : off+solana.PublicKeyLength]
+			off += solana.PublicKeyLength // owner
+
+			if uint64(len(parameterBytes)) < (off + 8) {
+				return InstrErrInvalidArgument
+			}
+			lamports := binary.LittleEndian.Uint64(parameterBytes[off:])
+
+			if borrowedAcct.Lamports() != lamports {
+				err = borrowedAcct.SetLamports(lamports, execCtx.GlobalCtx.Features)
+				if err != nil {
+					return err
+				}
+			}
+			off += 8 // lamports
+
+			if uint64(len(parameterBytes)) < (off + 8) {
+				return InstrErrInvalidArgument
+			}
+			postLen := binary.LittleEndian.Uint64(parameterBytes[off:])
+			off += 8 // data length
+
+			if safemath.SaturatingSubU64(postLen, preLen) > MaxPermittedDataIncrease ||
+				postLen > MaxPermittedDataIncrease {
+				return InstrErrInvalidRealloc
+			}
+
+			alignmentMask := uint64(7) // (alignment - 1)
+			alignmentOffset := -preLen & alignmentMask
+
+			if uint64(len(parameterBytes)) < (off + postLen) {
+				return InstrErrInvalidArgument
+			}
+			data := parameterBytes[off : off+postLen]
+
+			resizeErr := borrowedAcct.CanDataBeResized(postLen)
+			changedErr := borrowedAcct.DataCanBeChanged(execCtx.GlobalCtx.Features)
+
+			if resizeErr != nil || changedErr != nil {
+				acctBytes := borrowedAcct.Data()
+				if len(acctBytes) != len(data) {
+					return resizeErr
+				}
+				for count := range acctBytes {
+					if acctBytes[count] != data[count] {
+						return resizeErr
+					}
+				}
+			} else if changedErr != nil {
+				acctBytes := borrowedAcct.Data()
+				if len(acctBytes) != len(data) {
+					return resizeErr
+				}
+				for count := range acctBytes {
+					if acctBytes[count] != data[count] {
+						return resizeErr
+					}
+				}
+			} else {
+				err = borrowedAcct.SetData(execCtx.GlobalCtx.Features, data)
+				if err != nil {
+					return err
+				}
+			}
+
+			off += preLen
+
+			off += MaxPermittedDataIncrease
+			off += alignmentOffset
+			off += 8 // rent epoch
+
+			ownerPk := solana.PublicKeyFromBytes(owner)
+			if borrowedAcct.Owner() != ownerPk {
+				err = borrowedAcct.SetOwner(execCtx.GlobalCtx.Features, ownerPk)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
+	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
+
+	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
+	if err != nil {
+		return err
+	}
+
+	program, err := loader.Load()
+	if err != nil {
+		return err
+	}
+
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+	programAcct, err := instrCtx.BorrowLastProgramAccount(txCtx)
+	if err != nil {
+		return err
+	}
+	programId := programAcct.Key()
+
+	computeRemainingPrev := execCtx.ComputeMeter.Remaining()
+
+	heapSize := execCtx.TransactionContext.HeapSize
+	heapCostResult := calculateHeapCost(heapSize, CUHeapCostDefault)
+
+	err = execCtx.ComputeMeter.Consume(heapCostResult)
+	if err != nil {
+		return err
+	}
+
+	parameterBytes, preLens, err := serializeParameters(execCtx)
+
+	opts := &sbpf.VMOpts{
+		HeapSize: int(execCtx.TransactionContext.HeapSize),
+		Input:    parameterBytes,
+		Syscalls: syscallRegistry,
+		Context:  execCtx,
+	}
+
+	interpreter := sbpf.NewInterpreter(nil, program, opts)
+	runErr := interpreter.Run()
+
+	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
+	klog.Infof("Program %d consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
+
+	if err != nil {
+		klog.Infof("program execution result: %s", err)
+	}
+
+	returnedDataProgId, returnData := execCtx.TransactionContext.ReturnData()
+	if len(returnData) != 0 {
+		encodedStr := base64.StdEncoding.EncodeToString(returnData)
+		klog.Infof("Program return %s %s", returnedDataProgId, encodedStr)
+	}
+
+	// deserialize data
+	if runErr != nil {
+		err = deserializeParameters(execCtx, parameterBytes, preLens)
+		if err != nil {
+			return InstrErrInvalidArgument
+		}
+	}
+
+	// TODO: proper handling of errors returned from VM
+
+	return runErr
+}
+
 func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
 		return err
 	}
+
 	programAcct, err := instrCtx.BorrowLastProgramAccount(txCtx)
 	if err != nil {
 		return err
@@ -368,12 +739,44 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	}
 
 	if !programAcct.IsExecutable() {
+		klog.Infof("program is not executable")
 		return InstrErrUnsupportedProgramId
 	}
 
-	// TODO: program execution
+	prog, err := execCtx.SlotCtx.GetAccount(instrCtx.ProgramId())
+	if err != nil {
+		return err
+	}
+	programBytes := prog.Data
 
-	return nil
+	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	programDataPubkey := programAcctState.Program.ProgramDataAddress
+	programDataAcct, err := instrCtx.BorrowExecutableAccount(txCtx, programDataPubkey)
+	if err != nil {
+		return err
+	}
+
+	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data())
+	if err != nil {
+		return err
+	}
+
+	if programDataAcctState.Type == UpgradeableLoaderStateTypeUninitialized {
+		return InstrErrInvalidAccountData
+	}
+
+	programDataSlot := programDataAcctState.ProgramData.Slot
+	if programDataSlot >= execCtx.SlotCtx.Slot {
+		return InstrErrInvalidAccountData
+	}
+
+	err = executeProgram(execCtx, programBytes)
+
+	return err
 }
 
 func UpgradeableLoaderInitializeBuffer(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {

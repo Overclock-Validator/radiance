@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"fmt"
+
 	"github.com/gagliardetto/solana-go"
 	"github.com/ryanavella/wide"
 	"go.firedancer.io/radiance/pkg/safemath"
@@ -103,6 +105,15 @@ func (instrCtx *InstructionCtx) IsInstructionAccountSigner(instrAcctIdx uint64) 
 	}
 
 	return instrCtx.InstructionAccounts[instrAcctIdx].IsSigner, nil
+}
+
+func (instrCtx *InstructionCtx) BorrowExecutableAccount(txCtx *TransactionCtx, pubkey solana.PublicKey) (*BorrowedAccount, error) {
+	for _, execAcct := range txCtx.ExecutableAccounts {
+		if execAcct.Key() == pubkey && execAcct.AccountExists() {
+			return &execAcct, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown account")
 }
 
 func (instrCtx *InstructionCtx) IsInstructionAccountWritable(instrAcctIdx uint64) (bool, error) {

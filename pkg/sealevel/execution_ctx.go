@@ -17,6 +17,12 @@ type ExecutionCtx struct {
 	SysvarCache          SysvarCache
 	Blockhash            [32]byte
 	LamportsPerSignature uint64
+	SlotCtx              *SlotCtx
+}
+
+type SlotCtx struct {
+	Accounts accounts.Accounts
+	Slot     uint64
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {
@@ -255,4 +261,14 @@ func (execCtx *ExecutionCtx) NativeInvoke(instruction Instruction, signers []sol
 	}
 	err = execCtx.ProcessInstruction(instruction.Data, instrAccts, programIndices)
 	return err
+}
+
+func (slotCtx *SlotCtx) GetAccount(pubkey solana.PublicKey) (*accounts.Account, error) {
+	pk := [32]byte(pubkey)
+	acct, err := slotCtx.Accounts.GetAccount(&pk)
+	if err != nil {
+		return nil, err
+	} else {
+		return acct, nil
+	}
 }

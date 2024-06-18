@@ -23,9 +23,11 @@ type TransactionCtx struct {
 	RetData                  TxReturnData
 	AccountKeys              []solana.PublicKey
 	Accounts                 TransactionAccounts
+	ExecutableAccounts       []BorrowedAccount
 	InstructionTraceCapacity uint64
 	AccountsResizeDelta      int64
 	Rent                     SysvarRent
+	HeapSize                 uint32
 }
 
 func (txCtx *TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {
