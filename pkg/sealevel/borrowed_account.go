@@ -151,7 +151,7 @@ func (acct *BorrowedAccount) IsExecutable() bool {
 
 func (acct *BorrowedAccount) AccountExists() bool {
 	defaultPubkey := solana.PublicKey{}
-	hasOwner := acct.Owner() == defaultPubkey
+	hasOwner := acct.Owner() != defaultPubkey
 
 	return acct.Lamports() > 0 || len(acct.Data()) > 0 || hasOwner
 }
