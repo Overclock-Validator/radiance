@@ -18,6 +18,18 @@ type AddrLookupTableInstrCreateLookupTable struct {
 	BumpSeed   byte
 }
 
+type AddrLookupTableInstrExtendLookupTable struct {
+	NewAddresses []solana.PublicKey
+}
+
+type LookupTableMeta struct {
+	DeactivationSlot           uint64
+	LastExtendedSlot           uint64
+	LastExtendedSlotStartIndex byte
+	Authority                  *solana.PublicKey
+	Padding                    uint16
+}
+
 func (createLookupTable *AddrLookupTableInstrCreateLookupTable) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	createLookupTable.RecentSlot, err = decoder.ReadUint64(bin.LE)
@@ -27,10 +39,6 @@ func (createLookupTable *AddrLookupTableInstrCreateLookupTable) UnmarshalWithDec
 
 	createLookupTable.BumpSeed, err = decoder.ReadByte()
 	return err
-}
-
-type AddrLookupTableInstrExtendLookupTable struct {
-	NewAddresses []solana.PublicKey
 }
 
 func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -49,6 +57,82 @@ func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDec
 	}
 
 	return nil
+}
+
+func (lookupTableMeta *LookupTableMeta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+
+	lookupTableMeta.DeactivationSlot, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	lookupTableMeta.LastExtendedSlot, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	lookupTableMeta.LastExtendedSlotStartIndex, err = decoder.ReadByte()
+	if err != nil {
+		return err
+	}
+
+	hasAuthority, err := decoder.ReadBool()
+	if err != nil {
+		return err
+	}
+
+	if hasAuthority {
+		authorityBytes, err := decoder.ReadBytes(solana.PublicKeyLength)
+		if err != nil {
+			return err
+		}
+
+		authorityPk := solana.PublicKeyFromBytes(authorityBytes)
+		lookupTableMeta.Authority = authorityPk.ToPointer()
+	}
+
+	lookupTableMeta.Padding, err = decoder.ReadUint16(bin.LE)
+	return err
+}
+
+func (lookupTableMeta *LookupTableMeta) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint64(lookupTableMeta.DeactivationSlot, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(lookupTableMeta.LastExtendedSlot, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteByte(lookupTableMeta.LastExtendedSlotStartIndex)
+	if err != nil {
+		return err
+	}
+
+	if lookupTableMeta.Authority != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+		authority := *lookupTableMeta.Authority
+		err = encoder.WriteBytes(authority[:], false)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = encoder.WriteBool(false)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = encoder.WriteUint16(lookupTableMeta.Padding, bin.LE)
+	return err
 }
 
 func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
