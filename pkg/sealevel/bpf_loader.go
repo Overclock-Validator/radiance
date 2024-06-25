@@ -122,10 +122,19 @@ func (buffer *UpgradeableLoaderStateBuffer) UnmarshalWithDecoder(decoder *bin.De
 
 func (buffer *UpgradeableLoaderStateBuffer) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
+
 	if buffer.AuthorityAddress != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+
 		authAddr := *buffer.AuthorityAddress
 		err = encoder.WriteBytes(authAddr.Bytes(), false)
+	} else {
+		err = encoder.WriteBool(false)
 	}
+
 	return err
 }
 
@@ -176,8 +185,15 @@ func (programData *UpgradeableLoaderStateProgramData) MarshalWithEncoder(encoder
 	}
 
 	if programData.UpgradeAuthorityAddress != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+
 		upgradeAuthAddr := *programData.UpgradeAuthorityAddress
 		err = encoder.WriteBytes(upgradeAuthAddr.Bytes(), false)
+	} else {
+		err = encoder.WriteBool(false)
 	}
 
 	return err
@@ -580,16 +596,6 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 			changedErr := borrowedAcct.DataCanBeChanged(execCtx.GlobalCtx.Features)
 
 			if resizeErr != nil || changedErr != nil {
-				acctBytes := borrowedAcct.Data()
-				if len(acctBytes) != len(data) {
-					return resizeErr
-				}
-				for count := range acctBytes {
-					if acctBytes[count] != data[count] {
-						return resizeErr
-					}
-				}
-			} else if changedErr != nil {
 				acctBytes := borrowedAcct.Data()
 				if len(acctBytes) != len(data) {
 					return resizeErr

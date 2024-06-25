@@ -465,7 +465,17 @@ func (voteState *VoteState0_23_5) MarshalWithEncoder(encoder *bin.Encoder) error
 	}
 
 	if voteState.RootSlot != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+
 		err = encoder.WriteUint64(*voteState.RootSlot, bin.LE)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = encoder.WriteBool(false)
 		if err != nil {
 			return err
 		}
@@ -743,7 +753,17 @@ func (voteState *VoteState1_14_11) MarshalWithEncoder(encoder *bin.Encoder) erro
 	})
 
 	if voteState.RootSlot != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+
 		err = encoder.WriteUint64(*voteState.RootSlot, bin.LE)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = encoder.WriteBool(false)
 		if err != nil {
 			return err
 		}
@@ -879,7 +899,17 @@ func (voteState *VoteState) MarshalWithEncoder(encoder *bin.Encoder) error {
 	})
 
 	if voteState.RootSlot != nil {
+		err = encoder.WriteBool(true)
+		if err != nil {
+			return err
+		}
+
 		err = encoder.WriteUint64(*voteState.RootSlot, bin.LE)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = encoder.WriteBool(false)
 		if err != nil {
 			return err
 		}
