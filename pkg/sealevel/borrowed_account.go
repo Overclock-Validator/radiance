@@ -79,6 +79,33 @@ func (acct *BorrowedAccount) SetState(f features.Features, data []byte) error {
 	return nil
 }
 
+func (acct *BorrowedAccount) SetStateWithExtension(f features.Features, data []byte) error {
+	newLen := safemath.SaturatingAddU64(uint64(len(acct.Account.Data)), uint64(len(data)))
+	err := acct.CanDataBeResized(newLen)
+	if err != nil {
+		return err
+	}
+
+	err = acct.DataCanBeChanged(f)
+	if err != nil {
+		return err
+	}
+
+	if len(data) == 0 {
+		return nil
+	}
+
+	err = acct.Touch()
+	if err != nil {
+		return err
+	}
+
+	acct.UpdateAccountsResizeDelta(newLen)
+
+	acct.Account.SetData(data)
+	return nil
+}
+
 func (acct *BorrowedAccount) IsZeroed() bool {
 	if len(acct.Data()) == 0 {
 		return true

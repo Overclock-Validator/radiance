@@ -21,5 +21,5 @@ const (
 	CUDeprecatedLoaderComputeUnits          = 1140
 	CUDefaultLoaderComputeUnits             = 570
 	CUHeapCostDefault                       = 8
-	CUAddressTableLookupDefaultComputeUnits = 750
+	CUAddressLookupTableDefaultComputeUnits = 750
 )

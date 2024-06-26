@@ -13,12 +13,14 @@ import (
 )
 
 const (
-	AddrTableLookupInstrTypeCreateLookupTable = iota
-	AddrTableLookupInstrTypeFreezeLookupTable
-	AddrTableLookupInstrTypeExtendLookupTable
-	AddrTableLookupInstrTypeDeactivateLookupTable
-	AddrTableLookupInstrTypeCloseLookupTable
+	AddrLookupTableInstrTypeCreateLookupTable = iota
+	AddrLookupTableInstrTypeFreezeLookupTable
+	AddrLookupTableInstrTypeExtendLookupTable
+	AddrLookupTableInstrTypeDeactivateLookupTable
+	AddrLookupTableInstrTypeCloseLookupTable
 )
+
+const LookupTableMaxAddresses = 256
 
 type AddrLookupTableInstrCreateLookupTable struct {
 	RecentSlot uint64
@@ -233,8 +235,8 @@ func marshalAddressLookupTable(addrLookupTable *AddressLookupTable) ([]byte, err
 	return buffer.Bytes(), nil
 }
 
-func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
-	err := execCtx.ComputeMeter.Consume(CUAddressTableLookupDefaultComputeUnits)
+func AddressLookupTableExecute(execCtx *ExecutionCtx) error {
+	err := execCtx.ComputeMeter.Consume(CUAddressLookupTableDefaultComputeUnits)
 	if err != nil {
 		return err
 	}
@@ -254,7 +256,7 @@ func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
 	}
 
 	switch instructionType {
-	case AddrTableLookupInstrTypeCreateLookupTable:
+	case AddrLookupTableInstrTypeCreateLookupTable:
 		{
 			var createLookupTable AddrLookupTableInstrCreateLookupTable
 			err = createLookupTable.UnmarshalWithDecoder(decoder)
@@ -262,25 +264,25 @@ func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			err = AddressTableLookupCreateLookupTable(execCtx, createLookupTable.RecentSlot, createLookupTable.BumpSeed)
+			err = AddressLookupTableCreateLookupTable(execCtx, createLookupTable.RecentSlot, createLookupTable.BumpSeed)
 		}
 
-	case AddrTableLookupInstrTypeFreezeLookupTable:
+	case AddrLookupTableInstrTypeFreezeLookupTable:
 		{
-			err = AddressTableLookupFreezeLookupTable(execCtx)
+			err = AddressLookupTableFreezeLookupTable(execCtx)
 		}
 
-	case AddrTableLookupInstrTypeExtendLookupTable:
-		{
-
-		}
-
-	case AddrTableLookupInstrTypeDeactivateLookupTable:
+	case AddrLookupTableInstrTypeExtendLookupTable:
 		{
 
 		}
 
-	case AddrTableLookupInstrTypeCloseLookupTable:
+	case AddrLookupTableInstrTypeDeactivateLookupTable:
+		{
+
+		}
+
+	case AddrLookupTableInstrTypeCloseLookupTable:
 		{
 
 		}
@@ -304,7 +306,17 @@ func setAddrTableLookupAccountState(acct *BorrowedAccount, state *AddressLookupT
 	return err
 }
 
-func AddressTableLookupCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentSlot uint64, bumpSeed byte) error {
+func setAddrTableLookupAccountStateWithExtension(acct *BorrowedAccount, state *AddressLookupTable, f features.Features) error {
+	acctStateBytes, err := marshalAddressLookupTable(state)
+	if err != nil {
+		return err
+	}
+
+	err = acct.SetStateWithExtension(f, acctStateBytes)
+	return err
+}
+
+func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentSlot uint64, bumpSeed byte) error {
 	txCtx := execCtx.TransactionContext
 
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -422,7 +434,7 @@ func AddressTableLookupCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	return err
 }
 
-func AddressTableLookupFreezeLookupTable(execCtx *ExecutionCtx) error {
+func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	txCtx := execCtx.TransactionContext
 
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -488,4 +500,125 @@ func AddressTableLookupFreezeLookupTable(execCtx *ExecutionCtx) error {
 	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
 
 	return err
+}
+
+func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []solana.PublicKey) error {
+	txCtx := execCtx.TransactionContext
+
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+	tableKey := lookupTableAcct.Key()
+
+	if lookupTableAcct.Owner() != AddressLookupTableAddr {
+		return InstrErrInvalidAccountOwner
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+	authorityKey := authorityAcct.Key()
+
+	if !authorityAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	authorityAcct.DropBorrow()
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	lookupTableData := lookupTableAcct.Data()
+	lookupTableLamports := lookupTableAcct.Lamports()
+	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	if lookupTable.Meta.Authority == nil {
+		return InstrErrImmutable
+	}
+
+	if *lookupTable.Meta.Authority != authorityKey {
+		return InstrErrIncorrectAuthority
+	}
+
+	if lookupTable.Meta.DeactivationSlot != math.MaxUint64 {
+		klog.Infof("Deactivated tables cannot be extended")
+		return InstrErrInvalidArgument
+	}
+
+	if len(lookupTable.Addresses) >= LookupTableMaxAddresses {
+		klog.Infof("Empty lookup tables cannot be frozen")
+		return InstrErrInvalidArgument
+	}
+
+	if len(newAddresses) == 0 {
+		klog.Infof("Must extend with at least one address")
+		return InstrErrInvalidInstructionData
+	}
+
+	newTableAddressesLen := safemath.SaturatingAddU64(uint64(len(lookupTable.Addresses)), uint64(len(newAddresses)))
+	if newTableAddressesLen > LookupTableMaxAddresses {
+		klog.Infof("Extended lookup table length %d would exceed max capacity of %d", newTableAddressesLen, LookupTableMaxAddresses)
+		return InstrErrInvalidInstructionData
+	}
+
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	if clock.Slot != lookupTable.Meta.LastExtendedSlot {
+		lookupTable.Meta.LastExtendedSlot = clock.Slot
+		lookupTable.Meta.LastExtendedSlotStartIndex = byte(len(lookupTable.Addresses))
+	}
+
+	newTableDataLen := AddressLookupTableMetaSize + (newTableAddressesLen * solana.PublicKeyLength)
+
+	for _, newAddr := range newAddresses {
+		lookupTable.Addresses = append(lookupTable.Addresses, newAddr)
+	}
+
+	err = setAddrTableLookupAccountStateWithExtension(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+	lookupTableAcct.DropBorrow()
+
+	rent := ReadRentSysvar(&execCtx.Accounts)
+	minBalance := rent.MinimumBalance(newTableDataLen)
+	if minBalance > 1 {
+		minBalance = 1
+	}
+	requiredLamports := safemath.SaturatingSubU64(minBalance, lookupTableLamports)
+
+	if requiredLamports > 0 {
+		payerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
+		if err != nil {
+			return err
+		}
+
+		payerKey := payerAcct.Key()
+		if !payerAcct.IsSigner() {
+			klog.Infof("payer account must be a signer")
+			return InstrErrMissingRequiredSignature
+		}
+		payerAcct.DropBorrow()
+
+		txIx := newTransferInstruction(payerKey, tableKey, requiredLamports)
+		err = execCtx.NativeInvoke(*txIx, []solana.PublicKey{payerKey})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
