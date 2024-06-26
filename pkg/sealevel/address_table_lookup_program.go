@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"bytes"
+
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 )
@@ -22,12 +24,25 @@ type AddrLookupTableInstrExtendLookupTable struct {
 	NewAddresses []solana.PublicKey
 }
 
+const (
+	AddressLookupTableStateUninitialized = iota
+	AddressLookupTableStateLookupTable
+)
+
+const AddressLookupTableMetaSize = 56
+
 type LookupTableMeta struct {
 	DeactivationSlot           uint64
 	LastExtendedSlot           uint64
 	LastExtendedSlotStartIndex byte
 	Authority                  *solana.PublicKey
 	Padding                    uint16
+}
+
+type AddressLookupTable struct {
+	State     uint32
+	Meta      LookupTableMeta
+	Addresses []solana.PublicKey
 }
 
 func (createLookupTable *AddrLookupTableInstrCreateLookupTable) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -133,6 +148,84 @@ func (lookupTableMeta *LookupTableMeta) MarshalWithEncoder(encoder *bin.Encoder)
 
 	err = encoder.WriteUint16(lookupTableMeta.Padding, bin.LE)
 	return err
+}
+
+func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
+	addrLookupTable := new(AddressLookupTable)
+	decoder := bin.NewBinDecoder(data)
+
+	state, err := decoder.ReadUint32(bin.LE)
+	if err != nil {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	if state != AddressLookupTableStateLookupTable && state != AddressLookupTableStateUninitialized {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	err = addrLookupTable.Meta.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	if state == AddressLookupTableStateUninitialized {
+		return nil, InstrErrUninitializedAccount
+	}
+
+	addrLookupTable.State = AddressLookupTableStateLookupTable
+
+	if len(data) < AddressLookupTableMetaSize {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	rawAddrData := data[AddressLookupTableMetaSize:]
+	rawAddrDataLen := len(rawAddrData)
+
+	if rawAddrDataLen == 0 || (rawAddrDataLen%solana.PublicKeyLength) != 0 {
+		return nil, InstrErrInvalidAccountData
+	}
+
+	var addrs []solana.PublicKey
+
+	for pos := 0; pos < len(rawAddrData); pos += solana.PublicKeyLength {
+		pkBytes := rawAddrData[pos : pos+solana.PublicKeyLength]
+		pk := solana.PublicKeyFromBytes(pkBytes)
+		addrs = append(addrs, pk)
+	}
+
+	addrLookupTable.Addresses = addrs
+
+	return addrLookupTable, nil
+}
+
+func marshalAddressLookupTable(addrLookupTable *AddressLookupTable) ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buffer)
+
+	err := encoder.WriteUint32(addrLookupTable.State, bin.LE)
+	if err != nil {
+		return nil, err
+	}
+
+	// nothing else to serialize up for an uninitialized account state
+	if addrLookupTable.State == AddressLookupTableStateUninitialized {
+		return buffer.Bytes(), nil
+	}
+
+	err = addrLookupTable.Meta.MarshalWithEncoder(encoder)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range addrLookupTable.Addresses {
+		pkBytes := addr[:]
+		err = encoder.WriteBytes(pkBytes, false)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buffer.Bytes(), nil
 }
 
 func AddressTableLookupExecute(execCtx *ExecutionCtx) error {

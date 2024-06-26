@@ -238,11 +238,15 @@ func (state *UpgradeableLoaderState) UnmarshalWithDecoder(decoder *bin.Decoder) 
 }
 
 func (state *UpgradeableLoaderState) MarshalWithEncoder(encoder *bin.Encoder) error {
-	var err error
+	err := encoder.WriteUint32(state.Type, bin.LE)
+	if err != nil {
+		return err
+	}
+
 	switch state.Type {
 	case UpgradeableLoaderStateTypeUninitialized:
 		{
-			// nothing to deserialize
+			// nothing to serialize
 		}
 
 	case UpgradeableLoaderStateTypeBuffer:
