@@ -14,6 +14,7 @@ type TxReturnData struct {
 
 type TransactionAccounts struct {
 	Accounts []*accounts.Account
+	Locked   []bool
 	Touched  []bool
 }
 
@@ -218,7 +219,26 @@ func (txAccounts *TransactionAccounts) GetAccount(idx uint64) (*accounts.Account
 	if len(txAccounts.Accounts) == 0 || idx > (uint64(len(txAccounts.Accounts)-1)) {
 		return nil, InstrErrMissingAccount
 	}
+
+	if txAccounts.IsLocked(idx) {
+		return nil, InstrErrAccountBorrowFailed
+	}
+
+	txAccounts.Lock(idx)
+
 	return txAccounts.Accounts[idx], nil
+}
+
+func (txAccounts *TransactionAccounts) IsLocked(idx uint64) bool {
+	return txAccounts.Locked[idx]
+}
+
+func (txAccounts *TransactionAccounts) Lock(idx uint64) {
+	txAccounts.Locked[idx] = true
+}
+
+func (txAccounts *TransactionAccounts) Unlock(idx uint64) {
+	txAccounts.Locked[idx] = false
 }
 
 func (txAccounts *TransactionAccounts) Touch(idx uint64) error {

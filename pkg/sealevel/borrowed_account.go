@@ -339,7 +339,6 @@ func (acct *BorrowedAccount) IsRentExemptAtDataLength(len uint64) bool {
 	return acct.TxCtx.Rent.IsExempt(acct.Lamports(), len)
 }
 
-// TODO: implement borrow dropping
-func (acct *BorrowedAccount) DropBorrow() {
-
+func (acct *BorrowedAccount) Drop() {
+	acct.TxCtx.Accounts.Unlock(acct.IndexInTransaction)
 }

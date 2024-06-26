@@ -39,6 +39,7 @@ var (
 	InstrErrExecutableAccountNotRentExempt = errors.New("InstrErrExecutableAccountNotRentExempt")
 	InstrErrExecutableModified             = errors.New("InstrErrExecutableModified")
 	InstrErrMaxAccountsExceeded            = errors.New("InstrErrMaxAccountsExceeded")
+	InstrErrAccountBorrowFailed            = errors.New("InstrErrAccountBorrowFailed")
 )
 
 // syscall errors

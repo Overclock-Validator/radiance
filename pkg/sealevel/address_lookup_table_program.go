@@ -369,7 +369,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		return InstrErrAccountAlreadyInitialized
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -382,7 +382,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		return InstrErrMissingRequiredSignature
 	}
 
-	authorityAcct.DropBorrow()
+	authorityAcct.Drop()
 
 	payerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
 	if err != nil {
@@ -394,7 +394,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		return InstrErrMissingRequiredSignature
 	}
 
-	payerAcct.DropBorrow()
+	payerAcct.Drop()
 
 	slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
 	_, err = slotHashes.Get(untrustedRecentSlot)
@@ -482,7 +482,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidAccountOwner
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -495,7 +495,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrMissingRequiredSignature
 	}
 
-	authorityAcct.DropBorrow()
+	authorityAcct.Drop()
 
 	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
@@ -551,7 +551,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 		return InstrErrInvalidAccountOwner
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -563,7 +563,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 		return InstrErrMissingRequiredSignature
 	}
 
-	authorityAcct.DropBorrow()
+	authorityAcct.Drop()
 
 	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
@@ -622,7 +622,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	if err != nil {
 		return err
 	}
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	rent := ReadRentSysvar(&execCtx.Accounts)
 	minBalance := rent.MinimumBalance(newTableDataLen)
@@ -642,7 +642,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 			klog.Infof("payer account must be a signer")
 			return InstrErrMissingRequiredSignature
 		}
-		payerAcct.DropBorrow()
+		payerAcct.Drop()
 
 		txIx := newTransferInstruction(payerKey, tableKey, requiredLamports)
 		err = execCtx.NativeInvoke(*txIx, []solana.PublicKey{payerKey})
@@ -671,7 +671,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidAccountOwner
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -683,7 +683,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrMissingRequiredSignature
 	}
 
-	authorityAcct.DropBorrow()
+	authorityAcct.Drop()
 
 	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
@@ -734,7 +734,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidAccountOwner
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
@@ -746,7 +746,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrMissingRequiredSignature
 	}
 
-	authorityAcct.DropBorrow()
+	authorityAcct.Drop()
 
 	err = instrCtx.CheckNumOfInstructionAccounts(3)
 	if err != nil {
@@ -807,7 +807,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		}
 	}
 
-	lookupTableAcct.DropBorrow()
+	lookupTableAcct.Drop()
 
 	recipientAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
 	if err != nil {
@@ -819,7 +819,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return err
 	}
 
-	recipientAcct.DropBorrow()
+	recipientAcct.Drop()
 
 	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
