@@ -274,12 +274,18 @@ func AddressLookupTableExecute(execCtx *ExecutionCtx) error {
 
 	case AddrLookupTableInstrTypeExtendLookupTable:
 		{
+			var extend AddrLookupTableInstrExtendLookupTable
+			err = extend.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
 
+			err = AddressLookupTableExtendLookupTable(execCtx, extend.NewAddresses)
 		}
 
 	case AddrLookupTableInstrTypeDeactivateLookupTable:
 		{
-
+			err = AddressLookupTableDeactivateLookupTable(execCtx)
 		}
 
 	case AddrLookupTableInstrTypeCloseLookupTable:
@@ -621,4 +627,67 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	}
 
 	return nil
+}
+
+func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
+	txCtx := execCtx.TransactionContext
+
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	if lookupTableAcct.Owner() != AddressLookupTableAddr {
+		return InstrErrInvalidAccountOwner
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+	authorityKey := authorityAcct.Key()
+
+	if !authorityAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	authorityAcct.DropBorrow()
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	lookupTableData := lookupTableAcct.Data()
+	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	if lookupTable.Meta.Authority == nil {
+		klog.Infof("lookup table is frozen")
+		return InstrErrImmutable
+	}
+
+	if *lookupTable.Meta.Authority != authorityKey {
+		return InstrErrIncorrectAuthority
+	}
+
+	if lookupTable.Meta.DeactivationSlot != math.MaxUint64 {
+		klog.Infof("Lookup table is already deactivated")
+		return InstrErrInvalidArgument
+	}
+
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	lookupTable.Meta.DeactivationSlot = clock.Slot
+	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+
+	return err
 }
