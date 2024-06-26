@@ -3,6 +3,7 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -266,7 +267,7 @@ func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
 
 	case AddrTableLookupInstrTypeFreezeLookupTable:
 		{
-
+			err = AddressTableLookupFreezeLookupTable(execCtx)
 		}
 
 	case AddrTableLookupInstrTypeExtendLookupTable:
@@ -418,5 +419,73 @@ func AddressTableLookupCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 
 	newState := &AddressLookupTable{State: AddressLookupTableStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
 	err = setAddrTableLookupAccountState(lookupTableAcct, newState, execCtx.GlobalCtx.Features)
+	return err
+}
+
+func AddressTableLookupFreezeLookupTable(execCtx *ExecutionCtx) error {
+	txCtx := execCtx.TransactionContext
+
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	if lookupTableAcct.Owner() != AddressLookupTableAddr {
+		return InstrErrInvalidAccountOwner
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+	authorityKey := authorityAcct.Key()
+
+	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
+		!authorityAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	authorityAcct.DropBorrow()
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	lookupTableData := lookupTableAcct.Data()
+	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	if err != nil {
+		return InstrErrInvalidAccountData
+	}
+
+	if lookupTable.Meta.Authority == nil {
+		klog.Infof("lookup table is already frozen")
+		return InstrErrImmutable
+	}
+
+	if *lookupTable.Meta.Authority != authorityKey {
+		return InstrErrIncorrectAuthority
+	}
+
+	if lookupTable.Meta.DeactivationSlot != math.MaxUint64 {
+		klog.Infof("Deactivated tables cannot be frozen")
+		return InstrErrInvalidArgument
+	}
+
+	if len(lookupTable.Addresses) == 0 {
+		klog.Infof("Empty lookup tables cannot be frozen")
+		return InstrErrInvalidInstructionData
+	}
+
+	lookupTable.Meta.Authority = nil
+	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+
 	return err
 }
