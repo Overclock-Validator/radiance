@@ -13,6 +13,8 @@ const SysvarSlotHashesAddrStr = "SysvarS1otHashes111111111111111111111111111"
 
 var SysvarSlotHashesAddr = base58.MustDecodeFromString(SysvarSlotHashesAddrStr)
 
+const SlotHashesMaxEntries = 512
+
 type SlotHash struct {
 	Slot uint64
 	Hash [32]byte
@@ -61,6 +63,16 @@ func (sh *SysvarSlotHashes) Get(slot uint64) ([32]byte, error) {
 		}
 	}
 	return [32]byte{}, fmt.Errorf("slothash not found")
+}
+
+func (sh *SysvarSlotHashes) Position(slot uint64) (uint64, error) {
+	for idx, slotHash := range *sh {
+		if slotHash.Slot == slot {
+			return uint64(idx), nil
+		}
+	}
+
+	return 0, fmt.Errorf("not found")
 }
 
 func ReadSlotHashesSysvar(accts *accounts.Accounts) SysvarSlotHashes {

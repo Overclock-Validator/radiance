@@ -31,9 +31,22 @@ type AddrLookupTableInstrExtendLookupTable struct {
 	NewAddresses []solana.PublicKey
 }
 
+// account states
 const (
-	AddressLookupTableStateUninitialized = iota
-	AddressLookupTableStateLookupTable
+	AddressLookupTableProgramStateUninitialized = iota
+	AddressLookupTableProgramStateLookupTable
+)
+
+type AddressLookupTableStatus struct {
+	Status                      uint64
+	DeactivatingRemainingBlocks uint64
+}
+
+// address lookup table statuses
+const (
+	AddressLookupTableStatusTypeActivated = iota
+	AddressLookupTableStatusTypeDeactivating
+	AddressLookupTableStatusTypeDeactivated
 )
 
 const AddressLookupTableMetaSize = 56
@@ -79,6 +92,18 @@ func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDec
 	}
 
 	return nil
+}
+
+func (lookupTableMeta *LookupTableMeta) Status(currentSlot uint64, slotHashes SysvarSlotHashes) AddressLookupTableStatus {
+	if lookupTableMeta.DeactivationSlot == math.MaxUint64 {
+		return AddressLookupTableStatus{Status: AddressLookupTableStatusTypeActivated}
+	} else if lookupTableMeta.DeactivationSlot == currentSlot {
+		return AddressLookupTableStatus{Status: AddressLookupTableStatusTypeDeactivating, DeactivatingRemainingBlocks: SlotHashesMaxEntries + 1}
+	} else if slotHashPosition, err := slotHashes.Position(lookupTableMeta.DeactivationSlot); err == nil {
+		return AddressLookupTableStatus{Status: AddressLookupTableStatusTypeDeactivating, DeactivatingRemainingBlocks: safemath.SaturatingSubU64(SlotHashesMaxEntries, slotHashPosition)}
+	} else {
+		return AddressLookupTableStatus{Status: AddressLookupTableStatusTypeDeactivated}
+	}
 }
 
 func (lookupTableMeta *LookupTableMeta) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -166,7 +191,7 @@ func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
 		return nil, InstrErrInvalidAccountData
 	}
 
-	if state != AddressLookupTableStateLookupTable && state != AddressLookupTableStateUninitialized {
+	if state != AddressLookupTableProgramStateLookupTable && state != AddressLookupTableProgramStateUninitialized {
 		return nil, InstrErrInvalidAccountData
 	}
 
@@ -175,11 +200,11 @@ func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
 		return nil, InstrErrInvalidAccountData
 	}
 
-	if state == AddressLookupTableStateUninitialized {
+	if state == AddressLookupTableProgramStateUninitialized {
 		return nil, InstrErrUninitializedAccount
 	}
 
-	addrLookupTable.State = AddressLookupTableStateLookupTable
+	addrLookupTable.State = AddressLookupTableProgramStateLookupTable
 
 	if len(data) < AddressLookupTableMetaSize {
 		return nil, InstrErrInvalidAccountData
@@ -215,7 +240,7 @@ func marshalAddressLookupTable(addrLookupTable *AddressLookupTable) ([]byte, err
 	}
 
 	// nothing else to serialize up for an uninitialized account state
-	if addrLookupTable.State == AddressLookupTableStateUninitialized {
+	if addrLookupTable.State == AddressLookupTableProgramStateUninitialized {
 		return buffer.Bytes(), nil
 	}
 
@@ -290,7 +315,7 @@ func AddressLookupTableExecute(execCtx *ExecutionCtx) error {
 
 	case AddrLookupTableInstrTypeCloseLookupTable:
 		{
-
+			err = AddressLookupTableCloseLookupTable(execCtx)
 		}
 
 	default:
@@ -435,7 +460,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		return err
 	}
 
-	newState := &AddressLookupTable{State: AddressLookupTableStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
+	newState := &AddressLookupTable{State: AddressLookupTableProgramStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
 	err = setAddrTableLookupAccountState(lookupTableAcct, newState, execCtx.GlobalCtx.Features)
 	return err
 }
@@ -688,6 +713,123 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	clock := ReadClockSysvar(&execCtx.Accounts)
 	lookupTable.Meta.DeactivationSlot = clock.Slot
 	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+
+	return err
+}
+
+func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
+	txCtx := execCtx.TransactionContext
+
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	if lookupTableAcct.Owner() != AddressLookupTableAddr {
+		return InstrErrInvalidAccountOwner
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+	authorityKey := authorityAcct.Key()
+
+	if !authorityAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	authorityAcct.DropBorrow()
+
+	err = instrCtx.CheckNumOfInstructionAccounts(3)
+	if err != nil {
+		return err
+	}
+
+	idxInTx1, err := instrCtx.IndexOfInstructionAccountInTransaction(0)
+	if err != nil {
+		return err
+	}
+
+	idxInTx2, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+	if err != nil {
+		return err
+	}
+
+	if idxInTx1 == idxInTx2 {
+		klog.Infof("lookup table cannot be the recipient of reclaimed lamports")
+		return InstrErrInvalidArgument
+	}
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+	withdrawnLamports := lookupTableAcct.Lamports()
+	lookupTableData := lookupTableAcct.Data()
+
+	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	if err != nil {
+		return err
+	}
+
+	if lookupTable.Meta.Authority == nil {
+		klog.Infof("lookup table is frozen")
+		return InstrErrImmutable
+	}
+
+	if *lookupTable.Meta.Authority != authorityKey {
+		return InstrErrIncorrectAuthority
+	}
+
+	clock := ReadClockSysvar(&execCtx.Accounts)
+	slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+
+	status := lookupTable.Meta.Status(clock.Slot, slotHashes)
+	switch status.Status {
+	case AddressLookupTableStatusTypeActivated:
+		{
+			klog.Infof("lookup table is not deactivated")
+			return InstrErrInvalidArgument
+		}
+
+	case AddressLookupTableStatusTypeDeactivating:
+		{
+			klog.Infof("table cannot be closed until it's fully deactivated in %d blocks", status.DeactivatingRemainingBlocks)
+			return InstrErrInvalidArgument
+		}
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	recipientAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
+
+	err = recipientAcct.CheckedAddLamports(withdrawnLamports, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	recipientAcct.DropBorrow()
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+	err = lookupTableAcct.SetDataLength(0, execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+	err = lookupTableAcct.SetLamports(0, execCtx.GlobalCtx.Features)
 
 	return err
 }
