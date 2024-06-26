@@ -2,9 +2,13 @@ package sealevel
 
 import (
 	"bytes"
+	"encoding/binary"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/features"
+	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -251,7 +255,13 @@ func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
 	switch instructionType {
 	case AddrTableLookupInstrTypeCreateLookupTable:
 		{
+			var createLookupTable AddrLookupTableInstrCreateLookupTable
+			err = createLookupTable.UnmarshalWithDecoder(decoder)
+			if err != nil {
+				return InstrErrInvalidInstructionData
+			}
 
+			err = AddressTableLookupCreateLookupTable(execCtx, createLookupTable.RecentSlot, createLookupTable.BumpSeed)
 		}
 
 	case AddrTableLookupInstrTypeFreezeLookupTable:
@@ -280,5 +290,133 @@ func AddressTableLookupExecute(execCtx *ExecutionCtx) error {
 		}
 	}
 
+	return err
+}
+
+func setAddrTableLookupAccountState(acct *BorrowedAccount, state *AddressLookupTable, f features.Features) error {
+	acctStateBytes, err := marshalAddressLookupTable(state)
+	if err != nil {
+		return err
+	}
+
+	err = acct.SetState(f, acctStateBytes)
+	return err
+}
+
+func AddressTableLookupCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentSlot uint64, bumpSeed byte) error {
+	txCtx := execCtx.TransactionContext
+
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	lookupTableLamports := lookupTableAcct.Lamports()
+	tableKey := lookupTableAcct.Key()
+	lookupTableOwner := lookupTableAcct.Owner()
+
+	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
+		len(lookupTableAcct.Data()) != 0 {
+		return InstrErrAccountAlreadyInitialized
+	}
+
+	lookupTableAcct.DropBorrow()
+
+	authorityAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
+	if err != nil {
+		return err
+	}
+	authorityKey := authorityAcct.Key()
+
+	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
+		!authorityAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	authorityAcct.DropBorrow()
+
+	payerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
+	payerKey := payerAcct.Key()
+
+	if !payerAcct.IsSigner() {
+		return InstrErrMissingRequiredSignature
+	}
+
+	payerAcct.DropBorrow()
+
+	slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+	_, err = slotHashes.Get(untrustedRecentSlot)
+	if err != nil {
+		return InstrErrInvalidInstructionData
+	}
+
+	derivationSlot := untrustedRecentSlot
+
+	var seeds [][]byte
+	seeds = append(seeds, authorityKey[:])
+	derivationSlotBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(derivationSlotBytes, derivationSlot)
+	seeds = append(seeds, derivationSlotBytes)
+	seeds = append(seeds, []byte{bumpSeed})
+
+	derivedTableKey, err := solana.CreateProgramAddress(seeds, AddressLookupTableAddr)
+	if err != nil {
+		return err
+	}
+
+	if tableKey != derivedTableKey {
+		klog.Infof("Table address must match derived address: %s", derivedTableKey)
+		return InstrErrInvalidArgument
+	}
+
+	if execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
+		lookupTableOwner == AddressLookupTableAddr {
+		return nil
+	}
+
+	tableAcctDataLen := uint64(AddressLookupTableMetaSize)
+	rent := ReadRentSysvar(&execCtx.Accounts)
+
+	minBalance := rent.MinimumBalance(tableAcctDataLen)
+	if minBalance > 1 {
+		minBalance = 1
+	}
+	requiredLamports := safemath.SaturatingSubU64(minBalance, lookupTableLamports)
+
+	if requiredLamports > 0 {
+		txInstr := newTransferInstruction(payerKey, tableKey, requiredLamports)
+		err = execCtx.NativeInvoke(*txInstr, []solana.PublicKey{payerKey})
+		if err != nil {
+			return err
+		}
+	}
+
+	allocInstr := newAllocateInstruction(tableKey, tableAcctDataLen)
+	err = execCtx.NativeInvoke(*allocInstr, []solana.PublicKey{tableKey})
+	if err != nil {
+		return err
+	}
+
+	assignInstr := newAssignInstruction(tableKey, AddressLookupTableAddr)
+	err = execCtx.NativeInvoke(*assignInstr, []solana.PublicKey{tableKey})
+	if err != nil {
+		return err
+	}
+
+	lookupTableAcct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
+	newState := &AddressLookupTable{State: AddressLookupTableStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
+	err = setAddrTableLookupAccountState(lookupTableAcct, newState, execCtx.GlobalCtx.Features)
 	return err
 }

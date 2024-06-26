@@ -196,6 +196,40 @@ func newTransferInstruction(from solana.PublicKey, to solana.PublicKey, lamports
 	return instr
 }
 
+func newAllocateInstruction(pubkey solana.PublicKey, space uint64) *Instruction {
+	var accountMetas []AccountMeta
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: pubkey, IsSigner: true, IsWritable: true})
+
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	allocInstr := SystemInstrAllocate{Space: space}
+	err := allocInstr.MarshalWithEncoder(encoder)
+	if err != nil {
+		panic("shouldn't fail")
+	}
+
+	instr := &Instruction{Accounts: accountMetas, Data: buf.Bytes(), ProgramId: SystemProgramAddr}
+	return instr
+}
+
+func newAssignInstruction(pubkey solana.PublicKey, owner solana.PublicKey) *Instruction {
+	var accountMetas []AccountMeta
+	accountMetas = append(accountMetas, AccountMeta{Pubkey: pubkey, IsSigner: true, IsWritable: true})
+
+	buf := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(buf)
+
+	assignInstr := SystemInstrAssign{Owner: owner}
+	err := assignInstr.MarshalWithEncoder(encoder)
+	if err != nil {
+		panic("shouldn't fail")
+	}
+
+	instr := &Instruction{Accounts: accountMetas, Data: buf.Bytes(), ProgramId: SystemProgramAddr}
+	return instr
+}
+
 func (instr *SystemInstrAssign) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 
@@ -206,6 +240,11 @@ func (instr *SystemInstrAssign) UnmarshalWithDecoder(decoder *bin.Decoder) error
 	copy(instr.Owner[:], pk)
 
 	return checkWithinDeserializationLimit(decoder)
+}
+
+func (instr *SystemInstrAssign) MarshalWithEncoder(encoder *bin.Encoder) error {
+	err := encoder.WriteBytes(instr.Owner[:], false)
+	return err
 }
 
 func (instr *SystemInstrTransfer) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -291,6 +330,11 @@ func (instr *SystemInstrAllocate) UnmarshalWithDecoder(decoder *bin.Decoder) err
 	}
 
 	return checkWithinDeserializationLimit(decoder)
+}
+
+func (instr *SystemInstrAllocate) MarshalWithEncoder(encoder *bin.Encoder) error {
+	err := encoder.WriteUint64(instr.Space, bin.LE)
+	return err
 }
 
 func (instr *SystemInstrAllocateWithSeed) UnmarshalWithDecoder(decoder *bin.Decoder) error {

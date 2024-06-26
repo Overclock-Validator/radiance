@@ -54,6 +54,15 @@ func (sh *SysvarSlotHashes) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
+func (sh *SysvarSlotHashes) Get(slot uint64) ([32]byte, error) {
+	for _, slotHash := range *sh {
+		if slotHash.Slot == slot {
+			return slotHash.Hash, nil
+		}
+	}
+	return [32]byte{}, fmt.Errorf("slothash not found")
+}
+
 func ReadSlotHashesSysvar(accts *accounts.Accounts) SysvarSlotHashes {
 	slotHashesSysvarAcct, err := (*accts).GetAccount(&SysvarSlotHashesAddr)
 	if err != nil {

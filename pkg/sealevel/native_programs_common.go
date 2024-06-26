@@ -51,6 +51,10 @@ var SystemProgramAddrStr = "11111111111111111111111111111111"
 
 var SystemProgramAddr = base58.MustDecodeFromString(SystemProgramAddrStr)
 
+var AddressLookupTableProgramAddrStr = "AddressLookupTab1e1111111111111111111111111"
+
+var AddressLookupTableAddr = base58.MustDecodeFromString(AddressLookupTableProgramAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")

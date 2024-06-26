@@ -311,3 +311,8 @@ func (acct *BorrowedAccount) CheckedAddLamports(lamports uint64, f features.Feat
 func (acct *BorrowedAccount) IsRentExemptAtDataLength(len uint64) bool {
 	return acct.TxCtx.Rent.IsExempt(acct.Lamports(), len)
 }
+
+// TODO: implement borrow dropping
+func (acct *BorrowedAccount) DropBorrow() {
+
+}
