@@ -317,6 +317,7 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 	if err != nil {
 		return err
 	}
+	defer program.Drop()
 
 	writeOffset := safemath.SaturatingAddU64(programDataOffset, uint64(len(bytes)))
 	if uint64(len(program.Data())) < writeOffset {
@@ -385,6 +386,7 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	defer programAcct.Drop()
 
 	instrData := instrCtx.Data
 	programId := programAcct.Key()
@@ -404,6 +406,8 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 			if err != nil {
 				return nil, nil, err
 			}
+			defer acct.Drop()
+
 			sa := serializeAcct{indexOfAcct: instrAcctIdx, acct: acct}
 			accts = append(accts, sa)
 		}
@@ -551,6 +555,8 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 			if err != nil {
 				return err
 			}
+			defer borrowedAcct.Drop()
+
 			off += 1                      // is_signer
 			off += 1                      // is_writable
 			off += 1                      // executable
@@ -799,6 +805,7 @@ func UpgradeableLoaderInitializeBuffer(execCtx *ExecutionCtx, txCtx *Transaction
 	if err != nil {
 		return err
 	}
+	defer buffer.Drop()
 
 	state, err := unmarshalUpgradeableLoaderState(buffer.Data())
 	if err != nil {
@@ -824,6 +831,7 @@ func UpgradeableLoaderInitializeBuffer(execCtx *ExecutionCtx, txCtx *Transaction
 	state.Buffer.AuthorityAddress = authorityKey.ToPointer()
 
 	err = setUpgradeableLoaderAccountState(buffer, state, execCtx.GlobalCtx.Features)
+
 	return err
 }
 
@@ -837,6 +845,7 @@ func UpgradeableLoaderWrite(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	if err != nil {
 		return err
 	}
+	defer buffer.Drop()
 
 	state, err := unmarshalUpgradeableLoaderState(buffer.Data())
 	if err != nil {
@@ -875,6 +884,8 @@ func UpgradeableLoaderWrite(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		klog.Infof("Invalid buffer account")
 		return InstrErrInvalidAccountData
 	}
+
+	buffer.Drop()
 
 	err = writeProgramData(execCtx, upgradeableLoaderSizeOfBufferMetaData+uint64(write.Offset), write.Bytes)
 	return err
@@ -936,6 +947,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	if err != nil {
 		return err
 	}
+	defer program.Drop()
 
 	programAcctState, err := unmarshalUpgradeableLoaderState(program.Data())
 	if err != nil {
@@ -955,12 +967,14 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	}
 
 	newProgramId := program.Key()
+	program.Drop()
 
 	// validate buffer account
 	buffer, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
 	if err != nil {
 		return err
 	}
+	defer buffer.Drop()
 
 	bufferAcctState, err := unmarshalUpgradeableLoaderState(program.Data())
 	if err != nil {
@@ -994,6 +1008,8 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return InstrErrInvalidAccountData
 	}
 
+	buffer.Drop()
+
 	if deploy.MaxDataLen < bufferDataLen {
 		return InstrErrAccountDataTooSmall
 	}
@@ -1016,12 +1032,22 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return InstrErrInvalidArgument
 	}
 
+	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 3)
+	if err != nil {
+		return err
+	}
+
 	payer, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
 		return err
 	}
+	defer payer.Drop()
+
 	payer.CheckedAddLamports(buffer.Lamports(), execCtx.GlobalCtx.Features)
 	buffer.SetLamports(0, execCtx.GlobalCtx.Features)
+
+	buffer.Drop()
+	payer.Drop()
 
 	//ownerId := programId
 
@@ -1061,15 +1087,24 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	if uint64(len(bufferData)) < bufferDataOffset {
 		return InstrErrAccountDataTooSmall
 	}
+
+	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 3)
+	if err != nil {
+		return err
+	}
+
 	err = deployProgram(execCtx, bufferData[bufferDataOffset:])
 	if err != nil {
 		return InstrErrInvalidAccountData
 	}
 
+	buffer.Drop()
+
 	programData, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
 		return err
 	}
+	defer programData.Drop()
 
 	programDataState := &UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData,
 		ProgramData: UpgradeableLoaderStateProgramData{Slot: clock.Slot, UpgradeAuthorityAddress: authorityKey}}
@@ -1088,6 +1123,12 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	}
 
 	dstSlice := programData.Account.Data[programDataDataOffset:dstEnd]
+
+	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 3)
+	if err != nil {
+		return err
+	}
+
 	srcSlice := buffer.Account.Data[bufferDataOffset:]
 	copy(dstSlice, srcSlice)
 
@@ -1096,8 +1137,17 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
+	buffer.Drop()
+	programData.Drop()
+
 	programState := &UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram,
 		Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataKey}}
+
+	program, err = instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
+
 	err = setUpgradeableLoaderAccountState(program, programState, execCtx.GlobalCtx.Features)
 	if err != nil {
 		return err
@@ -1109,6 +1159,8 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 			return err
 		}
 	}
+
+	klog.Infof("deployed program: %s", newProgramId)
 
 	return nil
 }
@@ -1158,6 +1210,7 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	if err != nil {
 		return err
 	}
+	defer program.Drop()
 
 	if !program.IsExecutable() {
 		return InstrErrAccountNotExecutable
@@ -1188,10 +1241,13 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return InstrErrInvalidAccountData
 	}
 
+	program.Drop()
+
 	buffer, err := instrCtx.BorrowInstructionAccount(txCtx, 2)
 	if err != nil {
 		return err
 	}
+	defer buffer.Drop()
 
 	bufferState, err := unmarshalUpgradeableLoaderState(buffer.Data())
 	if bufferState.Type == UpgradeableLoaderStateTypeBuffer {
@@ -1216,10 +1272,13 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return InstrErrInvalidAccountData
 	}
 
+	buffer.Drop()
+
 	programData, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 	if err != nil {
 		return err
 	}
+	defer programData.Drop()
 
 	var programDataBalanceRequired uint64
 	minBalance := rent.MinimumBalance(uint64(len(programData.Data())))
@@ -1262,6 +1321,12 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	} else {
 		return InstrErrInvalidAccountData
 	}
+	programData.Drop()
+
+	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
 
 	bufferData := buffer.Data()
 	if uint64(len(bufferData)) < bufferDataOffset {
@@ -1270,6 +1335,12 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	err = deployProgram(execCtx, bufferData[bufferDataOffset:])
 	if err != nil {
 		return InstrErrInvalidAccountData
+	}
+	buffer.Drop()
+
+	programData, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
 	}
 
 	programDataNewState := &UpgradeableLoaderState{ProgramData: UpgradeableLoaderStateProgramData{Slot: clock.Slot, UpgradeAuthorityAddress: &authorityKey}}
@@ -1288,6 +1359,12 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	}
 
 	dstSlice := programData.Account.Data[programDataDataOffset:dstEnd]
+
+	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 2)
+	if err != nil {
+		return err
+	}
+
 	srcSlice := buffer.Account.Data[bufferDataOffset:]
 	copy(dstSlice, srcSlice)
 
@@ -1300,6 +1377,7 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	if err != nil {
 		return err
 	}
+	defer spill.Drop()
 
 	spillLamports := safemath.SaturatingSubU64(safemath.SaturatingAddU64(programData.Lamports(), bufferLamports), programDataBalanceRequired)
 	err = spill.CheckedAddLamports(spillLamports, execCtx.GlobalCtx.Features)
@@ -1335,6 +1413,7 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 	if err != nil {
 		return err
 	}
+	defer account.Drop()
 
 	presentAuthorityKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
 	if err != nil {
@@ -1456,6 +1535,7 @@ func UpgradeableLoaderSetAuthorityChecked(execCtx *ExecutionCtx, txCtx *Transact
 	if err != nil {
 		return err
 	}
+	defer account.Drop()
 
 	presentAuthorityKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
 	if err != nil {
@@ -1608,11 +1688,13 @@ func closeAcctCommon(authorityAddr *solana.PublicKey, txCtx *TransactionCtx, ins
 	if err != nil {
 		return err
 	}
+	defer closeAcct.Drop()
 
 	recipientAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 1)
 	if err != nil {
 		return err
 	}
+	defer recipientAcct.Drop()
 
 	err = recipientAcct.CheckedAddLamports(closeAcct.Lamports(), f)
 	if err != nil {
@@ -1655,6 +1737,7 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	if err != nil {
 		return err
 	}
+	defer closeAcct.Drop()
 
 	closeKey := closeAcct.Key()
 
@@ -1675,6 +1758,7 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 			if err != nil {
 				return err
 			}
+			defer recipientAcct.Drop()
 
 			err = recipientAcct.CheckedAddLamports(closeAcct.Lamports(), execCtx.GlobalCtx.Features)
 			if err != nil {
@@ -1696,6 +1780,8 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 				return err
 			}
 
+			closeAcct.Drop()
+
 			err = closeAcctCommon(closeAcctState.Buffer.AuthorityAddress, txCtx, instrCtx, execCtx.GlobalCtx.Features)
 			if err != nil {
 				return err
@@ -1711,10 +1797,13 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 				return err
 			}
 
+			closeAcct.Drop()
+
 			programAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
 			if err != nil {
 				return err
 			}
+			defer programAcct.Drop()
 
 			programKey := programAcct.Key()
 
@@ -1751,6 +1840,8 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 						klog.Infof("ProgramData account does not match ProgramData account")
 						return InstrErrInvalidArgument
 					}
+
+					programAcct.Drop()
 
 					err = closeAcctCommon(closeAcctState.ProgramData.UpgradeAuthorityAddress, txCtx, instrCtx, execCtx.GlobalCtx.Features)
 					if err != nil {
@@ -1803,6 +1894,8 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 	if err != nil {
 		return err
 	}
+	defer programDataAcct.Drop()
+
 	programDataKey := programDataAcct.Key()
 
 	programId, err := instrCtx.LastProgramKey(txCtx)
@@ -1824,6 +1917,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 	if err != nil {
 		return err
 	}
+	defer programAcct.Drop()
 
 	if !programAcct.IsWritable() {
 		klog.Infof("Program account is not writable")
@@ -1856,6 +1950,8 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 			return InstrErrInvalidAccountData
 		}
 	}
+
+	programAcct.Drop()
 
 	oldLen := uint64(len(programDataAcct.Data()))
 	newLen := safemath.SaturatingAddU64(oldLen, uint64(additionalBytes))
@@ -1895,6 +1991,8 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 	}
 	requiredPayment := safemath.SaturatingSubU64(minBalance, balance)
 
+	programDataAcct.Drop()
+
 	if requiredPayment > 0 {
 		payerKeyIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(optionalPayerAcctIdx)
 		if err != nil {
@@ -1910,6 +2008,11 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		if err != nil {
 			return err
 		}
+	}
+
+	programDataAcct, err = instrCtx.BorrowInstructionAccount(txCtx, programDataAcctIdx)
+	if err != nil {
+		return err
 	}
 
 	err = programDataAcct.SetDataLength(newLen, execCtx.GlobalCtx.Features)

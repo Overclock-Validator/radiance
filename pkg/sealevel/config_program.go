@@ -116,6 +116,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer configAccount.Drop()
 
 	if configAccount.Owner() != ConfigProgramAddr {
 		return InstrErrInvalidAccountOwner
@@ -126,6 +127,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	if err != nil {
 		return InstrErrInvalidAccountData
 	}
+	configAccount.Drop()
 
 	currentSignerKeys := signerOnlyConfigKeys(currentConfigKeys)
 	if len(currentSignerKeys) == 0 && !configAccount.IsSigner() {
@@ -141,6 +143,8 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrMissingRequiredSignature
 			}
+			defer signerAcct.Drop()
+
 			if !signerAcct.IsSigner() {
 				return InstrErrMissingRequiredSignature
 			}
@@ -175,14 +179,15 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 		return InstrErrMissingRequiredSignature
 	}
 
+	configAccount, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
+	if err != nil {
+		return err
+	}
+
 	if len(configAccount.Data()) < len(instrData) {
 		return InstrErrInvalidInstructionData
 	}
 
 	err = configAccount.SetData(ctx.GlobalCtx.Features, instrData)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }

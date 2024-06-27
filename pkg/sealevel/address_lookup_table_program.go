@@ -359,6 +359,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	if err != nil {
 		return err
 	}
+	defer lookupTableAcct.Drop()
 
 	lookupTableLamports := lookupTableAcct.Lamports()
 	tableKey := lookupTableAcct.Key()
@@ -375,6 +376,8 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	if err != nil {
 		return err
 	}
+	defer authorityAcct.Drop()
+
 	authorityKey := authorityAcct.Key()
 
 	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
@@ -388,6 +391,8 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	if err != nil {
 		return err
 	}
+	defer payerAcct.Drop()
+
 	payerKey := payerAcct.Key()
 
 	if !payerAcct.IsSigner() {
@@ -462,6 +467,8 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 
 	newState := &AddressLookupTable{State: AddressLookupTableProgramStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
 	err = setAddrTableLookupAccountState(lookupTableAcct, newState, execCtx.GlobalCtx.Features)
+	lookupTableAcct.Drop()
+
 	return err
 }
 
@@ -477,6 +484,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer lookupTableAcct.Drop()
 
 	if lookupTableAcct.Owner() != AddressLookupTableAddr {
 		return InstrErrInvalidAccountOwner
@@ -488,6 +496,8 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer authorityAcct.Drop()
+
 	authorityKey := authorityAcct.Key()
 
 	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
@@ -529,6 +539,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 
 	lookupTable.Meta.Authority = nil
 	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	lookupTableAcct.Drop()
 
 	return err
 }
@@ -545,6 +556,8 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	if err != nil {
 		return err
 	}
+	defer lookupTableAcct.Drop()
+
 	tableKey := lookupTableAcct.Key()
 
 	if lookupTableAcct.Owner() != AddressLookupTableAddr {
@@ -557,6 +570,8 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	if err != nil {
 		return err
 	}
+	defer authorityAcct.Drop()
+
 	authorityKey := authorityAcct.Key()
 
 	if !authorityAcct.IsSigner() {
@@ -636,6 +651,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 		if err != nil {
 			return err
 		}
+		defer payerAcct.Drop()
 
 		payerKey := payerAcct.Key()
 		if !payerAcct.IsSigner() {
@@ -666,6 +682,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer lookupTableAcct.Drop()
 
 	if lookupTableAcct.Owner() != AddressLookupTableAddr {
 		return InstrErrInvalidAccountOwner
@@ -677,6 +694,8 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer authorityAcct.Drop()
+
 	authorityKey := authorityAcct.Key()
 
 	if !authorityAcct.IsSigner() {
@@ -713,6 +732,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	clock := ReadClockSysvar(&execCtx.Accounts)
 	lookupTable.Meta.DeactivationSlot = clock.Slot
 	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	lookupTableAcct.Drop()
 
 	return err
 }
@@ -729,6 +749,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer lookupTableAcct.Drop()
 
 	if lookupTableAcct.Owner() != AddressLookupTableAddr {
 		return InstrErrInvalidAccountOwner
@@ -740,6 +761,8 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer authorityAcct.Drop()
+
 	authorityKey := authorityAcct.Key()
 
 	if !authorityAcct.IsSigner() {
@@ -813,6 +836,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer recipientAcct.Drop()
 
 	err = recipientAcct.CheckedAddLamports(withdrawnLamports, execCtx.GlobalCtx.Features)
 	if err != nil {
@@ -830,6 +854,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return err
 	}
 	err = lookupTableAcct.SetLamports(0, execCtx.GlobalCtx.Features)
+	lookupTableAcct.Drop()
 
 	return err
 }
