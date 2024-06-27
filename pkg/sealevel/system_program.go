@@ -670,6 +670,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			addr, err := extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
@@ -719,6 +721,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
 			if err != nil {
 				return err
@@ -771,6 +775,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
 			if err != nil {
 				return err
@@ -796,14 +802,18 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(1)
 			if err != nil {
 				return err
 			}
+
 			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			err = SystemProgramAuthorizeNonceAccount(execCtx, acct, authNonceAcct.Pubkey, signers)
 		}
 
@@ -818,10 +828,13 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+
 			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			addr, err := extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
@@ -836,14 +849,18 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(1)
 			if err != nil {
 				return err
 			}
+
 			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, allocateWithSeed.Base, allocateWithSeed.Seed, allocateWithSeed.Owner)
 			if err != nil {
 				return err
@@ -858,14 +875,18 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(1)
 			if err != nil {
 				return err
 			}
+
 			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
 			err = SystemProgramAssign(execCtx, acct, addr, assignWithSeed.Owner, signers)
 		}
@@ -891,10 +912,13 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+
 			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
+			defer acct.Drop()
+
 			err = SystemProgramUpgradeNonceAccount(execCtx, acct)
 		}
 
@@ -916,6 +940,7 @@ func SystemProgramCreateAccount(execCtx *ExecutionCtx, toAddr solana.PublicKey, 
 	if err != nil {
 		return err
 	}
+	defer toAcct.Drop()
 
 	if toAcct.Lamports() > 0 {
 		klog.Errorf("CreateAccount: account %s already in use (non-zero lamports)", toAddr)
@@ -1055,6 +1080,7 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 	if err != nil {
 		return err
 	}
+	defer from.Drop()
 
 	if len(from.Data()) != 0 {
 		klog.Errorf("Transfer: 'from' must not carry data")
@@ -1071,11 +1097,13 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 	if err != nil {
 		return err
 	}
+	from.Drop()
 
 	to, err := instrCtx.BorrowInstructionAccount(txCtx, toAcctIdx)
 	if err != nil {
 		return err
 	}
+	defer to.Drop()
 
 	return to.CheckedAddLamports(lamports, f)
 }
@@ -1191,6 +1219,7 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	if err != nil {
 		return err
 	}
+	defer from.Drop()
 
 	if !from.IsWritable() {
 		klog.Errorf("withdraw nonce account: account %s must be writeable", from.Key())
@@ -1255,11 +1284,13 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	if err != nil {
 		return err
 	}
+	from.Drop()
 
 	to, err := instrCtx.BorrowInstructionAccount(execCtx.TransactionContext, toAcctIdx)
 	if err != nil {
 		return err
 	}
+	defer to.Drop()
 
 	err = to.CheckedAddLamports(lamports, execCtx.GlobalCtx.Features)
 	if err != nil {

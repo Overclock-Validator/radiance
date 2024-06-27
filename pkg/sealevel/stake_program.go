@@ -352,6 +352,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			rent := ReadRentSysvar(&execCtx.Accounts)
 			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
@@ -374,6 +375,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
@@ -406,6 +408,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -428,10 +431,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeDelegateStake:
 		{
-			_, err := getStakeAccount()
+			unneeded, err := getStakeAccount()
 			if err != nil {
 				return err
 			}
+			defer unneeded.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -460,6 +464,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				if err != nil {
 					return err
 				}
+				defer configAcct.Drop()
+
 				if configAcct.Key() != StakeProgramConfigAddr {
 					return InstrErrInvalidArgument
 				}
@@ -481,10 +487,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			_, err := getStakeAccount()
+			unneeded, err := getStakeAccount()
 			if err != nil {
 				return err
 			}
+			defer unneeded.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -496,10 +503,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeMerge:
 		{
-			_, err = getStakeAccount()
+			unneeded, err := getStakeAccount()
 			if err != nil {
 				return err
 			}
+			defer unneeded.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -529,10 +537,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			_, err := getStakeAccount()
+			unneeded, err := getStakeAccount()
 			if err != nil {
 				return err
 			}
+			defer unneeded.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -571,6 +580,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
@@ -593,6 +603,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			clock := ReadClockSysvar(&execCtx.Accounts)
 
@@ -605,6 +616,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(4)
 			if err != nil {
@@ -662,6 +674,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
@@ -712,6 +725,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
@@ -767,6 +781,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 2, true)
 			if err != nil {
@@ -793,6 +808,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			err = instrCtx.CheckNumOfInstructionAccounts(3)
 			if err != nil {
@@ -810,6 +826,7 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+			defer me.Drop()
 
 			if execCtx.GlobalCtx.Features.IsActive(features.StakeRedelegateInstruction) {
 				err = instrCtx.CheckNumOfInstructionAccounts(3)
@@ -822,6 +839,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 					if err != nil {
 						return err
 					}
+					defer configAcct.Drop()
+
 					if configAcct.Key() != StakeProgramConfigAddr {
 						return InstrErrInvalidArgument
 					}
@@ -978,6 +997,7 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 	if err != nil {
 		return err
 	}
+	defer voteAcct.Drop()
 
 	if voteAcct.Owner() != VoteProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -990,6 +1010,7 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 	if err != nil {
 		return err
 	}
+	defer stakeAcct.Drop()
 
 	stakeState, err := unmarshalStakeState(stakeAcct.Data())
 	if err != nil {
@@ -1068,12 +1089,16 @@ func validateSplitAmount(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx 
 	if err != nil {
 		return validatedSplitInfo{}, err
 	}
+	defer srcAcct.Drop()
+
 	srcLamports := srcAcct.Lamports()
 
 	dstAcct, err := instrCtx.BorrowInstructionAccount(txCtx, destAcctIdx)
 	if err != nil {
 		return validatedSplitInfo{}, err
 	}
+	defer dstAcct.Drop()
+
 	dstLamports := dstAcct.Lamports()
 	dstDataLen := uint64(len(dstAcct.Data()))
 
@@ -1113,6 +1138,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	if err != nil {
 		return err
 	}
+	defer split.Drop()
 
 	if split.Owner() != StakeProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -1137,6 +1163,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	if err != nil {
 		return err
 	}
+	defer stakeAcct.Drop()
 
 	if lamports > stakeAcct.Lamports() {
 		return InstrErrInsufficientFunds
@@ -1202,6 +1229,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 			if err != nil {
 				return err
 			}
+			defer stakeAcct.Drop()
 
 			err = setStakeAccountState(stakeAcct, stakeState, execCtx.GlobalCtx.Features)
 			if err != nil {
@@ -1212,6 +1240,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 			if err != nil {
 				return err
 			}
+			defer split.Drop()
 
 			newSplitStakeState := StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: splitMeta, Stake: splitStake, StakeFlags: stakeState.Stake.StakeFlags}}
 			err = setStakeAccountState(split, &newSplitStakeState, execCtx.GlobalCtx.Features)
@@ -1239,6 +1268,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 			if err != nil {
 				return err
 			}
+			defer split.Drop()
 
 			newStakeState := StakeStateV2{Status: StakeStateV2StatusInitialized, Initialized: StakeStateV2Initialized{Meta: splitMeta}}
 			err = setStakeAccountState(split, &newStakeState, execCtx.GlobalCtx.Features)
@@ -1278,6 +1308,7 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	if err != nil {
 		return err
 	}
+	defer srcAcct.Drop()
 
 	if srcAcct.Owner() != StakeProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -1301,6 +1332,7 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	if err != nil {
 		return err
 	}
+	defer stakeAcct.Drop()
 
 	stakeAcctState, err := unmarshalStakeState(stakeAcct.Data())
 	if err != nil {
@@ -1382,6 +1414,7 @@ func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stake
 	if err != nil {
 		return err
 	}
+	defer stakeAcct.Drop()
 
 	stakeState, err := unmarshalStakeState(stakeAcct.Data())
 	if err != nil {
@@ -1496,6 +1529,7 @@ func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stake
 	if err != nil {
 		return err
 	}
+	defer to.Drop()
 
 	err = to.CheckedAddLamports(lamports, f)
 	return err
@@ -1615,6 +1649,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 	if err != nil {
 		return err
 	}
+	defer delinquentVoteAcct.Drop()
 
 	if delinquentVoteAcct.Owner() != VoteProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -1630,6 +1665,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 	if err != nil {
 		return err
 	}
+	defer referenceVoteAcct.Drop()
 
 	if referenceVoteAcct.Owner() != VoteProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -1678,6 +1714,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	if err != nil {
 		return err
 	}
+	defer uninitializedStakeAcct.Drop()
 
 	if uninitializedStakeAcct.Owner() != StakeProgramAddr {
 		return InstrErrIncorrectProgramId
@@ -1700,6 +1737,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	if err != nil {
 		return err
 	}
+	defer voteAcct.Drop()
 
 	if voteAcct.Owner() != VoteProgramAddr {
 		return InstrErrIncorrectProgramId

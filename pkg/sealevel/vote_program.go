@@ -497,6 +497,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer me.Drop()
 
 	if me.Owner() != VoteProgramAddr {
 		return InstrErrInvalidAccountOwner
@@ -1524,6 +1525,7 @@ func VoteProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, voteAc
 	if err != nil {
 		return err
 	}
+	defer voteAcct.Drop()
 
 	versionedVoteState, err := unmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
@@ -1571,11 +1573,13 @@ func VoteProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, voteAc
 	if err != nil {
 		return err
 	}
+	voteAcct.Drop()
 
 	toAcct, err := instrCtx.BorrowInstructionAccount(txCtx, toAcctIdx)
 	if err != nil {
 		return err
 	}
+	defer toAcct.Drop()
 
 	err = toAcct.CheckedAddLamports(lamports, f)
 
