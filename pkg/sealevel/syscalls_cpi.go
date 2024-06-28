@@ -765,6 +765,7 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 	if lastProgramAcct.Owner() == BpfLoaderDeprecatedAddr {
 		isLoaderDeprecated = true
 	}
+	lastProgramAcct.Drop()
 
 	instructionAccts, programIndices, err := execCtx.PrepareInstruction(ix, signers)
 	if err != nil {
@@ -844,6 +845,7 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 	if lastProgramAcct.Owner() == BpfLoaderDeprecatedAddr {
 		isLoaderDeprecated = true
 	}
+	lastProgramAcct.Drop()
 
 	instructionAccts, programIndices, err := execCtx.PrepareInstruction(ix, signers)
 	if err != nil {

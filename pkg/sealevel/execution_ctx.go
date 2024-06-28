@@ -171,8 +171,8 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 	if err != nil {
 		return InstrErrUnsupportedProgramId
 	}
-
 	ownerId := borrowedRootAccount.Owner()
+	borrowedRootAccount.Drop()
 
 	var builtinId solana.PublicKey
 	if ownerId == NativeLoaderAddr {
@@ -217,6 +217,7 @@ func (execCtx *ExecutionCtx) Push() error {
 			if err == nil {
 				programAcct, err := ic.BorrowLastProgramAccount(txCtx)
 				if err == nil {
+					programAcct.Drop()
 					if programAcct.Key() == programId {
 						contains = true
 						break
@@ -236,6 +237,7 @@ func (execCtx *ExecutionCtx) Push() error {
 				isLast = true
 			}
 		}
+		programAcct.Drop()
 
 		if contains && !isLast {
 			return InstrErrReentrancyNotAllowed

@@ -386,10 +386,10 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer programAcct.Drop()
+	programId := programAcct.Key()
+	programAcct.Drop()
 
 	instrData := instrCtx.Data
-	programId := programAcct.Key()
 	var preLens []uint64
 
 	accts := make([]serializeAcct, 0)
@@ -635,6 +635,7 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 					return err
 				}
 			}
+			borrowedAcct.Drop()
 		}
 	}
 
@@ -659,14 +660,15 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	if err != nil {
 		return err
 	}
+
 	programAcct, err := instrCtx.BorrowLastProgramAccount(txCtx)
 	if err != nil {
 		return err
 	}
 	programId := programAcct.Key()
+	programAcct.Drop()
 
 	computeRemainingPrev := execCtx.ComputeMeter.Remaining()
-
 	heapSize := execCtx.TransactionContext.HeapSize
 	heapCostResult := calculateHeapCost(heapSize, CUHeapCostDefault)
 
@@ -724,6 +726,7 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer programAcct.Drop()
 
 	if programAcct.Owner() == NativeLoaderAddr {
 		programId, err := instrCtx.LastProgramKey(txCtx)
@@ -769,6 +772,8 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+
+	programAcct.Drop()
 
 	programDataPubkey := programAcctState.Program.ProgramDataAddress
 	programDataAcct, err := instrCtx.BorrowExecutableAccount(txCtx, programDataPubkey)
