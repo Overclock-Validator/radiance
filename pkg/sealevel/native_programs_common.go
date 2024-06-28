@@ -55,6 +55,10 @@ var AddressLookupTableProgramAddrStr = "AddressLookupTab1e1111111111111111111111
 
 var AddressLookupTableAddr = base58.MustDecodeFromString(AddressLookupTableProgramAddrStr)
 
+var ComputeBudgetProgramAddrStr = "ComputeBudget111111111111111111111111111111"
+
+var ComputeBudgetProgramAddr = base58.MustDecodeFromString(ComputeBudgetProgramAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")
@@ -70,6 +74,10 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 		return StakeProgramExecute, nil
 	case VoteProgramAddr:
 		return VoteProgramExecute, nil
+	case AddressLookupTableAddr:
+		return AddressLookupTableExecute, nil
+	case ComputeBudgetProgramAddr:
+		return ComputeBudgetExecute, nil
 	case Secp256kPrecompileAddr:
 		return nil, IsPrecompile
 	case Ed25519PrecompileAddr:
