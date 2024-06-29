@@ -605,12 +605,8 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 	})
 }
 
-// The TestInterpreter_TryFindProgramAddress function tests the
-// sol_try_find_program_address syscall. The testcase uses some seeds
-// to derive an address via sol_try_find_program_address, and then checks
-// that the same value is derived by calling sol_create_program_address
-// with those same seeds (original seeds + bump seed returned by
-// sol_try_find_program_address)
+// The TestInterpreter_TestPanic function tests the
+// panic syscall.
 func TestInterpreter_TestPanic(t *testing.T) {
 	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "panic.so"))
 	require.NoError(t, err)

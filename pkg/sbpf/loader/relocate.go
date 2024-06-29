@@ -57,7 +57,7 @@ func (l *Loader) registerFunc(target uint64) (uint32, error) {
 	hash := sbpf.PCHash(target)
 
 	// check for collision with syscall
-	if l.syscalls.ExistsByHash(hash) {
+	if l.syscalls != nil && l.syscalls.ExistsByHash(hash) {
 		return 0, fmt.Errorf("symbol hash collision with syscall")
 	}
 
