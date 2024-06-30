@@ -1,8 +1,8 @@
 package sealevel
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"unsafe"
 
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/zeebo/blake3"
@@ -43,19 +43,22 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 		}
 
 		var data []byte
-		var idx uint64
+		reader := bytes.NewReader(vals)
 
 		for count := uint64(0); count < valsLen; count++ {
-			dataPtr := *(*uint64)(unsafe.Pointer(&vals[idx]))
-			dataSize := *(*uint64)(unsafe.Pointer(&vals[idx+8]))
-			idx += 16
 
-			data, err = vm.Translate(dataPtr, dataSize, false)
+			var vec VectorDescrC
+			err = vec.Unmarshal(reader)
 			if err != nil {
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
+			data, err = vm.Translate(vec.Addr, vec.Len, false)
+			if err != nil {
+				return
+			}
+
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
@@ -104,19 +107,21 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0
 		}
 
 		var data []byte
-		var idx uint64
+		reader := bytes.NewReader(vals)
 
 		for count := uint64(0); count < valsLen; count++ {
-			dataPtr := *(*uint64)(unsafe.Pointer(&vals[idx]))
-			dataSize := *(*uint64)(unsafe.Pointer(&vals[idx+8]))
-			idx += 16
-
-			data, err = vm.Translate(dataPtr, dataSize, false)
+			var vec VectorDescrC
+			err = vec.Unmarshal(reader)
 			if err != nil {
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
+			data, err = vm.Translate(vec.Addr, vec.Len, false)
+			if err != nil {
+				return
+			}
+
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}
@@ -167,19 +172,21 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 		}
 
 		var data []byte
-		var idx uint64
+		reader := bytes.NewReader(vals)
 
 		for count := uint64(0); count < valsLen; count++ {
-			dataPtr := *(*uint64)(unsafe.Pointer(&vals[idx]))
-			dataSize := *(*uint64)(unsafe.Pointer(&vals[idx+8]))
-			idx += 16
-
-			data, err = vm.Translate(dataPtr, dataSize, false)
+			var vec VectorDescrC
+			err = vec.Unmarshal(reader)
 			if err != nil {
 				return
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, dataSize) / 2
+			data, err = vm.Translate(vec.Addr, vec.Len, false)
+			if err != nil {
+				return
+			}
+
+			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
 			if CUMemOpBaseCost > cost {
 				cost = CUMemOpBaseCost
 			}

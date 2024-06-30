@@ -1,7 +1,7 @@
 package sealevel
 
 import (
-	"unsafe"
+	"bytes"
 
 	"github.com/ethereum/go-ethereum/common/math"
 	"go.firedancer.io/radiance/pkg/sbpf"
@@ -22,19 +22,21 @@ func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte
 	}
 
 	var data []byte
-	var idx uint64
+	reader := bytes.NewReader(seedsData)
 	seedsRet := make([][]byte, 0)
 
 	for count := uint64(0); count < seedsLen; count++ {
-		dataPtr := *(*uint64)(unsafe.Pointer(&seedsData[idx]))
-		dataSize := *(*uint64)(unsafe.Pointer(&seedsData[idx+8]))
-		idx += 16
+		var vec VectorDescrC
+		err = vec.Unmarshal(reader)
+		if err != nil {
+			return nil, err
+		}
 
-		if dataSize > MaxSeedLen {
+		if vec.Len > MaxSeedLen {
 			return nil, SyscallErrMaxSeedLengthExceeded
 		}
 
-		data, err = vm.Translate(dataPtr, dataSize, false)
+		data, err = vm.Translate(vec.Addr, vec.Len, false)
 		if err != nil {
 			return nil, err
 		}

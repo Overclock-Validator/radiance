@@ -15,12 +15,11 @@ func TestMarshal_Unmarshal_AccountMeta(t *testing.T) {
 	accountMeta.IsSigner = true
 	accountMeta.IsWritable = false
 
-	accountMetaBytes, err := accountMeta.Marshal()
-	assert.NoError(t, err)
+	accountMetaBytes := accountMeta.Marshal()
 
 	var newAccountMeta AccountMeta
 	reader := bytes.NewReader(accountMetaBytes)
-	err = newAccountMeta.Unmarshal(reader)
+	err := newAccountMeta.Unmarshal(reader)
 	assert.NoError(t, err)
 
 	assert.Equal(t, accountMeta.Pubkey, newAccountMeta.Pubkey)

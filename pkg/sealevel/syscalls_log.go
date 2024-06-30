@@ -1,9 +1,9 @@
 package sealevel
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
-	"unsafe"
 
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/safemath"
@@ -103,16 +103,18 @@ func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64) (r0 uint64, err err
 	totalSize := uint64(0)
 
 	var data []byte
-	var idx uint64
+	reader := bytes.NewReader(mem)
 
 	for count := uint64(0); count < len; count++ {
-		dataPtr := *(*uint64)(unsafe.Pointer(&mem[idx]))
-		dataSize := *(*uint64)(unsafe.Pointer(&mem[idx+8]))
-		idx += 16
+		var vec VectorDescrC
+		err = vec.Unmarshal(reader)
+		if err != nil {
+			return
+		}
 
-		totalSize = safemath.SaturatingAddU64(totalSize, dataSize)
+		totalSize = safemath.SaturatingAddU64(totalSize, vec.Len)
 
-		data, err = vm.Translate(dataPtr, dataSize, false)
+		data, err = vm.Translate(vec.Addr, vec.Len, false)
 		if err != nil {
 			return
 		}

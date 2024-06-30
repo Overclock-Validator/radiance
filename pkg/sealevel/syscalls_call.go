@@ -245,12 +245,7 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 				}
 
 				acctMeta := AccountMeta{Pubkey: key, IsSigner: isSigner, IsWritable: isWritable}
-
-				acctBytes, err := acctMeta.Marshal()
-				if err != nil {
-					return r0, err
-				}
-
+				acctBytes := acctMeta.Marshal()
 				writer.Write(acctBytes)
 			}
 		}
@@ -259,10 +254,8 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 		var resultHeaderOut ProcessedSiblingInstruction
 		resultHeaderOut.DataLen = uint64(len(instrCtxFound.Data))
 		resultHeaderOut.AccountsLen = instrCtxFound.NumberOfInstructionAccounts()
-		resultHeaderOutBytes, err := resultHeaderOut.Marshal()
-		if err != nil {
-			return r0, err
-		}
+		resultHeaderOutBytes := resultHeaderOut.Marshal()
+
 		copy(resultsHeaderBytes, resultHeaderOutBytes)
 
 		r0 = 1

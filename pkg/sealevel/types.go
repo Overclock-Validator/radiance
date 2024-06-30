@@ -164,25 +164,25 @@ func (accountMeta *AccountMeta) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
-func (accountMeta *AccountMeta) Marshal() ([]byte, error) {
+func (accountMeta *AccountMeta) Marshal() []byte {
 	buf := new(bytes.Buffer)
 
 	var err error
 	err = binary.Write(buf, binary.LittleEndian, accountMeta.Pubkey)
 	if err != nil {
-		return nil, err
+		panic("shouldn't fail")
 	}
 
 	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsSigner)
 	if err != nil {
-		return nil, err
+		panic("shouldn't fail")
 	}
 
 	err = binary.Write(buf, binary.LittleEndian, accountMeta.IsWritable)
 	if err != nil {
-		return nil, err
+		panic("shouldn't fail")
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
 
 func (accountMeta *SolAccountMetaC) Unmarshal(buf io.Reader) error {
@@ -571,18 +571,18 @@ func (psi *ProcessedSiblingInstruction) Unmarshal(buf io.Reader) error {
 	return nil
 }
 
-func (psi *ProcessedSiblingInstruction) Marshal() ([]byte, error) {
+func (psi *ProcessedSiblingInstruction) Marshal() []byte {
 	buf := new(bytes.Buffer)
 
 	err := binary.Write(buf, binary.LittleEndian, psi.DataLen)
 	if err != nil {
-		return nil, err
+		panic("shouldn't fail")
 	}
 
 	err = binary.Write(buf, binary.LittleEndian, psi.AccountsLen)
 	if err != nil {
-		return nil, err
+		panic("shouldn't fail")
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }
