@@ -23,7 +23,7 @@ func (instrCtx *InstructionCtx) ProgramId() solana.PublicKey {
 
 func (instrCtx *InstructionCtx) IndexOfProgramAccountInTransaction(programAccountIndex uint64) (uint64, error) {
 	if len(instrCtx.ProgramAccounts) == 0 || programAccountIndex > uint64(len(instrCtx.ProgramAccounts)-1) {
-		return 0, SyscallErrNotEnoughAccountKeys
+		return 0, InstrErrNotEnoughAccountKeys
 	}
 	return instrCtx.ProgramAccounts[programAccountIndex], nil
 }

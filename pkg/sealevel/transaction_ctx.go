@@ -35,7 +35,8 @@ func NewTransactionAccounts(accts []accounts.Account) *TransactionAccounts {
 	transactionAccts := new(TransactionAccounts)
 
 	for _, acct := range accts {
-		transactionAccts.Accounts = append(transactionAccts.Accounts, &acct)
+		a := acct
+		transactionAccts.Accounts = append(transactionAccts.Accounts, &a)
 	}
 
 	transactionAccts.Locked = make([]bool, len(accts), len(accts))

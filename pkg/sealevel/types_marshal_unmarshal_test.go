@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	bin "github.com/gagliardetto/binary"
+	"github.com/gagliardetto/solana-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -164,4 +165,27 @@ func TestMarshal_Unmarshal_VectorDescrC(t *testing.T) {
 
 	assert.Equal(t, descr.Addr, newDescr.Addr)
 	assert.Equal(t, descr.Len, newDescr.Len)
+}
+
+func TestMarshal_Unmarshal_ConfigKeys(t *testing.T) {
+	var configKeys []ConfigKey
+
+	for i := 0; i < 5; i++ {
+		var ck ConfigKey
+		privKey, err := solana.NewRandomPrivateKey()
+		assert.NoError(t, err)
+		ck.Pubkey = privKey.PublicKey()
+		ck.IsSigner = true
+		configKeys = append(configKeys, ck)
+	}
+
+	ckBytes := marshalConfigKeys(configKeys)
+
+	configKeysRecovered, err := unmarshalConfigKeys(ckBytes, true)
+	assert.NoError(t, err)
+
+	for i := 0; i < 5; i++ {
+		assert.Equal(t, configKeys[i].Pubkey, configKeysRecovered[i].Pubkey)
+		assert.Equal(t, configKeys[i].IsSigner, configKeysRecovered[i].IsSigner)
+	}
 }

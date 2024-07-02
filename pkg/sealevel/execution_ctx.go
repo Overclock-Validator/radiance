@@ -169,6 +169,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 	if err != nil {
 		return InstrErrUnsupportedProgramId
 	}
+
 	ownerId := borrowedRootAccount.Owner()
 	borrowedRootAccount.Drop()
 

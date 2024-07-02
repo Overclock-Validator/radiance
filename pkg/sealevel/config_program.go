@@ -1,13 +1,16 @@
 package sealevel
 
 import (
+	"bytes"
+	"fmt"
+
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"k8s.io/klog/v2"
 )
 
 type ConfigKey struct {
-	PubKey   solana.PublicKey
+	Pubkey   solana.PublicKey
 	IsSigner bool
 }
 
@@ -16,22 +19,19 @@ func (configKey *ConfigKey) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	if err != nil {
 		return err
 	}
-	copy(configKey.PubKey[:], pubKey)
+	copy(configKey.Pubkey[:], pubKey)
 
-	isSignerByte, err := decoder.ReadByte()
+	configKey.IsSigner, err = decoder.ReadBool()
+	return err
+}
+
+func (configKey *ConfigKey) MarshalWithEncoder(encoder *bin.Encoder) error {
+	err := encoder.WriteBytes(configKey.Pubkey.Bytes(), false)
 	if err != nil {
 		return err
 	}
-
-	if isSignerByte == 1 {
-		configKey.IsSigner = true
-	} else if isSignerByte == 0 {
-		configKey.IsSigner = false
-	} else {
-		return SyscallErrMalformedBool
-	}
-
-	return nil
+	err = encoder.WriteBool(configKey.IsSigner)
+	return err
 }
 
 func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
@@ -60,6 +60,26 @@ func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
 	return configKeys, nil
 }
 
+func marshalConfigKeys(configKeys []ConfigKey) []byte {
+	writer := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(writer)
+
+	numKeys := len(configKeys)
+
+	err := enc.WriteCompactU16(numKeys)
+	if err != nil {
+		panic("shouldn't error")
+	}
+
+	for _, ck := range configKeys {
+		err = ck.MarshalWithEncoder(enc)
+		if err != nil {
+			panic("shouldn't fail")
+		}
+	}
+	return writer.Bytes()
+}
+
 func signerOnlyConfigKeys(configKeys []ConfigKey) []ConfigKey {
 	var signerKeys []ConfigKey
 	for _, ck := range configKeys {
@@ -76,7 +96,7 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 	cm := make(map[solana.PublicKey]bool)
 
 	for _, ck := range configKeys {
-		_, alreadyExists := cm[ck.PubKey]
+		_, alreadyExists := cm[ck.Pubkey]
 		if !alreadyExists {
 			dedupeConfigKeys = append(dedupeConfigKeys, ck)
 		}
@@ -85,7 +105,8 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 }
 
 func ConfigProgramExecute(ctx *ExecutionCtx) error {
-	klog.Infof("in Config program")
+	klog.Infof("Config program")
+
 	var err error
 
 	err = ctx.ComputeMeter.Consume(CUConfigProcessorDefaultComputeUnits)
@@ -102,6 +123,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	instrData := instrCtx.Data
 	configKeys, err := unmarshalConfigKeys(instrData, true)
 	if err != nil {
+		fmt.Printf("failed to unmarshal instr data\n")
 		return InstrErrInvalidInstructionData
 	}
 
@@ -124,6 +146,8 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 		return InstrErrInvalidAccountOwner
 	}
 
+	configAcctIsSigner := configAccount.IsSigner()
+
 	configAcctData := configAccount.Data()
 	currentConfigKeys, err := unmarshalConfigKeys(configAcctData, false)
 	if err != nil {
@@ -132,7 +156,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	configAccount.Drop()
 
 	currentSignerKeys := signerOnlyConfigKeys(currentConfigKeys)
-	if len(currentSignerKeys) == 0 && !configAccount.IsSigner() {
+	if len(currentSignerKeys) == 0 && !configAcctIsSigner {
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -140,7 +164,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	var counter uint64
 	for _, signerKey := range signerKeys {
 		counter++
-		if signerKey.PubKey != configAccountKey {
+		if signerKey.Pubkey != configAccountKey {
 			signerAcct, err := instrCtx.BorrowInstructionAccount(txCtx, counter)
 			if err != nil {
 				return InstrErrMissingRequiredSignature
@@ -150,14 +174,14 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 			if !signerAcct.IsSigner() {
 				return InstrErrMissingRequiredSignature
 			}
-			if signerKey.PubKey != signerAcct.Key() {
+			if signerKey.Pubkey != signerAcct.Key() {
 				return InstrErrMissingRequiredSignature
 			}
 
 			if len(currentConfigKeys) != 0 {
 				matchFound := false
 				for _, s := range currentSignerKeys {
-					if s.PubKey == signerKey.PubKey {
+					if s.Pubkey == signerKey.Pubkey {
 						matchFound = true
 						break
 					}
@@ -166,7 +190,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 					return InstrErrMissingRequiredSignature
 				}
 			}
-		} else if !configAccount.IsSigner() {
+		} else if !configAcctIsSigner {
 			return InstrErrMissingRequiredSignature
 		}
 	}
@@ -190,6 +214,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 		return InstrErrInvalidInstructionData
 	}
 
+	klog.Infof("writing new config account state")
 	err = configAccount.SetData(ctx.GlobalCtx.Features, instrData)
 	return err
 }
