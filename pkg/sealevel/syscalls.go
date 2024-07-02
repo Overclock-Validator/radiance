@@ -47,11 +47,11 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 		reg.Register("sol_get_last_restart_slot_sysvar", SyscallGetLastRestartSlotSysvar)
 	}
 
+	var SyscallInvokeSignedC = sbpf.SyscallFunc5(SyscallInvokeSignedCImpl)
+	var SyscallInvokeSignedRust = sbpf.SyscallFunc5(SyscallInvokeSignedRustImpl)
+
 	reg.Register("sol_invoke_signed_c", SyscallInvokeSignedC)
 	reg.Register("sol_invoke_signed_rust", SyscallInvokeSignedRust)
-
-	// non-"feature gated" syscalls still yet to implement:
-	// 		sol_get_processed_sibling_instruction
 
 	// feature gated syscalls yet to implement:
 	//		sol_curve_validate_point (disabled)

@@ -4,6 +4,7 @@ import (
 	"io"
 
 	bin "github.com/gagliardetto/binary"
+	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/base58"
 )
 
@@ -13,6 +14,7 @@ type Accounts interface {
 }
 
 type Account struct {
+	Key        solana.PublicKey
 	Lamports   uint64
 	Data       []byte
 	Owner      [32]byte

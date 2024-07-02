@@ -3,6 +3,7 @@ package sealevel
 import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"k8s.io/klog/v2"
 )
 
 type ConfigKey struct {
@@ -84,6 +85,7 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 }
 
 func ConfigProgramExecute(ctx *ExecutionCtx) error {
+	klog.Infof("in Config program")
 	var err error
 
 	err = ctx.ComputeMeter.Consume(CUConfigProcessorDefaultComputeUnits)

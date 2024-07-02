@@ -138,9 +138,7 @@ func (execCtx *ExecutionCtx) ProcessInstruction(instrData []byte, instructionAcc
 		return err
 	}
 
-	nextInstrCtx.ProgramAccounts = programIndices
-	nextInstrCtx.InstructionAccounts = instructionAccts
-	nextInstrCtx.Data = instrData
+	nextInstrCtx.Configure(programIndices, instructionAccts, instrData)
 
 	err = execCtx.Push()
 	if err != nil {
@@ -200,12 +198,12 @@ func (execCtx *ExecutionCtx) Push() error {
 	txCtx := execCtx.TransactionContext
 
 	idx := txCtx.InstructionTraceLength()
-	ixCtx, err := txCtx.InstructionCtxAtIndexInTrace(idx)
+	instrCtx, err := txCtx.InstructionCtxAtIndexInTrace(idx)
 	if err != nil {
 		return err
 	}
 
-	programId, err := ixCtx.LastProgramKey(txCtx)
+	programId, err := instrCtx.LastProgramKey(txCtx)
 	if err != nil {
 		return InstrErrUnsupportedProgramId
 	}

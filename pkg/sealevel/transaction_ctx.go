@@ -31,6 +31,33 @@ type TransactionCtx struct {
 	HeapSize                 uint32
 }
 
+func NewTransactionAccounts(accts []accounts.Account) *TransactionAccounts {
+	transactionAccts := new(TransactionAccounts)
+
+	for _, acct := range accts {
+		transactionAccts.Accounts = append(transactionAccts.Accounts, &acct)
+	}
+
+	transactionAccts.Locked = make([]bool, len(accts), len(accts))
+	transactionAccts.Touched = make([]bool, len(accts), len(accts))
+	return transactionAccts
+}
+
+func NewTestTransactionCtx(txAccts TransactionAccounts, instrStackCapacity uint64, instrTraceCapacity uint64) *TransactionCtx {
+	txCtx := new(TransactionCtx)
+
+	txCtx.Accounts = txAccts
+	txCtx.InstructionTraceCapacity = instrTraceCapacity
+	txCtx.InstructionStack = make([]uint64, 0, instrStackCapacity)
+	txCtx.InstructionTrace = append(txCtx.InstructionTrace, InstructionCtx{})
+
+	for _, acct := range txAccts.Accounts {
+		txCtx.AccountKeys = append(txCtx.AccountKeys, acct.Key)
+	}
+
+	return txCtx
+}
+
 func (txCtx *TransactionCtx) PushInstructionCtx(ixCtx InstructionCtx) {
 	txCtx.InstructionTrace = append(txCtx.InstructionTrace, ixCtx)
 }

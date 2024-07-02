@@ -78,6 +78,8 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 		return AddressLookupTableExecute, nil
 	case ComputeBudgetProgramAddr:
 		return ComputeBudgetExecute, nil
+	case BpfLoaderUpgradeableAddr:
+		return BpfLoaderProgramExecute, nil
 	case Secp256kPrecompileAddr:
 		return nil, IsPrecompile
 	case Ed25519PrecompileAddr:

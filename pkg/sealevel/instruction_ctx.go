@@ -68,6 +68,12 @@ func (instrCtx *InstructionCtx) IsInstructionAccountDuplicate(instrAcctIdx uint6
 	}
 }
 
+func (instrCtx *InstructionCtx) Configure(programAccts []uint64, instrAccts []InstructionAccount, instrData []byte) {
+	instrCtx.ProgramAccounts = programAccts
+	instrCtx.InstructionAccounts = instrAccts
+	instrCtx.Data = instrData
+}
+
 func (instrCtx *InstructionCtx) BorrowAccount(txCtx *TransactionCtx, idxInTx uint64, idxInInstr uint64) (*BorrowedAccount, error) {
 	account, err := txCtx.Accounts.GetAccount(idxInTx)
 	if err != nil {

@@ -26,6 +26,8 @@ func TestExecute_Memo(t *testing.T) {
 		ProgramID: [32]byte{},
 	})
 
+	opts.MaxCU = 100000
+
 	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sealevel", "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr.so"))
 	require.NoError(t, err)
 	require.NotNil(t, loader)
@@ -36,14 +38,24 @@ func TestExecute_Memo(t *testing.T) {
 
 	require.NoError(t, program.Verify())
 
-	interpreter := sbpf.NewInterpreter(nil, program, opts)
+	var log LogRecorder
+
+	syscalls := sbpf.NewSyscallRegistry()
+	syscalls.Register("log", SyscallLog)
+	syscalls.Register("log_64", SyscallLog64)
+
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
+		HeapSize: 32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &ExecutionCtx{Log: &log, ComputeMeter: cu.NewComputeMeterDefault()},
+	})
 	require.NotNil(t, interpreter)
 
 	err = interpreter.Run()
-	assert.NoError(t, err)
-
-	logs := opts.Context.(*ExecutionCtx).Log.(*LogRecorder).Logs
-	assert.Equal(t, logs, []string{
+	require.NoError(t, err)
+	assert.Equal(t, log.Logs, []string{
 		`Program log: Memo (len 3): "Bla"`,
 	})
 }

@@ -3,6 +3,7 @@ package sealevel
 import (
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -222,6 +223,7 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 }
 
 func ComputeBudgetExecute(execCtx *ExecutionCtx) error {
+	klog.Infof("ComputeBudget program")
 	err := execCtx.ComputeMeter.Consume(CUComputeBudgetProgramDefaultComputeUnits)
 	return err
 }

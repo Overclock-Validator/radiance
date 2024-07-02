@@ -18,7 +18,7 @@ func NewComputeMeter(budget uint64) ComputeMeter {
 }
 
 func NewComputeMeterDefault() ComputeMeter {
-	return ComputeMeter{computeMeter: 10000}
+	return ComputeMeter{computeMeter: 200000}
 }
 
 func (cm *ComputeMeter) Consume(cost uint64) error {
