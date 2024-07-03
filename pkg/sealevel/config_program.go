@@ -2,7 +2,6 @@ package sealevel
 
 import (
 	"bytes"
-	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -99,6 +98,7 @@ func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 		_, alreadyExists := cm[ck.Pubkey]
 		if !alreadyExists {
 			dedupeConfigKeys = append(dedupeConfigKeys, ck)
+			cm[ck.Pubkey] = true
 		}
 	}
 	return dedupeConfigKeys
@@ -123,7 +123,6 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	instrData := instrCtx.Data
 	configKeys, err := unmarshalConfigKeys(instrData, true)
 	if err != nil {
-		fmt.Printf("failed to unmarshal instr data\n")
 		return InstrErrInvalidInstructionData
 	}
 
@@ -182,6 +181,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 				matchFound := false
 				for _, s := range currentSignerKeys {
 					if s.Pubkey == signerKey.Pubkey {
+						signerAcct.Drop()
 						matchFound = true
 						break
 					}
@@ -190,6 +190,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 					return InstrErrMissingRequiredSignature
 				}
 			}
+			signerAcct.Drop()
 		} else if !configAcctIsSigner {
 			return InstrErrMissingRequiredSignature
 		}
@@ -209,6 +210,7 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	defer configAccount.Drop()
 
 	if len(configAccount.Data()) < len(instrData) {
 		return InstrErrInvalidInstructionData
