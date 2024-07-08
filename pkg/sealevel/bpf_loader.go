@@ -1429,6 +1429,8 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 }
 
 func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	klog.Infof("SetAuthority instr")
+
 	err := instrCtx.CheckNumOfInstructionAccounts(2)
 	if err != nil {
 		return err
@@ -1467,6 +1469,7 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 	switch accountState.Type {
 	case UpgradeableLoaderStateTypeBuffer:
 		{
+			klog.Infof("buffer account")
 			if newAuthority == nil {
 				klog.Infof("buffer authority not optional")
 				return InstrErrIncorrectAuthority
@@ -1488,6 +1491,7 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 			}
 
 			if !isSigner {
+				klog.Infof("upgrade authority did not sign")
 				return InstrErrMissingRequiredSignature
 			}
 
@@ -1500,6 +1504,7 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 
 	case UpgradeableLoaderStateTypeProgramData:
 		{
+			klog.Infof("ProgramData account")
 			if accountState.ProgramData.UpgradeAuthorityAddress == nil {
 				klog.Infof("program not upgradeable")
 				return InstrErrImmutable
