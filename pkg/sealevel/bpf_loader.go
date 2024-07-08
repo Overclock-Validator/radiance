@@ -91,6 +91,23 @@ func (write *UpgradeableLoaderInstrWrite) UnmarshalWithDecoder(decoder *bin.Deco
 	return err
 }
 
+func (write *UpgradeableLoaderInstrWrite) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(UpgradeableLoaderInstrTypeWrite, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(write.Offset, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(write.Bytes, true)
+	return err
+}
+
 func (deploy *UpgradeableLoaderInstrDeployWithMaxDataLen) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	deploy.MaxDataLen, err = decoder.ReadUint64(bin.LE)
@@ -801,6 +818,7 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 }
 
 func UpgradeableLoaderInitializeBuffer(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	klog.Infof("InitializeBuffer instr")
 	err := instrCtx.CheckNumOfInstructionAccounts(2)
 	if err != nil {
 		return err
@@ -841,6 +859,8 @@ func UpgradeableLoaderInitializeBuffer(execCtx *ExecutionCtx, txCtx *Transaction
 }
 
 func UpgradeableLoaderWrite(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, write UpgradeableLoaderInstrWrite) error {
+	klog.Infof("Write instr")
+
 	err := instrCtx.CheckNumOfInstructionAccounts(2)
 	if err != nil {
 		return err
@@ -2046,6 +2066,8 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 }
 
 func ProcessUpgradeableLoaderInstruction(execCtx *ExecutionCtx) error {
+	klog.Infof("BPF loader program mgmt")
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
