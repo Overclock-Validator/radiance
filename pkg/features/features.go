@@ -15,7 +15,8 @@ type FeatureActivationInfo struct {
 type Features map[FeatureGate]FeatureActivationInfo
 
 func NewFeaturesDefault() *Features {
-	return new(Features)
+	newMap := make(Features, 0)
+	return &newMap
 }
 
 func (f *Features) EnableFeature(gate FeatureGate, activationSlot uint64) {

@@ -1551,6 +1551,7 @@ func UpgradeableLoaderSetAuthority(execCtx *ExecutionCtx, txCtx *TransactionCtx,
 }
 
 func UpgradeableLoaderSetAuthorityChecked(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	klog.Infof("SetAuthorityChecked instr")
 
 	if !execCtx.GlobalCtx.Features.IsActive(features.EnableBpfLoaderSetAuthorityCheckedIx) {
 		return InstrErrInvalidInstructionData
