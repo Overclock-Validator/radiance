@@ -67,7 +67,7 @@ func WriteFeesSysvar(accts *accounts.Accounts, fees SysvarFees) {
 		panic(err)
 	}
 
-	copy(feesSysvarAcct.Data, data.Bytes())
+	feesSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarFeesAddr, feesSysvarAcct)
 	if err != nil {

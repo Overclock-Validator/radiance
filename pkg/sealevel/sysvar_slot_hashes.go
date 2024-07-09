@@ -117,7 +117,7 @@ func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes
 		enc.WriteBytes(slotHashes[count].Hash[:], false)
 	}
 
-	copy(slotHashesSysvarAcct.Data, data.Bytes())
+	slotHashesSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarSlotHashesAddr, slotHashesSysvarAcct)
 	if err != nil {

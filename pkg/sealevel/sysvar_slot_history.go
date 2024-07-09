@@ -131,7 +131,7 @@ func WriteSlotHistorySysvar(accts *accounts.Accounts, slotHistory SysvarSlotHist
 		panic(err)
 	}
 
-	copy(slotHistorySysvarAcct.Data, data.Bytes())
+	slotHistorySysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarSlotHistoryAddr, slotHistorySysvarAcct)
 	if err != nil {

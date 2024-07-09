@@ -103,7 +103,7 @@ func WriteRentSysvar(accts *accounts.Accounts, rent SysvarRent) {
 		panic(err)
 	}
 
-	copy(rentSysvarAcct.Data, data.Bytes())
+	rentSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarRentAddr, rentSysvarAcct)
 	if err != nil {

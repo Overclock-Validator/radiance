@@ -137,7 +137,7 @@ func WriteStakeHistorySysvar(accts *accounts.Accounts, stakeHistory SysvarStakeH
 		}
 	}
 
-	copy(stakeHistSysvarAcct.Data, data.Bytes())
+	stakeHistSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarStakeHistoryAddr, stakeHistSysvarAcct)
 	if err != nil {

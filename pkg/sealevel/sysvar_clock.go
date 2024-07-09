@@ -70,7 +70,6 @@ func ReadClockSysvar(accts *accounts.Accounts) SysvarClock {
 	}
 
 	dec := bin.NewBinDecoder(clockAccount.Data)
-
 	var clock SysvarClock
 	clock.MustUnmarshalWithDecoder(dec)
 	return clock
@@ -116,7 +115,7 @@ func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {
 		panic(err)
 	}
 
-	copy(clockAccount.Data, data.Bytes())
+	clockAccount.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarClockAddr, clockAccount)
 	if err != nil {

@@ -1744,6 +1744,8 @@ func closeAcctCommon(authorityAddr *solana.PublicKey, txCtx *TransactionCtx, ins
 }
 
 func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx) error {
+	klog.Infof("Close instr")
+
 	err := instrCtx.CheckNumOfInstructionAccounts(2)
 	if err != nil {
 		return err
@@ -1808,6 +1810,7 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		{
 			err = instrCtx.CheckNumOfInstructionAccounts(3)
 			if err != nil {
+				klog.Infof("(buffer) not enough instruction accounts (%d)", instrCtx.NumberOfInstructionAccounts())
 				return err
 			}
 
@@ -1825,6 +1828,7 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		{
 			err = instrCtx.CheckNumOfInstructionAccounts(4)
 			if err != nil {
+				klog.Infof("(ProgramData) not enough instruction accounts (%d)", instrCtx.NumberOfInstructionAccounts())
 				return err
 			}
 

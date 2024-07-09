@@ -65,7 +65,7 @@ func WriteLastRestartSlotSysvar(accts *accounts.Accounts, lastRestartSlot Sysvar
 		panic(err)
 	}
 
-	copy(lrsSysvarAcct.Data, data.Bytes())
+	lrsSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarLastRestartSlotAddr, lrsSysvarAcct)
 	if err != nil {

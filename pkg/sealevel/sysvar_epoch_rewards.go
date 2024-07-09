@@ -91,7 +91,7 @@ func WriteEpochRewardsSysvar(accts *accounts.Accounts, epochRewards SysvarEpochR
 		panic(err)
 	}
 
-	copy(epochRewardsSysvarAcct.Data, data.Bytes())
+	epochRewardsSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarEpochRewardsAddr, epochRewardsSysvarAcct)
 	if err != nil {

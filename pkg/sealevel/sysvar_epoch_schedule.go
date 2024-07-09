@@ -146,7 +146,7 @@ func WriteEpochScheduleSysvar(accts *accounts.Accounts, epochSchedule SysvarEpoc
 		panic(err)
 	}
 
-	copy(epochScheduleSysvarAcct.Data, data.Bytes())
+	epochScheduleSysvarAcct.Data = data.Bytes()
 
 	err = (*accts).SetAccount(&SysvarEpochScheduleAddr, epochScheduleSysvarAcct)
 	if err != nil {
