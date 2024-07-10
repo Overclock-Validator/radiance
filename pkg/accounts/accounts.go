@@ -54,7 +54,7 @@ func (a *Account) Resize(newLen uint64, fillVal byte) {
 	if newLen > currentDataLen { // extend, copy existing data, and fill the new excess with fillVal
 		newData := make([]byte, newLen)
 		copy(newData, a.Data)
-		for count := uint64(newLen - currentDataLen); count < newLen; count++ {
+		for count := uint64(currentDataLen); count < newLen; count++ {
 			newData[count] = fillVal
 		}
 		a.Data = newData

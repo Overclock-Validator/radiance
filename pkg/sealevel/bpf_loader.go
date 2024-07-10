@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -117,6 +118,18 @@ func (deploy *UpgradeableLoaderInstrDeployWithMaxDataLen) UnmarshalWithDecoder(d
 func (extendProgram *UpgradeableLoaderInstrExtendProgram) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	extendProgram.AdditionalBytes, err = decoder.ReadUint32(bin.LE)
+	return err
+}
+
+func (extendProgram *UpgradeableLoaderInstrExtendProgram) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(UpgradeableLoaderInstrTypeExtendProgram, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(extendProgram.AdditionalBytes, bin.LE)
 	return err
 }
 
@@ -319,7 +332,11 @@ func setUpgradeableLoaderAccountState(acct *BorrowedAccount, state *UpgradeableL
 		return err
 	}
 
-	err = acct.SetState(f, acctStateBytes)
+	newStateBytes := make([]byte, len(acct.Data()))
+	copy(newStateBytes, acct.Data())
+	copy(newStateBytes, acctStateBytes)
+
+	err = acct.SetState(f, newStateBytes)
 	return err
 }
 
@@ -351,16 +368,23 @@ func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
 
 	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
 	if err != nil {
+		klog.Infof("failed to create loader")
 		return err
 	}
 
 	program, err := loader.Load()
 	if err != nil {
+		klog.Infof("failed to load program")
 		return err
 	}
 
 	err = program.Verify()
-	return err
+	if err != nil {
+		klog.Infof("failed to verify program")
+		return err
+	}
+
+	return nil
 }
 
 func calculateHeapCost(heapSize uint32, heapCost uint64) uint64 {
@@ -1916,6 +1940,8 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 }
 
 func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, additionalBytes uint32) error {
+	klog.Infof("ExtendProgram instr")
+
 	if additionalBytes == 0 {
 		klog.Infof("Additional bytes must be greater than 0")
 		return InstrErrInvalidInstructionData
@@ -1943,7 +1969,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return InstrErrInvalidAccountOwner
 	}
 
-	if programDataAcct.IsWritable() {
+	if !programDataAcct.IsWritable() {
 		klog.Infof("ProgramData is not writable")
 		return InstrErrInvalidArgument
 	}
@@ -1968,6 +1994,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 
 	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
 	if err != nil {
+		fmt.Printf("failed to unmarshal program acct")
 		return err
 	}
 
@@ -2061,6 +2088,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 	}
 	err = deployProgram(execCtx, programBytes[upgradeableLoaderSizeOfProgramDataMetaData:])
 	if err != nil {
+		klog.Infof("deploy program failed")
 		return InstrErrInvalidAccountData
 	}
 

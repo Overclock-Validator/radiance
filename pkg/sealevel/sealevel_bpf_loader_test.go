@@ -9,6 +9,7 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"github.com/stretchr/testify/assert"
+	"go.firedancer.io/radiance/fixtures"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/features"
@@ -2126,4 +2127,113 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Nonclosable_Account_Failure(t *t
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, InstrErrInvalidArgument, err)
+}
+
+/// # Account references
+///   0. `[writable]` The ProgramData account.
+///   1. `[writable]` The ProgramData account's associated Program account.
+///   2. `[]` System program (`solana_sdk::system_program::id()`), optional, used to transfer
+///      lamports from the payer to the ProgramData account.
+///   3. `[signer]` The payer account, optional, that will pay necessary rent exemption costs
+///      for the increased storage size.
+
+func TestExecute_Tx_BpfLoader_ExtendProgram_Success(t *testing.T) {
+	// bpf loader acct
+	loaderAcctData := make([]byte, 500, 500)
+	loaderAcct := accounts.Account{Key: BpfLoaderUpgradeableAddr, Lamports: 0, Data: loaderAcctData, Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority pubkey for the buffer acct
+	authorityPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivKey.PublicKey()
+	//authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	// programdata account
+	programDataDataWriter := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(programDataDataWriter)
+	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{UpgradeAuthorityAddress: &authorityPubkey, Slot: 1337}}
+	err = programDataAcctState.MarshalWithEncoder(encoder)
+	programDataAcctBytes := programDataDataWriter.Bytes()
+	validProgramBytes := fixtures.Load(t, "sbpf", "noop_aligned.so")
+	programDataData := make([]byte, len(programDataAcctBytes)+len(validProgramBytes))
+	copy(programDataData, programDataAcctBytes)
+	copy(programDataData[upgradeableLoaderSizeOfProgramDataMetaData:], validProgramBytes)
+	origProgramDataLen := len(programDataData)
+
+	programDataAcctPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programDataPubkey := programDataAcctPrivKey.PublicKey()
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 100000000000, Data: programDataData, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram, Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataPubkey}}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	var extendProgram UpgradeableLoaderInstrExtendProgram
+	extendProgram.AdditionalBytes = 12
+	extendProgramWriter := new(bytes.Buffer)
+	extendProgramEncoder := bin.NewBinEncoder(extendProgramWriter)
+	err = extendProgram.MarshalWithEncoder(extendProgramEncoder)
+	assert.NoError(t, err)
+	instrData := extendProgramWriter.Bytes()
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{loaderAcct, programDataAcct, programAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // programdata acct
+		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}} // program acct associated with the programdata acct
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	postAcct, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+
+	// check that the account size has been incremented by 12
+	assert.Equal(t, origProgramDataLen+12, len(postAcct.Data))
+
+	// check that the program bytes following the programdata metadata are still the same as before
+	lenOfOrigProgramBytes := len(programDataData[upgradeableLoaderSizeOfProgramDataMetaData:])
+	for count := upgradeableLoaderSizeOfProgramDataMetaData; count < lenOfOrigProgramBytes; count++ {
+		assert.Equal(t, programDataData[count], postAcct.Data[count])
+	}
+
+	// ensure the new data is filled with 0's
+	for count := (upgradeableLoaderSizeOfProgramDataMetaData + lenOfOrigProgramBytes); count < (upgradeableLoaderSizeOfProgramDataMetaData + lenOfOrigProgramBytes + 12); count++ {
+		assert.Equal(t, byte(0), postAcct.Data[count])
+	}
+
+	// ensure account state is correct
+	postAcctState, err := unmarshalUpgradeableLoaderState(postAcct.Data)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1234), postAcctState.ProgramData.Slot)
+	assert.Equal(t, authorityPubkey, *postAcctState.ProgramData.UpgradeAuthorityAddress)
 }
