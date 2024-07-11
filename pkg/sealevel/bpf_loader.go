@@ -1048,7 +1048,6 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 
 	if bufferAcctState.Buffer.AuthorityAddress != nil && authorityKey != nil &&
 		*bufferAcctState.Buffer.AuthorityAddress != *authorityKey {
-		klog.Infof("incorrect authority!")
 		return InstrErrIncorrectAuthority
 	}
 

@@ -2745,3 +2745,119 @@ func TestExecute_Tx_BpfLoader_Upgrade_Buffer_Wrong_Authority_Failure(t *testing.
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, InstrErrIncorrectAuthority, err)
 }
+
+func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
+	// bpf loader acct
+	loaderAcctData := make([]byte, 500, 500)
+	loaderAcct := accounts.Account{Key: BpfLoaderUpgradeableAddr, Lamports: 0, Data: loaderAcctData, Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority pubkey for the buffer acct
+	authorityPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	systemAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 0, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// buffer account containing program bytes
+	validProgramBytes := fixtures.Load(t, "sbpf", "noop_aligned.so")
+	bufferAcctPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	bufferPubkey := bufferAcctPrivKey.PublicKey()
+	bufferAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeBuffer, Buffer: UpgradeableLoaderStateBuffer{AuthorityAddress: &authorityPubkey}}
+	bufferStateWriter := new(bytes.Buffer)
+	bufferStateEncoder := bin.NewBinEncoder(bufferStateWriter)
+	err = bufferAcctState.MarshalWithEncoder(bufferStateEncoder)
+	assert.NoError(t, err)
+	bufferStateWriter.Write(validProgramBytes)
+	bufferStateBytes := bufferStateWriter.Bytes()
+
+	bufferAcct := accounts.Account{Key: bufferPubkey, Lamports: 20000, Data: bufferStateBytes, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// spill acct
+	payerPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	payerPubkey := payerPrivKey.PublicKey()
+	payerAcct := accounts.Account{Key: payerPubkey, Lamports: 200000, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeUninitialized}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programData := make([]byte, 5000)
+	copy(programData, programBytes)
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	seed := make([][]byte, 1)
+	seed[0] = make([]byte, solana.PublicKeyLength)
+	copy(seed[0], programPubkey[:])
+	programDataPubkey, _, err := solana.FindProgramAddress(seed, BpfLoaderUpgradeableAddr)
+	assert.NoError(t, err)
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 0, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	instrWriter := new(bytes.Buffer)
+	instrEncoder := bin.NewBinEncoder(instrWriter)
+	var deploy UpgradeableLoaderInstrDeployWithMaxDataLen
+	deploy.MaxDataLen = 50000
+	err = deploy.MarshalWithEncoder(instrEncoder)
+	instrData := instrWriter.Bytes()
+
+	fakeClockAcct := accounts.Account{Key: SysvarClockAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+	fakeRent := accounts.Account{Key: SysvarRentAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{loaderAcct, payerAcct, programDataAcct, programAcct, bufferAcct, fakeRent, fakeClockAcct, systemAcct, authorityAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: payerAcct.Key, IsSigner: true, IsWritable: true}, // programdata acct
+		{Pubkey: programDataAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: programAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: bufferAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: fakeRent.Key, IsSigner: false, IsWritable: true},      //rent
+		{Pubkey: fakeClockAcct.Key, IsSigner: false, IsWritable: true}, // clock
+		{Pubkey: SystemProgramAddr, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // authority
+	}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	programDataPost, err := txCtx.Accounts.GetAccount(2)
+	assert.NoError(t, err)
+
+	programBytesPost := programDataPost.Data[upgradeableLoaderSizeOfProgramDataMetaData:]
+
+	for count := 0; count < len(validProgramBytes); count++ {
+		assert.Equal(t, validProgramBytes[count], programBytesPost[count])
+	}
+
+	programDataStatePost, err := unmarshalUpgradeableLoaderState(programDataPost.Data)
+	assert.NoError(t, err)
+
+	assert.Equal(t, *programDataStatePost.ProgramData.UpgradeAuthorityAddress, authorityPubkey)
+}
