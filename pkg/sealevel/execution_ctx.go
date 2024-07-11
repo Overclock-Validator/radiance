@@ -183,6 +183,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 	if ownerId == NativeLoaderAddr {
 		builtinId = borrowedRootAccount.Key()
 	} else {
+		klog.Infof("invoking bpf program")
 		builtinId = ownerId
 	}
 

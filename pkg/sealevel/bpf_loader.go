@@ -400,9 +400,11 @@ func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
 }
 
 func calculateHeapCost(heapSize uint32, heapCost uint64) uint64 {
+	KiBiByteMulPages := uint64(1024 * 32)
+	KiBiByteMulPagesSub1 := KiBiByteMulPages - 1
 	roundedHeapSize := uint64(heapSize)
-	roundedHeapSize = roundedHeapSize + ((1024 * 32) - 1)
-	roundedHeapSize = ((roundedHeapSize / (32 * 1024)) - 1) * heapCost
+	roundedHeapSize = roundedHeapSize + KiBiByteMulPagesSub1
+	roundedHeapSize = ((roundedHeapSize / KiBiByteMulPagesSub1) * heapCost)
 	return roundedHeapSize
 }
 
@@ -540,7 +542,7 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 			serializedData = append(serializedData, acctKeySlice...)
 
 			// owner
-			owner := [32]byte(borrowedAcct.Key())
+			owner := [32]byte(borrowedAcct.Owner())
 			ownerSlice := owner[:]
 			serializedData = append(serializedData, ownerSlice...)
 
@@ -696,9 +698,11 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 }
 
 func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
+	klog.Infof("bpf loader - executeProgram")
+
 	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
 
-	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
+	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, false)
 	if err != nil {
 		return err
 	}
@@ -743,7 +747,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	runErr := interpreter.Run()
 
 	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
-	klog.Infof("Program %d consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
+	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
 
 	if err != nil {
 		klog.Infof("program execution result: %s", err)
@@ -759,6 +763,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	if runErr != nil {
 		err = deserializeParameters(execCtx, parameterBytes, preLens)
 		if err != nil {
+			klog.Infof("failed to deserialize, %s", err)
 			return InstrErrInvalidArgument
 		}
 	}
@@ -815,12 +820,6 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 		return InstrErrUnsupportedProgramId
 	}
 
-	prog, err := execCtx.SlotCtx.GetAccount(instrCtx.ProgramId())
-	if err != nil {
-		return err
-	}
-	programBytes := prog.Data
-
 	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
 	if err != nil {
 		return err
@@ -828,13 +827,12 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 
 	programAcct.Drop()
 
-	programDataPubkey := programAcctState.Program.ProgramDataAddress
-	programDataAcct, err := instrCtx.BorrowExecutableAccount(txCtx, programDataPubkey)
-	if err != nil {
-		return err
-	}
+	programDataPubkey := [32]byte(programAcctState.Program.ProgramDataAddress)
 
-	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data())
+	// TODO: use SlotCtx
+	programDataAcct, err := execCtx.Accounts.GetAccount(&programDataPubkey)
+
+	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data)
 	if err != nil {
 		return err
 	}
@@ -847,6 +845,8 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	if programDataSlot >= execCtx.SlotCtx.Slot {
 		return InstrErrInvalidAccountData
 	}
+
+	programBytes := programDataAcct.Data[upgradeableLoaderSizeOfProgramDataMetaData:]
 
 	err = executeProgram(execCtx, programBytes)
 
