@@ -115,6 +115,18 @@ func (deploy *UpgradeableLoaderInstrDeployWithMaxDataLen) UnmarshalWithDecoder(d
 	return err
 }
 
+func (deploy *UpgradeableLoaderInstrDeployWithMaxDataLen) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(UpgradeableLoaderInstrTypeDeployWithMaxDataLen, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(deploy.MaxDataLen, bin.LE)
+	return err
+}
+
 func (extendProgram *UpgradeableLoaderInstrExtendProgram) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	extendProgram.AdditionalBytes, err = decoder.ReadUint32(bin.LE)
@@ -982,7 +994,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	}
 
 	var authorityKey *solana.PublicKey
-	authorityIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
+	authorityIdx, err := instrCtx.IndexOfInstructionAccountInTransaction(7)
 	if err == nil {
 		k, err := txCtx.KeyOfAccountAtIndex(authorityIdx)
 		if err != nil {
@@ -1025,7 +1037,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	}
 	defer buffer.Drop()
 
-	bufferAcctState, err := unmarshalUpgradeableLoaderState(program.Data())
+	bufferAcctState, err := unmarshalUpgradeableLoaderState(buffer.Data())
 	if err != nil {
 		return err
 	}
@@ -1036,6 +1048,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 
 	if bufferAcctState.Buffer.AuthorityAddress != nil && authorityKey != nil &&
 		*bufferAcctState.Buffer.AuthorityAddress != *authorityKey {
+		klog.Infof("incorrect authority!")
 		return InstrErrIncorrectAuthority
 	}
 
