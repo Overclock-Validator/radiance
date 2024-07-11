@@ -49,7 +49,7 @@ func (instrCtx *InstructionCtx) LastProgramKey(txCtx *TransactionCtx) (solana.Pu
 
 func (instrCtx *InstructionCtx) IndexOfInstructionAccountInTransaction(instrAcctIdx uint64) (uint64, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)-1) {
-		return 0, SyscallErrNotEnoughAccountKeys
+		return 0, InstrErrNotEnoughAccountKeys
 	}
 	return instrCtx.InstructionAccounts[instrAcctIdx].IndexInTransaction, nil
 }

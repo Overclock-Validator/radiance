@@ -144,7 +144,10 @@ func (instr *SystemInstrCreateAccount) UnmarshalWithDecoder(decoder *bin.Decoder
 }
 
 func (instr *SystemInstrCreateAccount) MarshalWithEncoder(encoder *bin.Encoder) error {
-	var err error
+	err := encoder.WriteUint32(SystemProgramInstrTypeCreateAccount, bin.LE)
+	if err != nil {
+		return err
+	}
 
 	err = encoder.WriteUint64(instr.Lamports, bin.LE)
 	if err != nil {
@@ -243,7 +246,12 @@ func (instr *SystemInstrAssign) UnmarshalWithDecoder(decoder *bin.Decoder) error
 }
 
 func (instr *SystemInstrAssign) MarshalWithEncoder(encoder *bin.Encoder) error {
-	err := encoder.WriteBytes(instr.Owner[:], false)
+	err := encoder.WriteUint32(SystemProgramInstrTypeAssign, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(instr.Owner[:], false)
 	return err
 }
 
@@ -259,7 +267,12 @@ func (instr *SystemInstrTransfer) UnmarshalWithDecoder(decoder *bin.Decoder) err
 }
 
 func (instr *SystemInstrTransfer) MarshalWithEncoder(encoder *bin.Encoder) error {
-	err := encoder.WriteUint64(instr.Lamports, bin.LE)
+	err := encoder.WriteUint32(SystemProgramInstrTypeTransfer, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(instr.Lamports, bin.LE)
 	return err
 }
 
@@ -333,7 +346,12 @@ func (instr *SystemInstrAllocate) UnmarshalWithDecoder(decoder *bin.Decoder) err
 }
 
 func (instr *SystemInstrAllocate) MarshalWithEncoder(encoder *bin.Encoder) error {
-	err := encoder.WriteUint64(instr.Space, bin.LE)
+	err := encoder.WriteUint32(SystemProgramInstrTypeAllocate, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(instr.Space, bin.LE)
 	return err
 }
 
@@ -612,6 +630,8 @@ func extractAddressWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, ins
 }
 
 func SystemProgramExecute(execCtx *ExecutionCtx) error {
+	klog.Infof("System program")
+
 	err := execCtx.ComputeMeter.Consume(CUSystemProgramDefaultComputeUnits)
 	if err != nil {
 		return err
@@ -690,6 +710,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
+
 			err = SystemProgramTransfer(execCtx, 0, 1, transfer.Lamports)
 		}
 
@@ -923,7 +944,10 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 		}
 
 	default:
-		return InstrErrInvalidInstructionData
+		{
+			klog.Infof("invalid instruction")
+			err = InstrErrInvalidInstructionData
+		}
 	}
 
 	return err

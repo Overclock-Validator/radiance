@@ -81,7 +81,7 @@ func (txCtx *TransactionCtx) ReturnData() (solana.PublicKey, []byte) {
 
 func (txCtx *TransactionCtx) KeyOfAccountAtIndex(index uint64) (solana.PublicKey, error) {
 	if len(txCtx.AccountKeys) == 0 || index > uint64(len(txCtx.AccountKeys)-1) {
-		return solana.PublicKey{}, SyscallErrNotEnoughAccountKeys
+		return solana.PublicKey{}, InstrErrNotEnoughAccountKeys
 	}
 
 	return txCtx.AccountKeys[index], nil
@@ -211,6 +211,7 @@ func (txCtx *TransactionCtx) Push() error {
 		return InstrErrCallDepth
 	}
 
+	txCtx.InstructionTrace = append(txCtx.InstructionTrace, InstructionCtx{})
 	txCtx.InstructionStack = append(txCtx.InstructionStack, idxInTrace)
 
 	return nil

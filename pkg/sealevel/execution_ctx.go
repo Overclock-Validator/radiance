@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"fmt"
+
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
@@ -26,7 +28,6 @@ type SlotCtx struct {
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {
-
 	txCtx := execCtx.TransactionContext
 
 	ixCtx, err := txCtx.CurrentInstructionCtx()
@@ -35,7 +36,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 	}
 
 	dedupInstructionAccounts := make([]InstructionAccount, 0)
-	duplicateIndices := make([]uint64, len(ix.Accounts))
+	duplicateIndices := make([]uint64, 0)
 
 	for instructionAcctIndex, accountMeta := range ix.Accounts {
 		indexInTx, err := txCtx.IndexOfAccount(accountMeta.Pubkey)
@@ -100,6 +101,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 		if instructionAcct.IsSigner && !(borrowedAcct.IsSigner() || presentInSigners) {
 			return nil, nil, InstrErrPrivilegeEscalation
 		}
+		borrowedAcct.Drop()
 	}
 
 	var instructionAccounts []InstructionAccount
@@ -123,6 +125,7 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 	if err != nil {
 		return nil, nil, err
 	}
+	defer borrowedProgramAcct.Drop()
 
 	if !borrowedProgramAcct.IsExecutable() {
 		klog.Errorf("account %s is not executable", calleeProgramId)
@@ -159,6 +162,8 @@ func (execCtx *ExecutionCtx) ProcessInstruction(instrData []byte, instructionAcc
 }
 
 func (execCtx *ExecutionCtx) ExecuteInstruction() error {
+	klog.Infof("ExecuteInstruction")
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -167,6 +172,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 
 	borrowedRootAccount, err := instrCtx.BorrowProgramAccount(txCtx, 0)
 	if err != nil {
+		klog.Infof("BorrowProgramAccount failed: %s", err)
 		return InstrErrUnsupportedProgramId
 	}
 
@@ -180,6 +186,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 		builtinId = ownerId
 	}
 
+	klog.Infof("resolving native program")
 	nativeProgramFn, err := resolveNativeProgramById(builtinId)
 	if err == IsPrecompile {
 		// TODO: handle precompile calls (ed25519, secp256k)
@@ -188,6 +195,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 		return err
 	}
 
+	klog.Infof("calling native program %s", builtinId)
 	err = nativeProgramFn(execCtx)
 
 	// TODO: other error handling
@@ -235,8 +243,8 @@ func (execCtx *ExecutionCtx) Push() error {
 			if programAcct.Key() == programId {
 				isLast = true
 			}
+			programAcct.Drop()
 		}
-		programAcct.Drop()
 
 		if contains && !isLast {
 			return InstrErrReentrancyNotAllowed
@@ -256,10 +264,12 @@ func (execCtx *ExecutionCtx) StackHeight() uint64 {
 }
 
 func (execCtx *ExecutionCtx) NativeInvoke(instruction Instruction, signers []solana.PublicKey) error {
+	klog.Infof("NativeInvoke")
 	instrAccts, programIndices, err := execCtx.PrepareInstruction(instruction, signers)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("programIndices: %d\n", programIndices)
 	err = execCtx.ProcessInstruction(instruction.Data, instrAccts, programIndices)
 	return err
 }
