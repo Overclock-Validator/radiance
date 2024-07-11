@@ -1299,6 +1299,10 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 	defer buffer.Drop()
 
 	bufferState, err := unmarshalUpgradeableLoaderState(buffer.Data())
+	if err != nil {
+		return err
+	}
+
 	if bufferState.Type == UpgradeableLoaderStateTypeBuffer {
 		if bufferState.Buffer.AuthorityAddress == nil || *bufferState.Buffer.AuthorityAddress != authorityKey {
 			return InstrErrIncorrectAuthority
