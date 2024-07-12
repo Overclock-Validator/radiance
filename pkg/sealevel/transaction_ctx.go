@@ -5,6 +5,7 @@ import (
 	"github.com/ryanavella/wide"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 type TxReturnData struct {
@@ -195,6 +196,7 @@ func (txCtx *TransactionCtx) Push() error {
 		}
 
 		if originalCallerInstrAcctsLamportSum.Cmp(currentCallerInstructionAccountsLamportSum) != 0 {
+			klog.Infof("unbalanced push")
 			return InstrErrUnbalancedInstruction
 		}
 	}

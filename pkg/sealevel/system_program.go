@@ -668,7 +668,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			toAddr, err := extractAddress(txCtx, instrCtx, 1)
+			var toAddr solana.PublicKey
+			toAddr, err = extractAddress(txCtx, instrCtx, 1)
 			if err != nil {
 				return err
 			}
@@ -975,6 +976,7 @@ func SystemProgramCreateAccount(execCtx *ExecutionCtx, toAddr solana.PublicKey, 
 	if err != nil {
 		return err
 	}
+	toAcct.Drop()
 
 	return SystemProgramTransfer(execCtx, 0, 1, lamports)
 }
@@ -989,6 +991,8 @@ func SystemProgramAllocateAndAssign(execCtx *ExecutionCtx, toAcct *BorrowedAccou
 }
 
 func SystemProgramAllocate(execCtx *ExecutionCtx, acct *BorrowedAccount, address solana.PublicKey, space uint64, signers []solana.PublicKey) error {
+	klog.Infof("SystemProgramAllocate")
+
 	var isSigner bool
 	for _, signer := range signers {
 		if address == signer {
@@ -1016,6 +1020,8 @@ func SystemProgramAllocate(execCtx *ExecutionCtx, acct *BorrowedAccount, address
 }
 
 func SystemProgramAssign(execCtx *ExecutionCtx, acct *BorrowedAccount, address solana.PublicKey, owner solana.PublicKey, signers []solana.PublicKey) error {
+	klog.Infof("SystemProgramAssign")
+
 	if acct.Owner() == owner {
 		return nil
 	}
@@ -1037,6 +1043,8 @@ func SystemProgramAssign(execCtx *ExecutionCtx, acct *BorrowedAccount, address s
 }
 
 func SystemProgramTransfer(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint64, lamports uint64) error {
+	klog.Infof("SystemProgramTransfer")
+
 	instrCtx, err := execCtx.TransactionContext.CurrentInstructionCtx()
 	if err != nil {
 		return err
@@ -1048,6 +1056,7 @@ func SystemProgramTransfer(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx 
 	}
 
 	if !isSigner {
+		klog.Infof("'from' acct must be a signer")
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -1129,7 +1138,8 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 	}
 	defer to.Drop()
 
-	return to.CheckedAddLamports(lamports, f)
+	err = to.CheckedAddLamports(lamports, f)
+	return err
 }
 
 func durableNonce(hash [32]byte) [32]byte {
