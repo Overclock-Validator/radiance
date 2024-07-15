@@ -401,6 +401,28 @@ func (instr *SystemInstrAssignWithSeed) UnmarshalWithDecoder(decoder *bin.Decode
 	return checkWithinDeserializationLimit(decoder)
 }
 
+func (instr *SystemInstrAssignWithSeed) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(SystemProgramInstrTypeAssignWithSeed, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(instr.Base[:], false)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteRustString(instr.Seed)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteBytes(instr.Owner[:], false)
+	return err
+}
+
 func (instr *SystemInstrTransferWithSeed) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	instr.Lamports, err = decoder.ReadUint64(bin.LE)
@@ -623,10 +645,10 @@ func extractAddressWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, ins
 		return addr, err
 	}
 	if addr != addrWithSeed {
-		klog.Errorf("Create: address %s does not match derived address %s", addr, addrWithSeed)
+		klog.Errorf("address %s does not match derived address %s", addr, addrWithSeed)
 		return addr, SystemProgErrAddressWithSeedMismatch
 	}
-	return addr, err
+	return base, err
 }
 
 func SystemProgramExecute(execCtx *ExecutionCtx) error {
@@ -935,6 +957,10 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 
 			var addr solana.PublicKey
 			addr, err = extractAddressWithSeed(txCtx, instrCtx, 0, assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
+			if err != nil {
+				return err
+			}
+
 			err = SystemProgramAssign(execCtx, acct, addr, assignWithSeed.Owner, signers)
 		}
 

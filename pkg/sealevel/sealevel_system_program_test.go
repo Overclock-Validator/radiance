@@ -836,3 +836,183 @@ func TestExecute_Tx_System_Program_Transfer_Not_Enough_Lamports_In_From_Acct(t *
 	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
 	assert.Equal(t, SystemProgErrResultWithNegativeLamports, err)
 }
+
+func TestExecute_Tx_System_Program_AssignWithSeed_Success(t *testing.T) {
+
+	// system program acct
+	systemProgramAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// base acct
+	basePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	basePubkey := basePrivateKey.PublicKey()
+	baseAcct := accounts.Account{Key: basePubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	assignedPubkey, err := solana.CreateWithSeed(basePubkey, "seed", BpfLoaderUpgradeableAddr)
+	assert.NoError(t, err)
+
+	assignedAcct := accounts.Account{Key: assignedPubkey, Lamports: 0, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	assert.NoError(t, err)
+	transactionAccts := NewTransactionAccounts([]accounts.Account{systemProgramAcct, assignedAcct, baseAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: assignedAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: baseAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	instrWriter := new(bytes.Buffer)
+	instrEncoder := bin.NewBinEncoder(instrWriter)
+	var assignWithSeed SystemInstrAssignWithSeed
+	assignWithSeed.Base = basePubkey
+	assignWithSeed.Owner = BpfLoaderUpgradeableAddr
+	assignWithSeed.Seed = "seed"
+	err = assignWithSeed.MarshalWithEncoder(instrEncoder)
+	assert.NoError(t, err)
+
+	instrBytes := instrWriter.Bytes()
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	assignedAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+
+	assert.Equal(t, assignWithSeed.Owner, solana.PublicKeyFromBytes(assignedAcctPost.Owner[:]))
+}
+
+func TestExecute_Tx_System_Program_AssignWithSeed_Addr_Doesnt_Match_Derived_Addr_Failure(t *testing.T) {
+
+	// system program acct
+	systemProgramAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// base acct
+	basePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	basePubkey := basePrivateKey.PublicKey()
+	baseAcct := accounts.Account{Key: basePubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// base acct
+	wrongBasePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	wrongBasePubkey := wrongBasePrivateKey.PublicKey()
+	wrongBaseAcct := accounts.Account{Key: wrongBasePubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	assert.NoError(t, err)
+	transactionAccts := NewTransactionAccounts([]accounts.Account{systemProgramAcct, wrongBaseAcct, baseAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: wrongBaseAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: baseAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	instrWriter := new(bytes.Buffer)
+	instrEncoder := bin.NewBinEncoder(instrWriter)
+	var assignWithSeed SystemInstrAssignWithSeed
+	assignWithSeed.Base = basePubkey
+	assignWithSeed.Owner = BpfLoaderUpgradeableAddr
+	assignWithSeed.Seed = "seed"
+	err = assignWithSeed.MarshalWithEncoder(instrEncoder)
+	assert.NoError(t, err)
+
+	instrBytes := instrWriter.Bytes()
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, SystemProgErrAddressWithSeedMismatch, err)
+}
+
+func TestExecute_Tx_System_Program_AssignWithSeed_Base_Not_Signer_Failure(t *testing.T) {
+
+	// system program acct
+	systemProgramAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// base acct
+	basePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	basePubkey := basePrivateKey.PublicKey()
+	baseAcct := accounts.Account{Key: basePubkey, Lamports: 0, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	assignedPubkey, err := solana.CreateWithSeed(basePubkey, "seed", BpfLoaderUpgradeableAddr)
+	assert.NoError(t, err)
+
+	assignedAcct := accounts.Account{Key: assignedPubkey, Lamports: 0, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	assert.NoError(t, err)
+	transactionAccts := NewTransactionAccounts([]accounts.Account{systemProgramAcct, assignedAcct, baseAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: assignedAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: baseAcct.Key, IsSigner: false, IsWritable: true}}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	instrWriter := new(bytes.Buffer)
+	instrEncoder := bin.NewBinEncoder(instrWriter)
+	var assignWithSeed SystemInstrAssignWithSeed
+	assignWithSeed.Base = basePubkey
+	assignWithSeed.Owner = BpfLoaderUpgradeableAddr
+	assignWithSeed.Seed = "seed"
+	err = assignWithSeed.MarshalWithEncoder(instrEncoder)
+	assert.NoError(t, err)
+
+	instrBytes := instrWriter.Bytes()
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrMissingRequiredSignature, err)
+}
