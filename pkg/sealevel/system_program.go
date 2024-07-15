@@ -664,15 +664,18 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
 				return err
 			}
+
 			var toAddr solana.PublicKey
 			toAddr, err = extractAddress(txCtx, instrCtx, 1)
 			if err != nil {
 				return err
 			}
+
 			err = SystemProgramCreateAccount(execCtx, toAddr, createAccount.Lamports, createAccount.Space, createAccount.Owner, signers)
 		}
 
@@ -683,20 +686,25 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(1)
 			if err != nil {
 				return err
 			}
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
 			defer acct.Drop()
 
-			addr, err := extractAddress(txCtx, instrCtx, 0)
+			var addr solana.PublicKey
+			addr, err = extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
 			}
+
 			err = SystemProgramAssign(execCtx, acct, addr, assign.Owner, signers)
 		}
 
@@ -722,14 +730,18 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(2)
 			if err != nil {
 				return err
 			}
-			toAddr, err := extractAddressWithSeed(txCtx, instrCtx, 1, createAcctWithSeed.Base, createAcctWithSeed.Seed, createAcctWithSeed.Owner)
+
+			var toAddr solana.PublicKey
+			toAddr, err = extractAddressWithSeed(txCtx, instrCtx, 1, createAcctWithSeed.Base, createAcctWithSeed.Seed, createAcctWithSeed.Owner)
 			if err != nil {
 				return err
 			}
+
 			err = SystemProgramCreateAccount(execCtx, toAddr, createAcctWithSeed.Lamports, createAcctWithSeed.Space, createAcctWithSeed.Owner, signers)
 		}
 
@@ -745,13 +757,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer acct.Drop()
 
-			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			var recentBlockHashes *SysvarRecentBlockhashes
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
 			if err != nil {
 				return err
 			}
 			if len(*recentBlockHashes) == 0 {
 				return SystemProgErrNonceNoRecentBlockhashes
 			}
+
 			err = SystemProgramAdvanceNonceAccount(execCtx, acct, signers)
 		}
 
@@ -768,7 +782,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			_, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 2)
+			_, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 2)
 			if err != nil {
 				return err
 			}
@@ -789,17 +803,21 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(1)
 			if err != nil {
 				return err
 			}
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
 			defer acct.Drop()
 
-			recentBlockHashes, err := ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			var recentBlockHashes *SysvarRecentBlockhashes
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
 			if err != nil {
 				return err
 			}
@@ -830,7 +848,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
@@ -851,13 +870,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
 			defer acct.Drop()
 
-			addr, err := extractAddress(txCtx, instrCtx, 0)
+			var addr solana.PublicKey
+			addr, err = extractAddress(txCtx, instrCtx, 0)
 			if err != nil {
 				return err
 			}
@@ -877,13 +898,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
 			defer acct.Drop()
 
-			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, allocateWithSeed.Base, allocateWithSeed.Seed, allocateWithSeed.Owner)
+			var addr solana.PublicKey
+			addr, err = extractAddressWithSeed(txCtx, instrCtx, 0, allocateWithSeed.Base, allocateWithSeed.Seed, allocateWithSeed.Owner)
 			if err != nil {
 				return err
 			}
@@ -903,13 +926,15 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
 			defer acct.Drop()
 
-			addr, err := extractAddressWithSeed(txCtx, instrCtx, 0, assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
+			var addr solana.PublicKey
+			addr, err = extractAddressWithSeed(txCtx, instrCtx, 0, assignWithSeed.Base, assignWithSeed.Seed, assignWithSeed.Owner)
 			err = SystemProgramAssign(execCtx, acct, addr, assignWithSeed.Owner, signers)
 		}
 
@@ -920,10 +945,12 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return InstrErrInvalidInstructionData
 			}
+
 			err = instrCtx.CheckNumOfInstructionAccounts(3)
 			if err != nil {
 				return err
 			}
+
 			err = SystemProgramTransferWithSeed(execCtx, 0, 1, transferWithSeed.FromSeed, transferWithSeed.FromOwner, 2, transferWithSeed.Lamports)
 
 		}
@@ -935,7 +962,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
