@@ -497,3 +497,106 @@ func TestExecute_Tx_System_Program_CreateAccount_Funding_Acct_Not_Signer(t *test
 	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
 	assert.Equal(t, InstrErrMissingRequiredSignature, err)
 }
+
+func TestExecute_Tx_System_Program_Assign_Success(t *testing.T) {
+
+	// system program acct
+	systemProgramAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// new acct
+	newAcctPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	newPubkey := newAcctPrivateKey.PublicKey()
+	newAcct := accounts.Account{Key: newPubkey, Lamports: 0, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	assignInstrWriter := new(bytes.Buffer)
+	assignEncoder := bin.NewBinEncoder(assignInstrWriter)
+
+	var assign SystemInstrAssign
+	assign.Owner = BpfLoaderUpgradeableAddr
+	err = assign.MarshalWithEncoder(assignEncoder)
+	assert.NoError(t, err)
+	instrBytes := assignInstrWriter.Bytes()
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{systemProgramAcct, newAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	acctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+
+	assert.Equal(t, BpfLoaderUpgradeableAddr, acctPost.Owner)
+}
+
+func TestExecute_Tx_System_Program_Assign_Not_Signer_Failure(t *testing.T) {
+
+	// system program acct
+	systemProgramAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// new acct
+	newAcctPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	newPubkey := newAcctPrivateKey.PublicKey()
+	newAcct := accounts.Account{Key: newPubkey, Lamports: 0, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	assignInstrWriter := new(bytes.Buffer)
+	assignEncoder := bin.NewBinEncoder(assignInstrWriter)
+
+	var assign SystemInstrAssign
+	assign.Owner = BpfLoaderUpgradeableAddr
+	err = assign.MarshalWithEncoder(assignEncoder)
+	assert.NoError(t, err)
+	instrBytes := assignInstrWriter.Bytes()
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{systemProgramAcct, newAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: newAcct.Key, IsSigner: false, IsWritable: true}}
+
+	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrMissingRequiredSignature, err)
+}
