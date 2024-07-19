@@ -11,9 +11,9 @@ const BpfLoaderUpgradeableAddrStr = "BPFLoaderUpgradeab1e11111111111111111111111
 
 var BpfLoaderUpgradeableAddr = base58.MustDecodeFromString(BpfLoaderUpgradeableAddrStr)
 
-const BpfLoaderAddrStr = "BPFLoader2111111111111111111111111111111111"
+const BpfLoader2AddrStr = "BPFLoader2111111111111111111111111111111111"
 
-var BpfLoaderAddr = base58.MustDecodeFromString(BpfLoaderAddrStr)
+var BpfLoader2Addr = base58.MustDecodeFromString(BpfLoader2AddrStr)
 
 const BpfLoaderDeprecatedAddrStr = "BPFLoader1111111111111111111111111111111111"
 
@@ -79,6 +79,8 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 	case ComputeBudgetProgramAddr:
 		return ComputeBudgetExecute, nil
 	case BpfLoaderUpgradeableAddr:
+		return BpfLoaderProgramExecute, nil
+	case BpfLoader2Addr:
 		return BpfLoaderProgramExecute, nil
 	case Secp256kPrecompileAddr:
 		return nil, IsPrecompile

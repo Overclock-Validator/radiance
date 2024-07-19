@@ -75,8 +75,21 @@ func (acct *BorrowedAccount) SetState(f features.Features, data []byte) error {
 		return InstrErrAccountDataTooSmall
 	}
 
-	acct.Account.SetData(data)
+	copy(acct.Account.Data, data)
 	return nil
+}
+
+func (acct *BorrowedAccount) DataMutable(f features.Features) ([]byte, error) {
+	err := acct.DataCanBeChanged(f)
+	if err != nil {
+		return nil, err
+	}
+	err = acct.Touch()
+	if err != nil {
+		return nil, err
+	}
+
+	return acct.Account.Data, nil
 }
 
 func (acct *BorrowedAccount) SetStateWithExtension(f features.Features, data []byte) error {
@@ -173,7 +186,7 @@ func (acct *BorrowedAccount) Key() solana.PublicKey {
 }
 
 func (acct *BorrowedAccount) IsExecutable() bool {
-	return acct.Account.IsBuiltin() || acct.Account.IsExecutable()
+	return acct.Account.IsExecutable()
 }
 
 func (acct *BorrowedAccount) AccountExists() bool {

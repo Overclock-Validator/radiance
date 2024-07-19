@@ -36,5 +36,5 @@ func ReadRecentBlockHashesSysvar(execCtx *ExecutionCtx, instrCtx *InstructionCtx
 	if err != nil {
 		return nil, err
 	}
-	return execCtx.SysvarCache.RecentBlockHashes(), nil
+	return execCtx.SysvarCache.GetRecentBlockHashes(), nil
 }

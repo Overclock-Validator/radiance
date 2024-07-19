@@ -46,7 +46,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -113,7 +113,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Not_Enough_Accts_Failure(t *tes
 
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -172,7 +172,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Lamports_Failure(t
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -232,7 +232,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Signer_Failure(t *
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -292,7 +292,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Too_Much_Space_Allocated_Failur
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -352,7 +352,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Data_Failure(t *te
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -412,7 +412,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Owned_By_System_Fa
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -472,7 +472,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Funding_Acct_Not_Signer(t *test
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -522,7 +522,7 @@ func TestExecute_Tx_System_Program_Assign_Success(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: newAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -576,7 +576,7 @@ func TestExecute_Tx_System_Program_Assign_Not_Signer_Failure(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: newAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -633,7 +633,7 @@ func TestExecute_Tx_System_Program_Transfer_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: recipientAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -698,7 +698,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Not_Signer_Failure(t *testing.T
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: recipientAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -755,7 +755,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Has_Data_Failure(t *testing.T) 
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: recipientAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -812,7 +812,7 @@ func TestExecute_Tx_System_Program_Transfer_Not_Enough_Lamports_In_From_Acct(t *
 	acctMetas := []AccountMeta{{Pubkey: fundingAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: recipientAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
@@ -859,7 +859,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: assignedAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: baseAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	instrWriter := new(bytes.Buffer)
 	instrEncoder := bin.NewBinEncoder(instrWriter)
@@ -923,7 +923,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Addr_Doesnt_Match_Derived_Addr
 	acctMetas := []AccountMeta{{Pubkey: wrongBaseAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: baseAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	instrWriter := new(bytes.Buffer)
 	instrEncoder := bin.NewBinEncoder(instrWriter)
@@ -981,7 +981,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Base_Not_Signer_Failure(t *tes
 	acctMetas := []AccountMeta{{Pubkey: assignedAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: baseAcct.Key, IsSigner: false, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	instrWriter := new(bytes.Buffer)
 	instrEncoder := bin.NewBinEncoder(instrWriter)

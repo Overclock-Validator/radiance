@@ -787,7 +787,7 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 
 	err = execCtx.ProcessInstruction(ix.Data, instructionAccts, programIndices)
 	if err != nil {
-		r0 = uint64(translateErrToInstrErrCode(err))
+		r0 = uint64(TranslateErrToErrCode(err))
 		return
 	}
 
@@ -867,7 +867,7 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 
 	err = execCtx.ProcessInstruction(ix.Data, instructionAccts, programIndices)
 	if err != nil {
-		r0 = uint64(translateErrToInstrErrCode(err))
+		r0 = uint64(TranslateErrToErrCode(err))
 		return
 	}
 

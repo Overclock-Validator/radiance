@@ -371,7 +371,12 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 		return InstrErrAccountDataTooSmall
 	}
 
-	copy(program.Account.Data[programDataOffset:writeOffset], bytes)
+	data, err := program.DataMutable(execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	copy(data[programDataOffset:writeOffset], bytes)
 	return nil
 }
 
@@ -774,6 +779,8 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 }
 
 func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
+	klog.Infof("BpfLoaderProgramExecute")
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -798,11 +805,12 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			err = ProcessUpgradeableLoaderInstruction(execCtx)
 			return err
-		} else if programId == BpfLoaderAddr {
+		} else if programId == BpfLoader2Addr {
 			err = execCtx.ComputeMeter.Consume(CUDefaultLoaderComputeUnits)
 			if err != nil {
 				return err
 			}
+			klog.Infof("BPF loader 2 mgmt no longer supported")
 			return InstrErrUnsupportedProgramId
 		} else if programId == BpfLoaderDeprecatedAddr {
 			err = execCtx.ComputeMeter.Consume(CUDeprecatedLoaderComputeUnits)
@@ -1183,7 +1191,10 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return InstrErrAccountDataTooSmall
 	}
 
-	dstSlice := programData.Account.Data[programDataDataOffset:dstEnd]
+	dstSlice, err := programData.DataMutable(execCtx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
 
 	buffer, err = instrCtx.BorrowInstructionAccount(txCtx, 3)
 	if err != nil {
@@ -1191,7 +1202,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 	}
 
 	srcSlice := buffer.Account.Data[bufferDataOffset:]
-	copy(dstSlice, srcSlice)
+	copy(dstSlice[programDataDataOffset:dstEnd], srcSlice)
 
 	err = buffer.SetDataLength(upgradeableLoaderSizeOfBuffer(0), execCtx.GlobalCtx.Features)
 	if err != nil {

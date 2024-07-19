@@ -53,7 +53,7 @@ func (sr *SysvarRent) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 }
 
 func (sr *SysvarRent) MinimumBalance(dataLen uint64) uint64 {
-	min := float64((rentAccountStorageOverhead+dataLen)*sr.LamportsPerUint8Year) * sr.ExemptionThreshold
+	min := float64(((dataLen + rentAccountStorageOverhead) * sr.LamportsPerUint8Year) * uint64(sr.ExemptionThreshold))
 	return uint64(min)
 }
 

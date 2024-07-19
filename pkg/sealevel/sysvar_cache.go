@@ -1,9 +1,48 @@
 package sealevel
 
+import "crypto/rand"
+
 type SysvarCache struct {
-	recentBlockHashes *SysvarRecentBlockhashes
+	RecentBlockHashes *SysvarRecentBlockhashes
 }
 
-func (sysvarCache *SysvarCache) RecentBlockHashes() *SysvarRecentBlockhashes {
-	return sysvarCache.recentBlockHashes
+func (sysvarCache *SysvarCache) GetRecentBlockHashes() *SysvarRecentBlockhashes {
+	return sysvarCache.RecentBlockHashes
+}
+
+func (sysvarCache *SysvarCache) Initialize() {
+	if sysvarCache.RecentBlockHashes == nil {
+		sysvarCache.RecentBlockHashes = new(SysvarRecentBlockhashes)
+	}
+}
+
+func (sysvarCache *SysvarCache) AddRecentBlockHashEntry(entry RecentBlockHashesEntry) {
+	if sysvarCache.RecentBlockHashes == nil {
+		sysvarCache.RecentBlockHashes = new(SysvarRecentBlockhashes)
+	}
+
+	*sysvarCache.RecentBlockHashes = append(*sysvarCache.RecentBlockHashes, entry)
+}
+
+func (sysvarCache *SysvarCache) PopulateRecentBlockHashesForTesting() {
+	var blockhash1 [32]byte
+	var blockhash2 [32]byte
+	var blockhash3 [32]byte
+	var blockhash4 [32]byte
+
+	rand.Read(blockhash1[:])
+	rand.Read(blockhash2[:])
+	rand.Read(blockhash3[:])
+	rand.Read(blockhash4[:])
+
+	feeCalculator := FeeCalculator{LamportsPerSignature: 1}
+	entry1 := RecentBlockHashesEntry{Blockhash: blockhash1, FeeCalculator: feeCalculator}
+	entry2 := RecentBlockHashesEntry{Blockhash: blockhash2, FeeCalculator: feeCalculator}
+	entry3 := RecentBlockHashesEntry{Blockhash: blockhash3, FeeCalculator: feeCalculator}
+	entry4 := RecentBlockHashesEntry{Blockhash: blockhash4, FeeCalculator: feeCalculator}
+
+	sysvarCache.AddRecentBlockHashEntry(entry1)
+	sysvarCache.AddRecentBlockHashEntry(entry2)
+	sysvarCache.AddRecentBlockHashEntry(entry3)
+	sysvarCache.AddRecentBlockHashEntry(entry4)
 }

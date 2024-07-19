@@ -23,6 +23,9 @@ OPTIONS-*
 opt/
 deps-bundle.tar.zst
 
+# firedancer's test-conformance corpus
+conformance/test-vectors
+
 # Editor junk files
 # Please just use a global gitignore conf, I'm tired of this
 .idea

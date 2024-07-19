@@ -41,7 +41,7 @@ func TestExecute_Tx_BpfLoader_InitializeBuffer_Success(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: false, IsWritable: true}, // uninit buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // authority account
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -76,7 +76,7 @@ func TestExecute_Tx_BpfLoader_InitializeBuffer_Buffer_Acct_Already_Initialize_Fa
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: false, IsWritable: true}, // already initialize buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // authority account
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -131,7 +131,7 @@ func TestExecute_Tx_BpfLoader_Write_Success(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // authority account
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -182,7 +182,7 @@ func TestExecute_Tx_BpfLoader_Write_Offset_Too_Large_Failure(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // authority account
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -233,7 +233,7 @@ func TestExecute_Tx_BpfLoader_Write_Buffer_Authority_Didnt_Sign_Failure(t *testi
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true}} // authority account, not a signer
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -289,7 +289,7 @@ func TestExecute_Tx_BpfLoader_Write_Incorrect_Authority_Failure(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // incorrec authority account for the buffer
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -325,7 +325,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Not_Enough_Instr_Accts_Failure(t *tes
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}} // properly initialized buffer acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -370,7 +370,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -415,7 +415,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -460,7 +460,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Immutable_Failure(t *testing.T
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -510,7 +510,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Wrong_Upgrade_Authority_Failur
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: true, IsWritable: true}, // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}}       // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -555,7 +555,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Authority_Didnt_Sign_Failure(t
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true},   // authority for the account, but not a signer
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -594,7 +594,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_No_New_Authority_Failure(t *te
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // authority for the account
 	} // no new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -639,7 +639,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Uninitialized_Account_Failure(
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // uninitialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -684,7 +684,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Immutable_Failure(t *test
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -729,7 +729,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Authority_Didnt_Sign_Fail
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true},   // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -779,7 +779,7 @@ func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Wrong_Authority_Failure(t
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: false, IsWritable: true}, // incorrect authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}}        // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -815,7 +815,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Not_Enough_Instr_Accts_Failure
 
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}} // properly initialized buffer acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -862,7 +862,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -909,7 +909,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Success(t *testing
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -956,7 +956,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Immutable_Failure(t *te
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1008,7 +1008,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Wrong_Upgrade_Authority
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: true, IsWritable: true}, // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}}       // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1055,7 +1055,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Authority_Didnt_Sign_Fa
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true},   // authority for the account, but not a signer
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1102,7 +1102,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_New_Authority_Didnt_Sig
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},     // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: false, IsWritable: true}} // new authority but not a signer
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1149,7 +1149,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Uninitialized_Account_F
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // uninitialized buffer acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1196,7 +1196,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Immutable_Failure(
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},    // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1243,7 +1243,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Authority_Didnt_Si
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true},   // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1290,7 +1290,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_New_Authority_Didn
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},     // authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: false, IsWritable: true}} // new authority, but not a signer
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1342,7 +1342,7 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Wrong_Authority_Fa
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized programdata acct
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: false, IsWritable: true}, // incorrect authority for the account
 		{Pubkey: newAuthorityAcct.Key, IsSigner: true, IsWritable: true}}        // new authority
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	f := features.NewFeaturesDefault()
@@ -1389,7 +1389,7 @@ func TestExecute_Tx_BpfLoader_Close_Buffer_Success(t *testing.T) {
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true},       // account to deposit buffer account's lamports into upon close
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // buffer account's authority
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1445,7 +1445,7 @@ func TestExecute_Tx_BpfLoader_Close_Buffer_Immutable_Failure(t *testing.T) {
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true},       // account to deposit buffer account's lamports into upon close
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // buffer account's authority
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1490,7 +1490,7 @@ func TestExecute_Tx_BpfLoader_Close_Buffer_Authority_Didnt_Sign_Failure(t *testi
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true},        // account to deposit buffer account's lamports into upon close
 		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: true}} // buffer account's authority
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1541,7 +1541,7 @@ func TestExecute_Tx_BpfLoader_Close_Buffer_Wrong_Authority_Failure(t *testing.T)
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true},                // account to deposit buffer account's lamports into upon close
 		{Pubkey: incorrectAuthorityAcct.Key, IsSigner: true, IsWritable: true}} // incorrect buffer account authority
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1579,7 +1579,7 @@ func TestExecute_Tx_BpfLoader_Close_Uninitialized_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: uninitAcct.Key, IsSigner: true, IsWritable: true}, // uninitialized acct
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true}} // account to uninit account's lamports into upon close
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1623,7 +1623,7 @@ func TestExecute_Tx_BpfLoader_Close_Recipient_Same_As_Account_Being_Closed_Failu
 	acctMetas := []AccountMeta{{Pubkey: uninitAcct.Key, IsSigner: true, IsWritable: true}, // uninitialized acct to be closed
 		{Pubkey: uninitAcct.Key, IsSigner: true, IsWritable: true}} // receiving acct, but same as account being closed
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1666,7 +1666,7 @@ func TestExecute_Tx_BpfLoader_Close_Buffer_Not_Enough_Accounts(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: bufferAcct.Key, IsSigner: true, IsWritable: true}, // properly initialized buffer acct
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true}} // account to deposit buffer account's lamports into upon close
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1723,7 +1723,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Success(t *testing.T) {
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}}   // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1796,7 +1796,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Not_Enough_Accounts_Failure(t *t
 		{Pubkey: dstAcct.Key, IsSigner: true, IsWritable: true},       // account to deposit programdata account's lamports into upon close
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}} // programdata account's authority
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1859,7 +1859,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Program_Acct_Not_Writable_Failur
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: false}}  // program acct associated with the programdata acct, but not writable
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1923,7 +1923,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Program_Acct_Wrong_Owner_Failure
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}}   // program acct associated with the programdata acct, but is wrongly owned by system program instead of loader
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -1987,7 +1987,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Already_Deployed_In_This_Block_F
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}}   // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2051,7 +2051,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_ProgramData_Not_A_Program_Acct_F
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}}   // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2115,7 +2115,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Nonclosable_Account_Failure(t *t
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // programdata account's authority
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}}   // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2190,7 +2190,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Success(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // programdata acct
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}} // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2290,7 +2290,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Extend_By_Zero_Bytes_Failure(t *test
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // programdata acct
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}} // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2368,7 +2368,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Not_Enou
 	acctMetas := []AccountMeta{{Pubkey: programDataAcct.Key, IsSigner: true, IsWritable: true}, // programdata acct
 		{Pubkey: programAcct.Key, IsSigner: true, IsWritable: true}} // program acct associated with the programdata acct
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2459,7 +2459,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Success(
 		{Pubkey: systemAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: payerAcct.Key, IsSigner: true, IsWritable: true}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2610,7 +2610,7 @@ func TestExecute_Tx_BpfLoader_Upgrade_Success(t *testing.T) {
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},  // authority
 	}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2721,7 +2721,7 @@ func TestExecute_Tx_BpfLoader_Upgrade_Buffer_Wrong_Authority_Failure(t *testing.
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true},  // authority
 	}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2823,7 +2823,7 @@ func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
 		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: true}, // authority
 	}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
@@ -2901,7 +2901,7 @@ func TestExecute_Tx_BpfLoader_Invoke_Bpf_Program_Success(t *testing.T) {
 
 	acctMetas := []AccountMeta{{Pubkey: programAcct.Key, IsSigner: false, IsWritable: false}}
 
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}

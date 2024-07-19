@@ -42,7 +42,7 @@ func TestExecute_Tx_Config_Program_Success(t *testing.T) {
 	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct, configAcct})
 
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: true, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -92,7 +92,7 @@ func TestExecute_Tx_Config_Program_With_Additional_Signer_Success(t *testing.T) 
 
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: authSignerAcct.Key, IsSigner: true, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -136,7 +136,7 @@ func TestExecute_Tx_Config_Program_With_Additional_Account_But_Not_As_Signer_Fai
 
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: authSignerAcct.Key, IsSigner: false, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -176,7 +176,7 @@ func TestExecute_Tx_Config_Program_Without_Config_Signer_Failure(t *testing.T) {
 	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct, configAcct})
 
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: false, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -224,7 +224,7 @@ func TestExecute_Tx_Config_Program_Without_Additional_Signer_Failure(t *testing.
 
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: randomPubKeyAcct.Key, IsSigner: true, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 
@@ -272,7 +272,7 @@ func TestExecute_Tx_Config_Program_Duplicate_New_Keys_Failure(t *testing.T) {
 	acctMetas := []AccountMeta{{Pubkey: configAcct.Key, IsSigner: false, IsWritable: true},
 		{Pubkey: authSignerAcct.Key, IsSigner: true, IsWritable: true},
 		{Pubkey: authSignerAcct.Key, IsSigner: true, IsWritable: true}}
-	instructionAccts := instructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
 

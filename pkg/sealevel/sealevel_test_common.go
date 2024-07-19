@@ -1,6 +1,6 @@
 package sealevel
 
-func instructionAcctsFromAccountMetas(instrAcctMetas []AccountMeta, txAccounts TransactionAccounts) []InstructionAccount {
+func InstructionAcctsFromAccountMetas(instrAcctMetas []AccountMeta, txAccounts TransactionAccounts) []InstructionAccount {
 	var instrAccts []InstructionAccount
 
 	for instrAcctIdx, accountMeta := range instrAcctMetas {

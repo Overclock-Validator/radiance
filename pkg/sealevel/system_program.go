@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
+	"unicode/utf8"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -287,6 +289,9 @@ func (instr *SystemInstrCreateAccountWithSeed) UnmarshalWithDecoder(decoder *bin
 	if err != nil {
 		return err
 	}
+	if !utf8.ValidString(instr.Seed) {
+		return InstrErrInvalidInstructionData
+	}
 
 	instr.Lamports, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
@@ -366,13 +371,17 @@ func (instr *SystemInstrAllocateWithSeed) UnmarshalWithDecoder(decoder *bin.Deco
 	if err != nil {
 		return err
 	}
+	if !utf8.ValidString(instr.Seed) {
+		return InstrErrInvalidInstructionData
+	}
 
 	instr.Space, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		return err
 	}
 
-	owner, err := decoder.ReadBytes(solana.PublicKeyLength)
+	var owner []byte
+	owner, err = decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
 		return err
 	}
@@ -391,6 +400,9 @@ func (instr *SystemInstrAssignWithSeed) UnmarshalWithDecoder(decoder *bin.Decode
 	instr.Seed, err = decoder.ReadRustString()
 	if err != nil {
 		return err
+	}
+	if !utf8.ValidString(instr.Seed) {
+		return InstrErrInvalidInstructionData
 	}
 
 	owner, err := decoder.ReadBytes(solana.PublicKeyLength)
@@ -433,6 +445,9 @@ func (instr *SystemInstrTransferWithSeed) UnmarshalWithDecoder(decoder *bin.Deco
 	instr.FromSeed, err = decoder.ReadRustString()
 	if err != nil {
 		return err
+	}
+	if !utf8.ValidString(instr.FromSeed) {
+		return InstrErrInvalidInstructionData
 	}
 
 	fromOwner, err := decoder.ReadBytes(solana.PublicKeyLength)
@@ -493,10 +508,12 @@ func (nonceStateVersions *NonceStateVersions) Marshal() ([]byte, error) {
 
 	buf.Write(nonceDataBytes)
 
+	fmt.Printf("NonceStateVersions Marshal len bytes = %d\n", buf.Len())
+
 	return buf.Bytes(), nil
 }
 
-func unmarshalNonceStateVersions(data []byte) (*NonceStateVersions, error) {
+func UnmarshalNonceStateVersions(data []byte) (*NonceStateVersions, error) {
 	decoder := bin.NewBinDecoder(data)
 
 	nonceStateVersions := new(NonceStateVersions)
@@ -526,13 +543,23 @@ func (nonceStateVersions *NonceStateVersions) IsUpgradeable() bool {
 	}
 }
 
-func (nonceStateVersions *NonceStateVersions) Upgrade() {
-	if !nonceStateVersions.IsUpgradeable() {
-		panic("attempting to mutate non-upgradeable state - programming error")
+func (nonceStateVersions *NonceStateVersions) Upgrade() bool {
+	if nonceStateVersions.Type == NonceVersionCurrent {
+		return false
+	} else if nonceStateVersions.Type == NonceVersionLegacy {
+		if !nonceStateVersions.Legacy.IsInitialized {
+			return false
+		}
+
+		nonceStateVersions.Current = nonceStateVersions.Legacy
+		nonceStateVersions.Type = NonceVersionCurrent
+		nonceStateVersions.Current.DurableNonce = durableNonce(nonceStateVersions.Current.DurableNonce)
+		nonceStateVersions.Legacy = NonceData{}
+
+		return true
+	} else {
+		panic("invalid nonce state version - should be impossible")
 	}
-	nonceStateVersions.Current = nonceStateVersions.Legacy
-	nonceStateVersions.Legacy = NonceData{}
-	nonceStateVersions.Type = NonceVersionCurrent
 }
 
 func (nonceStateVersions *NonceStateVersions) Deinitialize() {
@@ -548,12 +575,18 @@ func (nonceData *NonceData) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 		return err
 	}
 
-	if isInitialized == 1 {
+	if isInitialized != 0 && isInitialized != 1 {
+		return InstrErrInvalidAccountData
+	}
+
+	nonceData.IsInitialized = isInitialized == 1
+
+	if nonceData.IsInitialized {
 		authority, err := decoder.ReadBytes(solana.PublicKeyLength)
 		if err != nil {
 			return err
 		}
-		copy(nonceData.Authority[:], authority)
+		nonceData.Authority = solana.PublicKeyFromBytes(authority)
 
 		durableNonce, err := decoder.ReadBytes(32)
 		if err != nil {
@@ -566,7 +599,6 @@ func (nonceData *NonceData) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 			return err
 		}
 		nonceData.FeeCalculator.LamportsPerSignature = lamportsPerSig
-		nonceData.IsInitialized = true
 	}
 	return nil
 }
@@ -605,7 +637,9 @@ func (nonceData *NonceData) Marshal() ([]byte, error) {
 }
 
 func (nonceData *NonceData) IsSignerAuthority(signers []solana.PublicKey) bool {
+	fmt.Printf("IsSignerAuthority: nonceData.Authority = %s\n", nonceData.Authority)
 	for _, signer := range signers {
+		fmt.Printf("**** checking signer %s against %s\n", signer, nonceData.Authority)
 		if nonceData.Authority == signer {
 			return true
 		}
@@ -640,14 +674,16 @@ func extractAddressWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, ins
 		return addr, err
 	}
 
-	addrWithSeed, err := solana.CreateWithSeed(base, seed, owner)
+	addrWithSeed, err := ValidateAndCreateWithSeed(base, seed, owner)
 	if err != nil {
 		return addr, err
 	}
+
 	if addr != addrWithSeed {
 		klog.Errorf("address %s does not match derived address %s", addr, addrWithSeed)
 		return addr, SystemProgErrAddressWithSeedMismatch
 	}
+
 	return base, err
 }
 
@@ -656,7 +692,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 
 	err := execCtx.ComputeMeter.Consume(CUSystemProgramDefaultComputeUnits)
 	if err != nil {
-		return err
+		return InstrErrComputationalBudgetExceeded
 	}
 
 	txCtx := execCtx.TransactionContext
@@ -773,7 +809,9 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			acct, err := instrCtx.BorrowInstructionAccount(txCtx, 0)
+
+			var acct *BorrowedAccount
+			acct, err = instrCtx.BorrowInstructionAccount(txCtx, 0)
 			if err != nil {
 				return err
 			}
@@ -877,6 +915,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer acct.Drop()
 
+			klog.Infof("**** authNonceAcct.Pubkey = %s", authNonceAcct.Pubkey)
 			err = SystemProgramAuthorizeNonceAccount(execCtx, acct, authNonceAcct.Pubkey, signers)
 		}
 
@@ -1009,6 +1048,8 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 }
 
 func SystemProgramCreateAccount(execCtx *ExecutionCtx, toAddr solana.PublicKey, lamports uint64, space uint64, owner solana.PublicKey, signers []solana.PublicKey) error {
+	klog.Infof("CreateAccount")
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -1036,6 +1077,8 @@ func SystemProgramCreateAccount(execCtx *ExecutionCtx, toAddr solana.PublicKey, 
 }
 
 func SystemProgramAllocateAndAssign(execCtx *ExecutionCtx, toAcct *BorrowedAccount, toAddr solana.PublicKey, space uint64, owner solana.PublicKey, signers []solana.PublicKey) error {
+	klog.Infof("AllocateAndAssign")
+
 	err := SystemProgramAllocate(execCtx, toAcct, toAddr, space, signers)
 	if err != nil {
 		return err
@@ -1118,6 +1161,8 @@ func SystemProgramTransfer(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx 
 }
 
 func SystemProgramTransferWithSeed(execCtx *ExecutionCtx, fromAcctIdx uint64, fromBaseAcctIdx uint64, fromSeed string, fromOwner solana.PublicKey, toAcctIdx uint64, lamports uint64) error {
+	klog.Infof("TransferWithSeed")
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -1133,12 +1178,17 @@ func SystemProgramTransferWithSeed(execCtx *ExecutionCtx, fromAcctIdx uint64, fr
 		return InstrErrMissingRequiredSignature
 	}
 
-	base, err := txCtx.KeyOfAccountAtIndex(fromBaseAcctIdx)
+	baseAcctIdxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(fromBaseAcctIdx)
 	if err != nil {
 		return err
 	}
 
-	addrFromSeed, err := solana.CreateWithSeed(base, fromSeed, fromOwner)
+	base, err := txCtx.KeyOfAccountAtIndex(baseAcctIdxInTx)
+	if err != nil {
+		return err
+	}
+
+	addrFromSeed, err := ValidateAndCreateWithSeed(base, fromSeed, fromOwner)
 	if err != nil {
 		return err
 	}
@@ -1200,20 +1250,23 @@ func durableNonce(hash [32]byte) [32]byte {
 	prefix := "DURABLE_NONCE"
 	hasher := sha256.New()
 	hasher.Write([]byte(prefix))
-	sum := hasher.Sum(hash[:])
+	hasher.Write(hash[:])
+	sum := hasher.Sum(nil)
 
-	var result [32]byte
-	copy(result[:], sum)
-	return result
+	var durableNonce [32]byte
+	copy(durableNonce[:], sum)
+	return durableNonce
 }
 
 func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, rent *SysvarRent) error {
+	klog.Infof("InitializeNonceAccount: acct %s", acct.Key())
+
 	if !acct.IsWritable() {
 		klog.Errorf("Initialize nonce account: account %s must be writable", acct.Key())
 		return InstrErrInvalidArgument
 	}
 
-	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
+	nonceStateVersions, err := UnmarshalNonceStateVersions(acct.Data())
 	if err != nil {
 		return err
 	}
@@ -1232,6 +1285,7 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 	durableNonce := durableNonce(execCtx.Blockhash)
 
 	newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
+		IsInitialized: true,
 		Authority:     nonceAuthority,
 		DurableNonce:  durableNonce,
 		FeeCalculator: FeeCalculator{LamportsPerSignature: execCtx.LamportsPerSignature},
@@ -1242,7 +1296,8 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		return err
 	}
 
-	return acct.SetData(execCtx.GlobalCtx.Features, newStateBytes)
+	err = acct.SetState(execCtx.GlobalCtx.Features, newStateBytes)
+	return err
 }
 
 func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, signers []solana.PublicKey) error {
@@ -1251,7 +1306,7 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 		return InstrErrInvalidArgument
 	}
 
-	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
+	nonceStateVersions, err := UnmarshalNonceStateVersions(acct.Data())
 	if err != nil {
 		return err
 	}
@@ -1272,10 +1327,12 @@ func SystemProgramAuthorizeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAcc
 	if err != nil {
 		return err
 	}
-	return acct.SetData(execCtx.GlobalCtx.Features, newStateData)
+	return acct.SetState(execCtx.GlobalCtx.Features, newStateData)
 }
 
 func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount) error {
+	klog.Infof("UpgradeNonceAccount")
+
 	if acct.Owner() != SystemProgramAddr {
 		return InstrErrInvalidAccountOwner
 	}
@@ -1284,25 +1341,27 @@ func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrInvalidArgument
 	}
 
-	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
+	nonceStateVersions, err := UnmarshalNonceStateVersions(acct.Data())
 	if err != nil {
 		return err
 	}
 
-	if !nonceStateVersions.IsUpgradeable() {
+	upgradeable := nonceStateVersions.Upgrade()
+	if !upgradeable {
 		return InstrErrInvalidArgument
 	}
-
-	nonceStateVersions.Upgrade()
 
 	newStateData, err := nonceStateVersions.Marshal()
 	if err != nil {
 		return err
 	}
-	return acct.SetData(execCtx.GlobalCtx.Features, newStateData)
+
+	return acct.SetState(execCtx.GlobalCtx.Features, newStateData)
 }
 
 func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *InstructionCtx, fromAcctIdx uint64, lamports uint64, toAcctIdx uint64, rent *SysvarRent, signers []solana.PublicKey) error {
+	klog.Infof("WithdrawNonceAccount")
+
 	from, err := instrCtx.BorrowInstructionAccount(execCtx.TransactionContext, fromAcctIdx)
 	if err != nil {
 		return err
@@ -1310,11 +1369,11 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	defer from.Drop()
 
 	if !from.IsWritable() {
-		klog.Errorf("withdraw nonce account: account %s must be writeable", from.Key())
+		klog.Infof("withdraw nonce account: account %s must be writeable", from.Key())
 		return InstrErrInvalidArgument
 	}
 
-	nonceStateVersions, err := unmarshalNonceStateVersions(from.Data())
+	nonceStateVersions, err := UnmarshalNonceStateVersions(from.Data())
 	if err != nil {
 		return err
 	}
@@ -1323,10 +1382,11 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	state := nonceStateVersions.State()
 
 	if state.IsInitialized {
+		signer = state.Authority
 		if lamports == from.Lamports() {
 			durableNonce := durableNonce(execCtx.Blockhash)
 			if durableNonce == state.DurableNonce {
-				klog.Errorf("Withdraw nonce account: nonce can only advance once per slot")
+				klog.Infof("Withdraw nonce account: nonce can only advance once per slot")
 				return SystemProgErrNonceBlockhashNotExpired
 			}
 			nonceStateVersions.Deinitialize()
@@ -1334,22 +1394,25 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 			if err != nil {
 				return err
 			}
-			from.SetData(execCtx.GlobalCtx.Features, deinitNonceStateVersionsData)
+			err = from.SetState(execCtx.GlobalCtx.Features, deinitNonceStateVersionsData)
+			if err != nil {
+				return err
+			}
 		} else {
 			minBalance := rent.MinimumBalance(uint64(len(from.Data())))
 			amount, err := safemath.CheckedAddU64(lamports, minBalance)
 			if err != nil {
+				klog.Infof("Withdraw nonce account: integer overflow when calculating min balance + current balance")
 				return InstrErrInsufficientFunds
 			}
 			if amount > from.Lamports() {
-				klog.Errorf("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), amount)
+				klog.Infof("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), amount)
 				return InstrErrInsufficientFunds
 			}
 		}
-		signer = state.Authority
 	} else {
 		if lamports > from.Lamports() {
-			klog.Errorf("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), lamports)
+			klog.Infof("Withdraw nonce account: insufficient lamports %d, need %d", from.Lamports(), lamports)
 			return InstrErrInsufficientFunds
 		}
 		signer = from.Key()
@@ -1364,7 +1427,7 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	}
 
 	if !isSigner {
-		klog.Errorf("Withdraw nonce account: Account %s must sign", signer)
+		klog.Infof("Withdraw nonce account: Account %s must sign", signer)
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -1389,13 +1452,16 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 }
 
 func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, signers []solana.PublicKey) error {
+	klog.Infof("AdvanceNonceAccount")
+
 	if !acct.IsWritable() {
 		klog.Errorf("Advance nonce account: Account %s must be writeable", acct.Key())
 		return InstrErrInvalidArgument
 	}
 
-	nonceStateVersions, err := unmarshalNonceStateVersions(acct.Data())
+	nonceStateVersions, err := UnmarshalNonceStateVersions(acct.Data())
 	if err != nil {
+		klog.Infof("error unmarshaling NonceStateVersions acct data")
 		return err
 	}
 
@@ -1417,14 +1483,18 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return SystemProgErrNonceBlockhashNotExpired
 	}
 
-	state.DurableNonce = nextDurableNonce
 	state.FeeCalculator.LamportsPerSignature = execCtx.LamportsPerSignature
+
+	if nonceStateVersions.Type == NonceVersionCurrent {
+		state.DurableNonce = nextDurableNonce
+	} else {
+		nonceStateVersions.Upgrade()
+	}
 
 	newData, err := nonceStateVersions.Marshal()
 	if err != nil {
 		return err
 	}
 
-	acct.SetData(execCtx.GlobalCtx.Features, newData)
-	return nil
+	return acct.SetState(execCtx.GlobalCtx.Features, newData)
 }
