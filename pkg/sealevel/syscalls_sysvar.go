@@ -1,6 +1,7 @@
 package sealevel
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"go.firedancer.io/radiance/pkg/sbpf"
@@ -112,11 +113,22 @@ func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err e
 		return
 	}
 
-	epochRewards := ReadEpochRewardsSysvar(getAccounts(vm))
+	epochRewards, err := ReadEpochRewardsSysvar(getAccounts(vm))
+	if err != nil {
+		r0 = 1
+		return
+	}
 
-	binary.LittleEndian.PutUint64(epochRewardsDst[:8], epochRewards.TotalRewards)
-	binary.LittleEndian.PutUint64(epochRewardsDst[8:16], epochRewards.DistributedRewards)
-	binary.LittleEndian.PutUint64(epochRewardsDst[8:16], epochRewards.DistributionCompleteBlockHeight)
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, epochRewards.DistributionStartingBlockHeight)
+	binary.Write(buf, binary.LittleEndian, epochRewards.NumPartitions)
+	binary.Write(buf, binary.LittleEndian, epochRewards.ParentBlockhash)
+	binary.Write(buf, binary.LittleEndian, epochRewards.TotalPoints)
+	binary.Write(buf, binary.LittleEndian, epochRewards.TotalRewards)
+	binary.Write(buf, binary.LittleEndian, epochRewards.DistributedRewards)
+	binary.Write(buf, binary.LittleEndian, epochRewards.Active)
+
+	copy(epochRewardsDst, buf.Bytes())
 
 	r0 = 0
 	return

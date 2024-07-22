@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/stretchr/testify/assert"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"google.golang.org/protobuf/proto"
 )
 
-func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {
+func stakeProgramTestAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {
 	txCtx := execCtx.TransactionContext
 	acctsModified := make([]accounts.Account, 0)
 
@@ -30,7 +30,7 @@ func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx
 
 	for _, mithrilModifiedAcct := range acctsModified {
 		var modifiedAcctFoundInTestcase bool
-		for _, fixtureModifiedAcct := range fixture.Output.ModifiedAccounts {
+		for modifiedAcctIdx, fixtureModifiedAcct := range fixture.Output.ModifiedAccounts {
 			if solana.PublicKeyFromBytes(fixtureModifiedAcct.Address) == mithrilModifiedAcct.Key {
 				modifiedAcctFoundInTestcase = true
 				if fixtureModifiedAcct.Lamports != mithrilModifiedAcct.Lamports {
@@ -46,20 +46,23 @@ func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx
 					return false
 				}
 
-				// we don't know what recent blockhash was used in generating some *NonceAccount testcases,
-				// and we also do not know what lamports_per_signature value was used, hence we need to compare
-				// the new account data without these fields
-				if isSystemProgramNonceInstr(fixture) && len(fixtureModifiedAcct.Data) >= 80 {
-					if !bytes.Equal(fixtureModifiedAcct.Data[:40], mithrilModifiedAcct.Data[:40]) {
-						fmt.Printf("**** nonce account state (first 40 bytes) did not match\n")
-						fmt.Printf("fixture: %v\n", fixtureModifiedAcct.Data)
-						fmt.Printf("mithril: %v\n", mithrilModifiedAcct.Data)
-						return false
-					}
-				} else if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
-					fmt.Printf("**** account states did not match\n")
+				if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
+					fmt.Printf("**** %d: account states did not match\n", modifiedAcctIdx)
 					fmt.Printf("\na: %v\n\n", mithrilModifiedAcct.Data)
 					fmt.Printf("b: %v\n\n", fixtureModifiedAcct.Data)
+
+					mithrilState, err := sealevel.UnmarshalStakeState(mithrilModifiedAcct.Data)
+					if err != nil {
+						return false
+					}
+					fixtureState, err := sealevel.UnmarshalStakeState(fixtureModifiedAcct.Data)
+					if err != nil {
+						return false
+					}
+
+					fmt.Printf("\nmithril state: %+v\n\n", mithrilState)
+					fmt.Printf("fixture state: %+v\n\n", fixtureState)
+
 					return false
 				}
 			}
@@ -90,88 +93,8 @@ func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx
 	return true
 }
 
-func isSystemProgramNonceInstr(fixture *InstrFixture) bool {
-	if solana.PublicKeyFromBytes(fixture.Input.ProgramId) != sealevel.SystemProgramAddr {
-		return false
-	}
-
-	if len(fixture.Input.Data) < 4 {
-		return false
-	}
-
-	instrCode := binary.LittleEndian.Uint32(fixture.Input.Data[0:4])
-
-	return instrCode == sealevel.SystemProgramInstrTypeAdvanceNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeWithdrawNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeAuthorizeNonceAccount
-}
-
-func skipSystemProgramTestcase(fixture *InstrFixture, filename string) bool {
-
-	testcasesToSkip := []string{"764d48300da9556f84b303e15ef9cacfc825ec2a.fix"} // seems to have been generated with non-standard rent sysvar
-
-	for _, fnToSkip := range testcasesToSkip {
-		if strings.HasSuffix(filename, fnToSkip) {
-			return true
-		}
-	}
-
-	// some testcases saw the return of the system program's NonceNoRecentBlockhashes error.
-	// this is not a condition we'll ever see outside of perhaps the genesis block, so we
-	// skip these testcases.
-	if fixture.Output.Result == 26 && fixture.Output.CustomErr == 6 {
-		return true
-	}
-
-	// some testcases in the corpus expect a result of InstrErrUnsupportedSysvar, but this is
-	// not possible other than during the genesis block, hence we skip these samples.
-	if fixture.Output.Result == 49 {
-		return true
-	}
-
-	return false
-}
-
-func shouldDisregardSystemProgramError(fixture *InstrFixture, err error) bool {
-
-	if len(fixture.Input.Data) < 4 {
-		return false
-	}
-
-	instrCode := int32(binary.LittleEndian.Uint32(fixture.Input.Data[0:4]))
-
-	// some testcases for InitializeNonceAccount give no error, but when running the relevant
-	// testcases with default rent sysvar configuration (exemption_threshold=2.0, burn_percent=50
-	// lamports_per_byte_year=3480), we get an error returned by mithril. This indicates that the
-	// testcases in question were generated with non-standard Rent sysvar settings, and we'll therefore
-	// reject these results because we have no way of knowing what settings were actually used.
-	if instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount && err == sealevel.InstrErrInsufficientFunds {
-		return true
-	}
-
-	// the above is also true here as well; non-standard Rent sysvar settings used when generating
-	// testcases can also mean that while mithril returns success with standard Rent sysvar settings,
-	// the testcase when run with mocked-up firedancer state gave an error, so we have to disregard these
-	// errors as well.
-	if instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount && err == nil && fixture.Output.Result == 6 {
-		return true
-	}
-
-	// we don't know what the recent blockhash was when generating these samples
-	if err == sealevel.SystemProgErrNonceBlockhashNotExpired && (instrCode == sealevel.SystemProgramInstrTypeAdvanceNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeUpgradeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeAuthorizeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeWithdrawNonceAccount) {
-		return true
-	}
-
-	return false
-}
-
-func TestConformance_System_Program(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
+func TestConformance_Stake_Program(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/stake"
 	fileInfos, err := ioutil.ReadDir(basePath)
 	assert.NoError(t, err)
 
@@ -201,9 +124,48 @@ func TestConformance_System_Program(t *testing.T) {
 			log.Fatalln("Failed to parse fixture:", err)
 		}
 
+		fmt.Printf("len of features: %d\n", len(fixture.Input.EpochContext.Features.Features))
+
 		fmt.Printf("**** (%s) testcase %d of %d\n", fname, testcaseCounter, len(fnames))
 
 		execCtx, instrAccts := newExecCtxAndInstrAcctsFromFixture(fixture)
+
+		f := features.NewFeaturesDefault()
+		execCtx.GlobalCtx.Features = *f
+
+		featureId := features.StakeRaiseMinimumDelegationTo1Sol.Address[:8]
+		featureIdInt := binary.LittleEndian.Uint64(featureId)
+
+		featureId2 := features.RequireRentExemptSplitDestination.Address[:8]
+		featureIdInt2 := binary.LittleEndian.Uint64(featureId2)
+
+		featureId3 := features.StakeRedelegateInstruction.Address[:8]
+		featureIdInt3 := binary.LittleEndian.Uint64(featureId3)
+
+		featureId4 := features.ReduceStakeWarmupCooldown.Address[:8]
+		featureIdInt4 := binary.LittleEndian.Uint64(featureId4)
+
+		featureId5 := features.EnablePartitionedEpochReward.Address[:8]
+		featureIdInt5 := binary.LittleEndian.Uint64(featureId5)
+
+		for _, ftr := range fixture.Input.EpochContext.Features.Features {
+			if ftr == featureIdInt {
+				fmt.Printf("StakeRaiseMinimumDelegationTo1Sol enabled\n")
+				execCtx.GlobalCtx.Features.EnableFeature(features.StakeRaiseMinimumDelegationTo1Sol, 0)
+			} else if ftr == featureIdInt2 {
+				fmt.Printf("RequireRentExemptSplitDestination enabled\n")
+				execCtx.GlobalCtx.Features.EnableFeature(features.RequireRentExemptSplitDestination, 0)
+			} else if ftr == featureIdInt3 {
+				fmt.Printf("StakeRedelegateInstruction enabled\n")
+				execCtx.GlobalCtx.Features.EnableFeature(features.StakeRedelegateInstruction, 0)
+			} else if ftr == featureIdInt4 {
+				fmt.Printf("ReduceStakeWarmupCooldown enabled\n")
+				execCtx.GlobalCtx.Features.EnableFeature(features.ReduceStakeWarmupCooldown, 0)
+			} else if ftr == featureIdInt5 {
+				fmt.Printf("EnablePartitionedEpochReward enabled\n")
+				execCtx.GlobalCtx.Features.EnableFeature(features.EnablePartitionedEpochReward, 0)
+			}
+		}
 
 		fmt.Printf("prepared instruction accounts:")
 		for idx, ia := range instrAccts {
@@ -216,10 +178,6 @@ func TestConformance_System_Program(t *testing.T) {
 			fmt.Printf("instruction code: %d\n", instrCode)
 		}
 
-		if skipSystemProgramTestcase(fixture, fname) {
-			continue
-		}
-
 		for idx, acct := range fixture.Input.Accounts {
 			fmt.Printf("txAcct %d: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(acct.Address), acct.Lamports)
 		}
@@ -230,10 +188,6 @@ func TestConformance_System_Program(t *testing.T) {
 
 		err = execCtx.ProcessInstruction(fixture.Input.Data, instrAccts, []uint64{0})
 
-		if shouldDisregardSystemProgramError(fixture, err) {
-			continue
-		}
-
 		if !returnValueIsExpectedValue(fixture, err) {
 			errMsg := fmt.Sprintf("failed testcase on return value (instrCode %d), %s", instrCode, fname)
 			failedTestcases = append(failedTestcases, errMsg)
@@ -242,7 +196,7 @@ func TestConformance_System_Program(t *testing.T) {
 		}
 
 		if err == nil {
-			if !systemAccountStateChangesMatch(t, execCtx, fixture) {
+			if !stakeProgramTestAccountStateChangesMatch(t, execCtx, fixture) {
 				errMsg := fmt.Sprintf("failed testcase on account state check (instrCode %d), %s", instrCode, fname)
 				failedTestcases = append(failedTestcases, errMsg)
 				acctStateFailure++
@@ -257,7 +211,7 @@ func TestConformance_System_Program(t *testing.T) {
 		fmt.Printf("%s\n", fn)
 	}
 
-	fmt.Printf("\n\nfailed testcases %d:\n", len(failedTestcases))
+	fmt.Printf("\n\nfailed testcases %d / %d:\n", len(failedTestcases), len(fnames))
 	fmt.Printf("return value failures: %d, acct state failures: %d\n\n", returnValueFailure, acctStateFailure)
 
 	for k, v := range returnValueFailureMap {
@@ -270,12 +224,13 @@ func TestConformance_System_Program(t *testing.T) {
 		fmt.Printf("(acct state failures) instrCode: %d, %d failures\n", k, v)
 	}
 
-	assert.Empty(t, failedTestcases, "failing testcases found")
+	hasFailedTestcases := len(failedTestcases) != 0
+	assert.Equal(t, false, hasFailedTestcases, "failing testcases found")
 }
 
-func TestConformance_System_Program_Single_Testcase(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
-	fn := "5994531cac2587a14054252dc54b9eb1f288f357.fix"
+func TestConformance_Stake_Program_Single_Testcase(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/stake"
+	fn := "instr-1111111111111111111111111111111111111111111111111111111111111111-0292.fix"
 
 	fname := fmt.Sprintf("%s/%s", basePath, fn)
 
@@ -289,7 +244,46 @@ func TestConformance_System_Program_Single_Testcase(t *testing.T) {
 		log.Fatalln("Failed to parse fixture:", err)
 	}
 
+	fmt.Printf("len of features: %d\n", len(fixture.Input.EpochContext.Features.Features))
+
 	execCtx, instrAccts := newExecCtxAndInstrAcctsFromFixture(fixture)
+
+	f := features.NewFeaturesDefault()
+	execCtx.GlobalCtx.Features = *f
+
+	featureId := features.StakeRaiseMinimumDelegationTo1Sol.Address[:8]
+	featureIdInt := binary.LittleEndian.Uint64(featureId)
+
+	featureId2 := features.RequireRentExemptSplitDestination.Address[:8]
+	featureIdInt2 := binary.LittleEndian.Uint64(featureId2)
+
+	featureId3 := features.StakeRedelegateInstruction.Address[:8]
+	featureIdInt3 := binary.LittleEndian.Uint64(featureId3)
+
+	featureId4 := features.ReduceStakeWarmupCooldown.Address[:8]
+	featureIdInt4 := binary.LittleEndian.Uint64(featureId4)
+
+	featureId5 := features.EnablePartitionedEpochReward.Address[:8]
+	featureIdInt5 := binary.LittleEndian.Uint64(featureId5)
+
+	for _, ftr := range fixture.Input.EpochContext.Features.Features {
+		if ftr == featureIdInt {
+			fmt.Printf("StakeRaiseMinimumDelegationTo1Sol enabled\n")
+			execCtx.GlobalCtx.Features.EnableFeature(features.StakeRaiseMinimumDelegationTo1Sol, 0)
+		} else if ftr == featureIdInt2 {
+			fmt.Printf("RequireRentExemptSplitDestination enabled\n")
+			execCtx.GlobalCtx.Features.EnableFeature(features.RequireRentExemptSplitDestination, 0)
+		} else if ftr == featureIdInt3 {
+			fmt.Printf("StakeRedelegateInstruction enabled\n")
+			execCtx.GlobalCtx.Features.EnableFeature(features.StakeRedelegateInstruction, 0)
+		} else if ftr == featureIdInt4 {
+			fmt.Printf("ReduceStakeWarmupCooldown enabled\n")
+			execCtx.GlobalCtx.Features.EnableFeature(features.ReduceStakeWarmupCooldown, 0)
+		} else if ftr == featureIdInt5 {
+			fmt.Printf("EnablePartitionedEpochReward enabled\n")
+			execCtx.GlobalCtx.Features.EnableFeature(features.EnablePartitionedEpochReward, 0)
+		}
+	}
 
 	fmt.Printf("prepared instruction accounts:\n")
 	for idx, ia := range instrAccts {
@@ -317,7 +311,7 @@ func TestConformance_System_Program_Single_Testcase(t *testing.T) {
 	}
 
 	if err == nil {
-		if !systemAccountStateChangesMatch(t, execCtx, fixture) {
+		if !stakeProgramTestAccountStateChangesMatch(t, execCtx, fixture) {
 			fmt.Printf("failed testcase on account state check (instrCode %d), %s\n", instrCode, fname)
 		}
 	}

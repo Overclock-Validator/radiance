@@ -20,7 +20,7 @@ require (
 	github.com/segmentio/textio v1.2.0
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/spf13/cobra v1.7.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	github.com/vbauerster/mpb/v8 v8.4.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.10.0
@@ -34,6 +34,7 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 )
 
 require (
@@ -48,6 +49,7 @@ require (
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/gagliardetto/treeout v0.1.4 // indirect
+	github.com/gammazero/deque v0.2.1
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/mock v1.6.0 // indirect

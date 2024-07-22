@@ -1,6 +1,8 @@
 package features
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type FeatureGate struct {
 	Name    string

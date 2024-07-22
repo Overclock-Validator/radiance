@@ -32,7 +32,7 @@ func (sh *SysvarStakeHistory) UnmarshalWithDecoder(decoder *bin.Decoder) (err er
 		return fmt.Errorf("failed to read length of entries when decoding SysvarStakeHistory: %w", err)
 	}
 
-	stakeHistory := *sh
+	stakeHistory := SysvarStakeHistory{}
 
 	for count := 0; count < int(entriesLen); count++ {
 
@@ -60,6 +60,8 @@ func (sh *SysvarStakeHistory) UnmarshalWithDecoder(decoder *bin.Decoder) (err er
 		stakeHistory = append(stakeHistory, stakeHistoryPair)
 	}
 
+	*sh = stakeHistory
+
 	return
 }
 
@@ -79,10 +81,10 @@ func (sh *SysvarStakeHistory) Get(epoch uint64) *StakeHistoryEntry {
 	return nil
 }
 
-func ReadStakeHistorySysvar(accts *accounts.Accounts) SysvarStakeHistory {
+func ReadStakeHistorySysvar(accts *accounts.Accounts) (SysvarStakeHistory, error) {
 	stakeHistorySysvarAcct, err := (*accts).GetAccount(&SysvarStakeHistoryAddr)
 	if err != nil {
-		panic("failed to read StakeHistory sysvar account")
+		return SysvarStakeHistory{}, InstrErrUnsupportedSysvar
 	}
 
 	dec := bin.NewBinDecoder(stakeHistorySysvarAcct.Data)
@@ -90,7 +92,7 @@ func ReadStakeHistorySysvar(accts *accounts.Accounts) SysvarStakeHistory {
 	var stakeHistory SysvarStakeHistory
 	stakeHistory.MustUnmarshalWithDecoder(dec)
 
-	return stakeHistory
+	return stakeHistory, nil
 }
 
 func WriteStakeHistorySysvar(accts *accounts.Accounts, stakeHistory SysvarStakeHistory) {

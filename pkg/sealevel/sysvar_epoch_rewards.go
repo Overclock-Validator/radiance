@@ -13,33 +13,91 @@ const SysvarEpochRewardsAddrStr = "SysvarEpochRewards1111111111111111111111111"
 
 var SysvarEpochRewardsAddr = base58.MustDecodeFromString(SysvarEpochRewardsAddrStr)
 
-const SysvarEpochRewardsStructLen = 24
+const SysvarEpochRewardsStructLen = 81
 
 type SysvarEpochRewards struct {
+	DistributionStartingBlockHeight uint64
+	NumPartitions                   uint64
+	ParentBlockhash                 [32]byte
+	TotalPoints                     bin.Uint128
 	TotalRewards                    uint64
 	DistributedRewards              uint64
-	DistributionCompleteBlockHeight uint64
+	Active                          bool
 }
 
-func (ser *SysvarEpochRewards) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
-	totalRewards, err := decoder.ReadUint64(bin.LE)
+func (ser *SysvarEpochRewards) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+
+	ser.DistributionStartingBlockHeight, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to read DistributionStartingBlockHeight when decoding SysvarEpochRewards: %w", err)
+	}
+
+	ser.NumPartitions, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to read NumPartitions when decoding SysvarEpochRewards: %w", err)
+	}
+
+	parentBlockhash, err := decoder.ReadBytes(32)
+	if err != nil {
+		return fmt.Errorf("failed to read ParentBlockhash when decoding SysvarEpochRewards: %w", err)
+	}
+	copy(ser.ParentBlockhash[:], parentBlockhash)
+
+	ser.TotalPoints, err = decoder.ReadUint128(bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to read TotalPoints when decoding SysvarEpochRewards: %w", err)
+	}
+
+	ser.TotalRewards, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		return fmt.Errorf("failed to read TotalRewards when decoding SysvarEpochRewards: %w", err)
 	}
-	ser.TotalRewards = totalRewards
 
-	distributedRewards, err := decoder.ReadUint64(bin.LE)
+	ser.DistributedRewards, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		return fmt.Errorf("failed to read DistributedRewards when decoding SysvarEpochRewards: %w", err)
 	}
-	ser.DistributedRewards = distributedRewards
 
-	distributionCompleteBlockHeight, err := decoder.ReadUint64(bin.LE)
+	ser.Active, err = decoder.ReadBool()
+	return err
+}
+
+func (ser *SysvarEpochRewards) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint64(ser.DistributionStartingBlockHeight, bin.LE)
 	if err != nil {
-		return fmt.Errorf("failed to read DistributionCompleteBlockHeight when decoding SysvarEpochRewards: %w", err)
+		return fmt.Errorf("failed to write DistributionStartingBlockHeight when decoding SysvarEpochRewards: %w", err)
 	}
-	ser.DistributionCompleteBlockHeight = distributionCompleteBlockHeight
-	return
+
+	err = encoder.WriteUint64(ser.NumPartitions, bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to write NumPartitions when decoding SysvarEpochRewards: %w", err)
+	}
+
+	err = encoder.WriteBytes(ser.ParentBlockhash[:], false)
+	if err != nil {
+		return fmt.Errorf("failed to write ParentBlockhash when decoding SysvarEpochRewards: %w", err)
+	}
+
+	err = encoder.WriteUint128(ser.TotalPoints, bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to write TotalPoints when decoding SysvarEpochRewards: %w", err)
+	}
+
+	err = encoder.WriteUint64(ser.TotalRewards, bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to write TotalRewards when decoding SysvarEpochRewards: %w", err)
+	}
+
+	err = encoder.WriteUint64(ser.DistributedRewards, bin.LE)
+	if err != nil {
+		return fmt.Errorf("failed to write DistributedRewards when decoding SysvarEpochRewards: %w", err)
+	}
+
+	err = encoder.WriteBool(ser.Active)
+	return err
 }
 
 func (sr *SysvarEpochRewards) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
@@ -49,10 +107,10 @@ func (sr *SysvarEpochRewards) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func ReadEpochRewardsSysvar(accts *accounts.Accounts) SysvarEpochRewards {
+func ReadEpochRewardsSysvar(accts *accounts.Accounts) (SysvarEpochRewards, error) {
 	epochRewardsSysvarAcct, err := (*accts).GetAccount(&SysvarEpochRewardsAddr)
 	if err != nil {
-		panic("failed to read epoch schedule sysvar account")
+		return SysvarEpochRewards{}, InstrErrUnsupportedSysvar
 	}
 
 	dec := bin.NewBinDecoder(epochRewardsSysvarAcct.Data)
@@ -60,7 +118,7 @@ func ReadEpochRewardsSysvar(accts *accounts.Accounts) SysvarEpochRewards {
 	var epochRewards SysvarEpochRewards
 	epochRewards.MustUnmarshalWithDecoder(dec)
 
-	return epochRewards
+	return epochRewards, nil
 }
 
 func WriteEpochRewardsSysvar(accts *accounts.Accounts, epochRewards SysvarEpochRewards) {
@@ -73,23 +131,7 @@ func WriteEpochRewardsSysvar(accts *accounts.Accounts, epochRewards SysvarEpochR
 	data := new(bytes.Buffer)
 	enc := bin.NewBinEncoder(data)
 
-	err = enc.WriteUint64(epochRewards.TotalRewards, bin.LE)
-	if err != nil {
-		err = fmt.Errorf("failed to serialize TotalRewards for EpochRewards sysvar: %w", err)
-		panic(err)
-	}
-
-	err = enc.WriteUint64(epochRewards.DistributedRewards, bin.LE)
-	if err != nil {
-		err = fmt.Errorf("failed to serialize DistributedRewards for EpochRewards sysvar: %w", err)
-		panic(err)
-	}
-
-	err = enc.WriteUint64(epochRewards.DistributionCompleteBlockHeight, bin.LE)
-	if err != nil {
-		err = fmt.Errorf("failed to serialize DistributionCompleteBlockHeight for EpochRewards sysvar: %w", err)
-		panic(err)
-	}
+	err = epochRewards.MarshalWithEncoder(enc)
 
 	epochRewardsSysvarAcct.Data = data.Bytes()
 

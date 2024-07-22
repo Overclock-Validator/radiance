@@ -11,6 +11,7 @@ import (
 	"github.com/tidwall/btree"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -87,7 +88,7 @@ type VoteState0_23_5 struct {
 	PriorVoters          PriorVoters0_23_5
 	AuthorizedWithdrawer solana.PublicKey
 	Commission           byte
-	Votes                deque.Deque[VoteLockout]
+	Votes                *deque.Deque[VoteLockout]
 	RootSlot             *uint64
 	EpochCredits         []EpochCredits
 	LastTimestamp        BlockTimestamp
@@ -124,7 +125,7 @@ type VoteStateVersions struct {
 	Current  VoteState
 }
 
-func (priorVoter *PriorVoter) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+func (priorVoter *PriorVoter) UnmarshalWithDecoder(decoder *bin.Decoder, isVersion0_23_5 bool) error {
 	pk, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
 		return err
@@ -137,11 +138,12 @@ func (priorVoter *PriorVoter) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 
 	priorVoter.EpochEnd, err = decoder.ReadUint64(bin.LE)
-	if err != nil {
-		return err
+
+	if isVersion0_23_5 {
+		priorVoter.Slot, err = decoder.ReadUint64(bin.LE)
+
 	}
 
-	priorVoter.Slot, err = decoder.ReadUint64(bin.LE)
 	return err
 }
 
@@ -173,7 +175,7 @@ func (priorVoters *PriorVoters0_23_5) UnmarshalWithDecoder(decoder *bin.Decoder)
 	var err error
 	for count := 0; count < 32; count++ {
 		var priorVoter PriorVoter
-		err = priorVoter.UnmarshalWithDecoder(decoder)
+		err = priorVoter.UnmarshalWithDecoder(decoder, true)
 		if err != nil {
 			return err
 		}
@@ -204,7 +206,7 @@ func (priorVoters *PriorVoters) UnmarshalWithDecoder(decoder *bin.Decoder) error
 	var err error
 	for count := 0; count < 32; count++ {
 		var priorVoter PriorVoter
-		err = priorVoter.UnmarshalWithDecoder(decoder)
+		err = priorVoter.UnmarshalWithDecoder(decoder, false)
 		if err != nil {
 			return err
 		}
@@ -374,6 +376,7 @@ func (voteState *VoteState0_23_5) UnmarshalWithDecoder(decoder *bin.Decoder) err
 		return err
 	}
 
+	voteState.Votes = deque.NewDeque[VoteLockout]()
 	for count := uint64(0); count < numLockouts; count++ {
 		var lockout VoteLockout
 		err = lockout.UnmarshalWithDecoder(decoder)
@@ -818,6 +821,7 @@ func (voteState *VoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 		return err
 	}
 
+	voteState.Votes = deque.NewDeque[LandedVote]()
 	for count := uint64(0); count < numLockouts; count++ {
 		var landedVote LandedVote
 		err = landedVote.UnmarshalWithDecoder(decoder)
@@ -1180,6 +1184,7 @@ func (voteStateVersions *VoteStateVersions) UnmarshalWithDecoder(decoder *bin.De
 		}
 	default:
 		{
+			klog.Infof("invalid vote state type")
 			err = InstrErrInvalidAccountData
 		}
 	}
@@ -1248,6 +1253,8 @@ func (voteStateVersions *VoteStateVersions) ConvertToCurrent() *VoteState {
 				EpochCredits:         state.EpochCredits,
 				LastTimestamp:        state.LastTimestamp,
 			}
+
+			newVoteState.Votes = deque.NewDeque[LandedVote]()
 
 			state.Votes.Range(func(i int, lockout VoteLockout) bool {
 				newVoteState.Votes.PushBack(LandedVote{Latency: 0, Lockout: lockout})

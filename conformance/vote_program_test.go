@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
@@ -16,7 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {
+func voteProgramTestAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {
 	txCtx := execCtx.TransactionContext
 	acctsModified := make([]accounts.Account, 0)
 
@@ -46,17 +45,7 @@ func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx
 					return false
 				}
 
-				// we don't know what recent blockhash was used in generating some *NonceAccount testcases,
-				// and we also do not know what lamports_per_signature value was used, hence we need to compare
-				// the new account data without these fields
-				if isSystemProgramNonceInstr(fixture) && len(fixtureModifiedAcct.Data) >= 80 {
-					if !bytes.Equal(fixtureModifiedAcct.Data[:40], mithrilModifiedAcct.Data[:40]) {
-						fmt.Printf("**** nonce account state (first 40 bytes) did not match\n")
-						fmt.Printf("fixture: %v\n", fixtureModifiedAcct.Data)
-						fmt.Printf("mithril: %v\n", mithrilModifiedAcct.Data)
-						return false
-					}
-				} else if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
+				if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
 					fmt.Printf("**** account states did not match\n")
 					fmt.Printf("\na: %v\n\n", mithrilModifiedAcct.Data)
 					fmt.Printf("b: %v\n\n", fixtureModifiedAcct.Data)
@@ -90,88 +79,8 @@ func systemAccountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx
 	return true
 }
 
-func isSystemProgramNonceInstr(fixture *InstrFixture) bool {
-	if solana.PublicKeyFromBytes(fixture.Input.ProgramId) != sealevel.SystemProgramAddr {
-		return false
-	}
-
-	if len(fixture.Input.Data) < 4 {
-		return false
-	}
-
-	instrCode := binary.LittleEndian.Uint32(fixture.Input.Data[0:4])
-
-	return instrCode == sealevel.SystemProgramInstrTypeAdvanceNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeWithdrawNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeAuthorizeNonceAccount
-}
-
-func skipSystemProgramTestcase(fixture *InstrFixture, filename string) bool {
-
-	testcasesToSkip := []string{"764d48300da9556f84b303e15ef9cacfc825ec2a.fix"} // seems to have been generated with non-standard rent sysvar
-
-	for _, fnToSkip := range testcasesToSkip {
-		if strings.HasSuffix(filename, fnToSkip) {
-			return true
-		}
-	}
-
-	// some testcases saw the return of the system program's NonceNoRecentBlockhashes error.
-	// this is not a condition we'll ever see outside of perhaps the genesis block, so we
-	// skip these testcases.
-	if fixture.Output.Result == 26 && fixture.Output.CustomErr == 6 {
-		return true
-	}
-
-	// some testcases in the corpus expect a result of InstrErrUnsupportedSysvar, but this is
-	// not possible other than during the genesis block, hence we skip these samples.
-	if fixture.Output.Result == 49 {
-		return true
-	}
-
-	return false
-}
-
-func shouldDisregardSystemProgramError(fixture *InstrFixture, err error) bool {
-
-	if len(fixture.Input.Data) < 4 {
-		return false
-	}
-
-	instrCode := int32(binary.LittleEndian.Uint32(fixture.Input.Data[0:4]))
-
-	// some testcases for InitializeNonceAccount give no error, but when running the relevant
-	// testcases with default rent sysvar configuration (exemption_threshold=2.0, burn_percent=50
-	// lamports_per_byte_year=3480), we get an error returned by mithril. This indicates that the
-	// testcases in question were generated with non-standard Rent sysvar settings, and we'll therefore
-	// reject these results because we have no way of knowing what settings were actually used.
-	if instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount && err == sealevel.InstrErrInsufficientFunds {
-		return true
-	}
-
-	// the above is also true here as well; non-standard Rent sysvar settings used when generating
-	// testcases can also mean that while mithril returns success with standard Rent sysvar settings,
-	// the testcase when run with mocked-up firedancer state gave an error, so we have to disregard these
-	// errors as well.
-	if instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount && err == nil && fixture.Output.Result == 6 {
-		return true
-	}
-
-	// we don't know what the recent blockhash was when generating these samples
-	if err == sealevel.SystemProgErrNonceBlockhashNotExpired && (instrCode == sealevel.SystemProgramInstrTypeAdvanceNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeUpgradeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeAuthorizeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeInitializeNonceAccount ||
-		instrCode == sealevel.SystemProgramInstrTypeWithdrawNonceAccount) {
-		return true
-	}
-
-	return false
-}
-
-func TestConformance_System_Program(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
+func TestConformance_Vote_Program(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/vote"
 	fileInfos, err := ioutil.ReadDir(basePath)
 	assert.NoError(t, err)
 
@@ -216,10 +125,6 @@ func TestConformance_System_Program(t *testing.T) {
 			fmt.Printf("instruction code: %d\n", instrCode)
 		}
 
-		if skipSystemProgramTestcase(fixture, fname) {
-			continue
-		}
-
 		for idx, acct := range fixture.Input.Accounts {
 			fmt.Printf("txAcct %d: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(acct.Address), acct.Lamports)
 		}
@@ -230,10 +135,6 @@ func TestConformance_System_Program(t *testing.T) {
 
 		err = execCtx.ProcessInstruction(fixture.Input.Data, instrAccts, []uint64{0})
 
-		if shouldDisregardSystemProgramError(fixture, err) {
-			continue
-		}
-
 		if !returnValueIsExpectedValue(fixture, err) {
 			errMsg := fmt.Sprintf("failed testcase on return value (instrCode %d), %s", instrCode, fname)
 			failedTestcases = append(failedTestcases, errMsg)
@@ -242,7 +143,7 @@ func TestConformance_System_Program(t *testing.T) {
 		}
 
 		if err == nil {
-			if !systemAccountStateChangesMatch(t, execCtx, fixture) {
+			if !voteProgramTestAccountStateChangesMatch(t, execCtx, fixture) {
 				errMsg := fmt.Sprintf("failed testcase on account state check (instrCode %d), %s", instrCode, fname)
 				failedTestcases = append(failedTestcases, errMsg)
 				acctStateFailure++
@@ -257,7 +158,7 @@ func TestConformance_System_Program(t *testing.T) {
 		fmt.Printf("%s\n", fn)
 	}
 
-	fmt.Printf("\n\nfailed testcases %d:\n", len(failedTestcases))
+	fmt.Printf("\n\nfailed testcases %d / %d:\n", len(failedTestcases), len(fnames))
 	fmt.Printf("return value failures: %d, acct state failures: %d\n\n", returnValueFailure, acctStateFailure)
 
 	for k, v := range returnValueFailureMap {
@@ -273,8 +174,8 @@ func TestConformance_System_Program(t *testing.T) {
 	assert.Empty(t, failedTestcases, "failing testcases found")
 }
 
-func TestConformance_System_Program_Single_Testcase(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
+func TestConformance_Vote_Program_Single_Testcase(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/bpf-loader-v3"
 	fn := "5994531cac2587a14054252dc54b9eb1f288f357.fix"
 
 	fname := fmt.Sprintf("%s/%s", basePath, fn)
@@ -317,7 +218,7 @@ func TestConformance_System_Program_Single_Testcase(t *testing.T) {
 	}
 
 	if err == nil {
-		if !systemAccountStateChangesMatch(t, execCtx, fixture) {
+		if !voteProgramTestAccountStateChangesMatch(t, execCtx, fixture) {
 			fmt.Printf("failed testcase on account state check (instrCode %d), %s\n", instrCode, fname)
 		}
 	}

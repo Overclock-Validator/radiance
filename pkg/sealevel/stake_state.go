@@ -38,7 +38,7 @@ type Delegation struct {
 }
 
 var (
-	StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted = StakeFlags{Bits: 0b0000_0001}
+	StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted = StakeFlags{Bits: 1}
 )
 
 type StakeFlags struct {
@@ -143,7 +143,7 @@ func (authorized *Authorized) Check(signers []solana.PublicKey, stakeAuthorize u
 	switch stakeAuthorize {
 	case StakeAuthorizeStaker:
 		{
-			err := verifySigner(authorized.Withdrawer, signers)
+			err := verifySigner(authorized.Staker, signers)
 			if err != nil {
 				return InstrErrMissingRequiredSignature
 			} else {
@@ -450,7 +450,7 @@ func (delegation *Delegation) StakeActivatingAndDeactivating(targetEpoch uint64,
 			return StakeHistoryEntry{Effective: effectiveStake, Activating: activatingStake}
 		}
 	} else if targetEpoch == delegation.DeactivationEpoch {
-		return StakeHistoryEntry{Deactivating: effectiveStake}
+		return StakeHistoryEntry{Effective: effectiveStake, Deactivating: effectiveStake}
 	} else if prevClusterStake := stakeHistory.Get(delegation.DeactivationEpoch); prevClusterStake != nil {
 		prevEpoch := delegation.DeactivationEpoch
 		currentEpoch := uint64(0)
@@ -469,10 +469,10 @@ func (delegation *Delegation) StakeActivatingAndDeactivating(targetEpoch uint64,
 			newlyNotEffectiveClusterStake := float64(prevClusterStake.Effective) * warmupCooldownRate
 
 			var newlyNotEffectiveStake uint64
-			if (weight * newlyNotEffectiveClusterStake) > 1 {
-				newlyNotEffectiveStake = 1
-			} else {
+			if uint64(weight*newlyNotEffectiveClusterStake) > 1 {
 				newlyNotEffectiveStake = uint64(weight * newlyNotEffectiveClusterStake)
+			} else {
+				newlyNotEffectiveStake = 1
 			}
 
 			currentEffectiveStake = safemath.SaturatingSubU64(currentEffectiveStake, newlyNotEffectiveStake)
@@ -491,7 +491,7 @@ func (delegation *Delegation) StakeActivatingAndDeactivating(targetEpoch uint64,
 				break
 			}
 		}
-		return StakeHistoryEntry{Deactivating: currentEffectiveStake}
+		return StakeHistoryEntry{Effective: currentEffectiveStake, Deactivating: currentEffectiveStake}
 	} else {
 		return StakeHistoryEntry{}
 	}
@@ -512,7 +512,7 @@ func (stakeFlags *StakeFlags) Union(other StakeFlags) StakeFlags {
 }
 
 func (stakeFlags *StakeFlags) Contains(other StakeFlags) bool {
-	return (stakeFlags.Bits & other.Bits) == other.Bits
+	return (stakeFlags.Bits & other.Bits) != 0
 }
 
 func (stakeFlags *StakeFlags) Remove(other StakeFlags) {
@@ -525,7 +525,7 @@ func (initialized *StakeStateV2Initialized) UnmarshalWithDecoder(decoder *bin.De
 }
 
 func (initialized *StakeStateV2Initialized) MarshalWithEncoder(encoder *bin.Encoder) error {
-	return initialized.MarshalWithEncoder(encoder)
+	return initialized.Meta.MarshalWithEncoder(encoder)
 }
 
 func (stake *Stake) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -750,7 +750,7 @@ func (config *StakeConfig) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	return err
 }
 
-func unmarshalStakeState(data []byte) (*StakeStateV2, error) {
+func UnmarshalStakeState(data []byte) (*StakeStateV2, error) {
 	state := new(StakeStateV2)
 	decoder := bin.NewBinDecoder(data)
 
@@ -854,7 +854,7 @@ func getMergeKindIfMergeable(execCtx *ExecutionCtx, stakeState *StakeStateV2, st
 
 	case StakeStateV2StatusInitialized:
 		{
-			return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Stake.Meta, StakeLamports: stakeLamports}}, nil
+			return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Initialized.Meta, StakeLamports: stakeLamports}}, nil
 
 		}
 
@@ -872,7 +872,7 @@ func metasCanMerge(stakeMeta *Meta, srcMeta *Meta, clock SysvarClock) error {
 	if stakeMeta.Authorized == srcMeta.Authorized && canMergeLockups {
 		return nil
 	} else {
-		klog.Errorf("unable to merge due to metadata mismatch")
+		klog.Infof("unable to merge due to metadata mismatch")
 		return StakeErrMergeMismatch
 	}
 
@@ -925,12 +925,12 @@ func (mergeKind *MergeKind) ActiveStake() *Stake {
 
 func activeDelegationsCanMerge(stake *Delegation, src *Delegation) error {
 	if stake.VoterPubkey != src.VoterPubkey {
-		klog.Errorf("unable to merge due to voter mismatch")
+		klog.Infof("unable to merge due to voter mismatch")
 		return StakeErrMergeMismatch
 	} else if stake.DeactivationEpoch == math.MaxUint64 && src.DeactivationEpoch == math.MaxUint64 {
 		return nil
 	} else {
-		klog.Errorf("unable to merge due to stake deactivation")
+		klog.Infof("unable to merge due to stake deactivation")
 		return StakeErrMergeMismatch
 	}
 }
@@ -944,19 +944,22 @@ func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock S
 	stakeStake := mergeKind.ActiveStake()
 	srcStake := src.ActiveStake()
 
-	if stakeStake != nil || srcStake != nil {
+	if stakeStake != nil && srcStake != nil {
 		err = activeDelegationsCanMerge(&stakeStake.Delegation, &srcStake.Delegation)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusInactive {
+	if mergeKind.Status == MergeKindStatusInactive && src.Status == MergeKindStatusInactive {
+		return nil, nil
+	} else if mergeKind.Status == MergeKindStatusInactive && src.Status == MergeKindStatusActivationEpoch {
+		return nil, nil
+	} else if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusInactive {
 		mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, err = safemath.CheckedAddU64(mergeKind.ActivationEpoch.Stake.Delegation.StakeLamports, src.Inactive.StakeLamports)
 		if err != nil {
 			return nil, InstrErrInsufficientFunds
 		}
-
 		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake, StakeFlags: mergeKind.ActivationEpoch.StakeFlags.Union(src.Inactive.StakeFlags)}}, nil
 	} else if mergeKind.Status == MergeKindStatusActivationEpoch && src.Status == MergeKindStatusActivationEpoch {
 		srcLamports, err := safemath.CheckedAddU64(src.ActivationEpoch.Meta.RentExemptReserve, src.ActivationEpoch.Stake.Delegation.StakeLamports)
@@ -976,17 +979,19 @@ func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock S
 			return nil, err
 		}
 
-		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.ActivationEpoch.Meta, Stake: mergeKind.ActivationEpoch.Stake}}, nil
+		return &StakeStateV2{Status: StakeStateV2StatusStake, Stake: StakeStateV2Stake{Meta: mergeKind.FullyActive.Meta, Stake: mergeKind.FullyActive.Stake}}, nil
 	} else {
 		return nil, StakeErrMergeMismatch
 	}
 }
 
 func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags, epoch uint64) error {
-	var err error
 	if execCtx.GlobalCtx.Features.IsActive(features.StakeRedelegateInstruction) {
 		if stakeFlags.Contains(StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted) {
-			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			status := stake.Delegation.StakeActivatingAndDeactivating(epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
 			if status.Activating != 0 {
@@ -999,17 +1004,15 @@ func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags
 				stakeFlags.Remove(StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted)
 				return nil
 			}
-		} else {
-			stake.Deactivate(epoch)
-			return nil
 		}
-	} else {
-		stake.Deactivate(epoch)
-		return nil
 	}
+	return stake.Deactivate(epoch)
 }
 
-func getStakeStatus(execCtx *ExecutionCtx, stake *Stake, clock SysvarClock) StakeHistoryEntry {
-	stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
-	return stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+func getStakeStatus(execCtx *ExecutionCtx, stake *Stake, clock SysvarClock) (StakeHistoryEntry, error) {
+	stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
+	if err != nil {
+		return StakeHistoryEntry{}, err
+	}
+	return stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx)), nil
 }

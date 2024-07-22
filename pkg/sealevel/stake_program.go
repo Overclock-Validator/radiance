@@ -9,6 +9,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -51,6 +52,7 @@ var (
 	StakeErrMinimumDelinquentEpochsForDeactivationNotMet                   = errors.New("StakeErrMinimumDelinquentEpochsForDeactivationNotMet")
 	StakeErrRedelegateTransientOrInactiveStake                             = errors.New("StakeErrRedelegateTransientOrInactiveStake")
 	StakeErrRedelegateToSameVoteAccount                                    = errors.New("StakeErrRedelegateToSameVoteAccount")
+	StakeErrEpochRewardsActive                                             = errors.New("StakeErrEpochRewardsActive")
 )
 
 type StakeInstrInitialize struct {
@@ -328,6 +330,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 		return acct, nil
 	}
 
+	var epochRewardsActive bool
+	epochRewards, err := ReadEpochRewardsSysvar(&execCtx.Accounts)
+	if err == nil {
+		epochRewardsActive = epochRewards.Active
+	}
+
 	signers, err := instrCtx.Signers(txCtx)
 	if err != nil {
 		return err
@@ -348,7 +356,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -371,7 +384,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -388,7 +406,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 3, false)
+			var custodianPubkey *solana.PublicKey
+			custodianPubkey, err = getOptionalPubkey(txCtx, instrCtx, 3, false)
 			if err != nil {
 				return err
 			}
@@ -404,34 +423,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
-			if err != nil {
-				return err
-			}
-			defer me.Drop()
-
-			err = instrCtx.CheckNumOfInstructionAccounts(2)
-			if err != nil {
-				return err
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
-			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
-			if err != nil {
-				return err
-			}
-
-			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 3, false)
-			if err != nil {
-				return err
-			}
-
-			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeWithSeed.AuthoritySeed, authorizeWithSeed.AuthorityOwner, authorizeWithSeed.NewAuthorizedPubkey, authorizeWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
-		}
-
-	case StakeProgramInstrTypeDelegateStake:
-		{
-			me, err := getStakeAccount()
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -448,7 +445,45 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			var custodianPubkey *solana.PublicKey
+			custodianPubkey, err = getOptionalPubkey(txCtx, instrCtx, 3, false)
+			if err != nil {
+				return err
+			}
+
+			err = StakeProgramAuthorizeWithSeed(txCtx, instrCtx, me, 1, authorizeWithSeed.AuthoritySeed, authorizeWithSeed.AuthorityOwner, authorizeWithSeed.NewAuthorizedPubkey, authorizeWithSeed.StakeAuthorize, clock, custodianPubkey, execCtx.GlobalCtx.Features)
+		}
+
+	case StakeProgramInstrTypeDelegateStake:
+		{
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
+			if err != nil {
+				return err
+			}
+			defer me.Drop()
+
+			err = instrCtx.CheckNumOfInstructionAccounts(2)
+			if err != nil {
+				return err
+			}
+
+			clock := ReadClockSysvar(&execCtx.Accounts)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var stakeHistory SysvarStakeHistory
+			stakeHistory, err = ReadStakeHistorySysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
 			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
 			if err != nil {
 				return err
@@ -459,23 +494,6 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 			me.Drop()
-
-			if execCtx.GlobalCtx.Features.IsActive(features.ReduceStakeWarmupCooldown) {
-				configAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 4)
-				if err != nil {
-					return err
-				}
-				defer configAcct.Drop()
-
-				if configAcct.Key() != StakeProgramConfigAddr {
-					return InstrErrInvalidArgument
-				}
-
-				_, err = unmarshalStakeConfig(configAcct.Data())
-				if err != nil {
-					return InstrErrInvalidArgument
-				}
-			}
 
 			err = StakeProgramDelegate(execCtx, txCtx, instrCtx, 0, 1, clock, stakeHistory, signers, execCtx.GlobalCtx.Features)
 		}
@@ -488,7 +506,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -505,7 +528,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeMerge:
 		{
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -522,7 +550,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			var stakeHistory SysvarStakeHistory
+			stakeHistory, err = ReadStakeHistorySysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
 			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
 			if err != nil {
 				return err
@@ -540,7 +573,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -557,7 +595,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+			var stakeHistory SysvarStakeHistory
+			stakeHistory, err = ReadStakeHistorySysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
 			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
 			if err != nil {
 				return err
@@ -581,7 +624,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeDeactivate:
 		{
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -604,7 +652,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -617,7 +670,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeInitializeChecked:
 		{
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -628,27 +686,32 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idxInTxStaker, err := instrCtx.IndexOfInstructionAccountInTransaction(2)
+			var idxInTxStaker uint64
+			idxInTxStaker, err = instrCtx.IndexOfInstructionAccountInTransaction(2)
 			if err != nil {
 				return err
 			}
 
-			stakerPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTxStaker)
+			var stakerPubkey solana.PublicKey
+			stakerPubkey, err = txCtx.KeyOfAccountAtIndex(idxInTxStaker)
 			if err != nil {
 				return err
 			}
 
-			idxInTxWithdrawer, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			var idxInTxWithdrawer uint64
+			idxInTxWithdrawer, err = instrCtx.IndexOfInstructionAccountInTransaction(3)
 			if err != nil {
 				return err
 			}
 
-			withdrawerPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTxWithdrawer)
+			var withdrawerPubkey solana.PublicKey
+			withdrawerPubkey, err = txCtx.KeyOfAccountAtIndex(idxInTxWithdrawer)
 			if err != nil {
 				return err
 			}
 
-			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			var isSigner bool
+			isSigner, err = instrCtx.IsInstructionAccountSigner(3)
 			if err != nil {
 				return err
 			}
@@ -675,7 +738,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -692,17 +760,20 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			var idxInTx uint64
+			idxInTx, err = instrCtx.IndexOfInstructionAccountInTransaction(3)
 			if err != nil {
 				return err
 			}
 
-			authorizedPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			var authorizedPubkey solana.PublicKey
+			authorizedPubkey, err = txCtx.KeyOfAccountAtIndex(idxInTx)
 			if err != nil {
 				return err
 			}
 
-			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			var isSigner bool
+			isSigner, err = instrCtx.IsInstructionAccountSigner(3)
 			if err != nil {
 				return err
 			}
@@ -710,7 +781,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrMissingRequiredSignature
 			}
 
-			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 4, false)
+			var custodianPubkey *solana.PublicKey
+			custodianPubkey, err = getOptionalPubkey(txCtx, instrCtx, 4, false)
 			if err != nil {
 				return err
 			}
@@ -726,7 +798,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrInvalidInstructionData
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -748,17 +825,20 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			var idxInTx uint64
+			idxInTx, err = instrCtx.IndexOfInstructionAccountInTransaction(3)
 			if err != nil {
 				return err
 			}
 
-			authorizedPubkey, err := txCtx.KeyOfAccountAtIndex(idxInTx)
+			var authorizedPubkey solana.PublicKey
+			authorizedPubkey, err = txCtx.KeyOfAccountAtIndex(idxInTx)
 			if err != nil {
 				return err
 			}
 
-			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			var isSigner bool
+			isSigner, err = instrCtx.IsInstructionAccountSigner(3)
 			if err != nil {
 				return err
 			}
@@ -766,7 +846,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return InstrErrMissingRequiredSignature
 			}
 
-			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 4, false)
+			var custodianPubkey *solana.PublicKey
+			custodianPubkey, err = getOptionalPubkey(txCtx, instrCtx, 4, false)
 			if err != nil {
 				return err
 			}
@@ -782,13 +863,19 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
 			defer me.Drop()
 
-			custodianPubkey, err := getOptionalPubkey(txCtx, instrCtx, 2, true)
+			var custodianPubkey *solana.PublicKey
+			custodianPubkey, err = getOptionalPubkey(txCtx, instrCtx, 2, true)
 			if err != nil {
 				return err
 			}
@@ -809,7 +896,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeDeactivateDelinquent:
 		{
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -827,7 +919,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 	case StakeProgramInstrTypeRedelegate:
 		{
-			me, err := getStakeAccount()
+			if epochRewardsActive {
+				return StakeErrEpochRewardsActive
+			}
+
+			var me *BorrowedAccount
+			me, err = getStakeAccount()
 			if err != nil {
 				return err
 			}
@@ -837,23 +934,6 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				err = instrCtx.CheckNumOfInstructionAccounts(3)
 				if err != nil {
 					return err
-				}
-
-				if !execCtx.GlobalCtx.Features.IsActive(features.ReduceStakeWarmupCooldown) {
-					configAcct, err := instrCtx.BorrowInstructionAccount(txCtx, 3)
-					if err != nil {
-						return err
-					}
-					defer configAcct.Drop()
-
-					if configAcct.Key() != StakeProgramConfigAddr {
-						return InstrErrInvalidArgument
-					}
-
-					_, err = unmarshalStakeConfig(configAcct.Data())
-					if err != nil {
-						return InstrErrInvalidArgument
-					}
 				}
 
 				err = StakeProgramRedelegate(execCtx, txCtx, instrCtx, me, 1, 2, signers)
@@ -873,11 +953,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 }
 
 func StakeProgramInitialize(stakeAcct *BorrowedAccount, authorized Authorized, lockup StakeLockup, rent SysvarRent, f features.Features) error {
+	klog.Infof("StakeProgramInitialize")
+
 	if len(stakeAcct.Data()) != StakeStateV2Size {
 		return InstrErrInvalidAccountData
 	}
 
-	state, err := unmarshalStakeState(stakeAcct.Data())
+	state, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -919,7 +1001,9 @@ func validateAndReturnDelegatedAmount(stakeAcct *BorrowedAccount, meta Meta, f f
 }
 
 func StakeProgramAuthorize(stakeAcct *BorrowedAccount, signers []solana.PublicKey, newAuthority solana.PublicKey, stakeAuthorize uint32, clock SysvarClock, custodianPubkey *solana.PublicKey, f features.Features) error {
-	state, err := unmarshalStakeState(stakeAcct.Data())
+	klog.Infof("StakeProgramAuthorize")
+
+	state, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -955,6 +1039,8 @@ func StakeProgramAuthorize(stakeAcct *BorrowedAccount, signers []solana.PublicKe
 }
 
 func StakeProgramAuthorizeWithSeed(txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, authorityBaseIndex uint64, authoritySeed string, authorityOwner solana.PublicKey, newAuthority solana.PublicKey, stakeAuthorize uint32, clock SysvarClock, custodian *solana.PublicKey, f features.Features) error {
+	klog.Infof("StakeProgramAuthorizeWithSeed")
+
 	var signers []solana.PublicKey
 
 	isSigner, err := instrCtx.IsInstructionAccountSigner(authorityBaseIndex)
@@ -972,7 +1058,7 @@ func StakeProgramAuthorizeWithSeed(txCtx *TransactionCtx, instrCtx *InstructionC
 		if err != nil {
 			return err
 		}
-		pk, err := solana.CreateWithSeed(basePubkey, authoritySeed, authorityOwner)
+		pk, err := ValidateAndCreateWithSeed(basePubkey, authoritySeed, authorityOwner)
 		if err != nil {
 			return err
 		}
@@ -986,11 +1072,14 @@ var DefaultWarmupCooldownRate float64 = 0.25
 var NewWarmupCooldownRate float64 = 0.09
 
 func warmupCooldownRate(currentEpoch uint64, newRateActivationEpoch *uint64) float64 {
+	var n uint64
 	if newRateActivationEpoch == nil {
-		e := uint64(math.MaxUint64)
-		newRateActivationEpoch = &e
+		n = uint64(math.MaxUint64)
+	} else {
+		n = *newRateActivationEpoch
 	}
-	if currentEpoch < *newRateActivationEpoch {
+
+	if currentEpoch < n {
 		return DefaultWarmupCooldownRate
 	} else {
 		return NewWarmupCooldownRate
@@ -998,6 +1087,8 @@ func warmupCooldownRate(currentEpoch uint64, newRateActivationEpoch *uint64) flo
 }
 
 func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, voteAcctIdx uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, signers []solana.PublicKey, f features.Features) error {
+	klog.Infof("StakeProgramDelegate")
+
 	voteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, voteAcctIdx)
 	if err != nil {
 		return err
@@ -1018,7 +1109,7 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 	}
 	defer stakeAcct.Drop()
 
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1040,9 +1131,10 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 			}
 
 			credits := versionedVoteState.ConvertToCurrent().Credits()
-			stake := Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch},
+			stake := Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch, DeactivationEpoch: math.MaxUint64, WarmupCooldownRate: 0.25},
 				CreditsObserved: credits}
 
+			stakeState.Status = StakeStateV2StatusStake
 			stakeState.Stake = StakeStateV2Stake{Meta: stakeState.Initialized.Meta, Stake: stake}
 			err = setStakeAccountState(stakeAcct, stakeState, f)
 			if err != nil {
@@ -1062,6 +1154,7 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 			}
 
 			if voteUnmarshalErr != nil {
+				klog.Infof("failed to unmarshal vote state")
 				return voteUnmarshalErr
 			}
 
@@ -1142,6 +1235,8 @@ func validateSplitAmount(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx 
 }
 
 func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, lamports uint64, splitIdx uint64, signers []solana.PublicKey) error {
+	klog.Infof("StakeProgramSplit")
+
 	split, err := instrCtx.BorrowInstructionAccount(txCtx, splitIdx)
 	if err != nil {
 		return err
@@ -1156,7 +1251,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 		return InstrErrInvalidAccountData
 	}
 
-	splitStakeState, err := unmarshalStakeState(split.Data())
+	splitStakeState, err := UnmarshalStakeState(split.Data())
 	if err != nil {
 		return err
 	}
@@ -1178,7 +1273,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 		return InstrErrInsufficientFunds
 	}
 
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1187,6 +1282,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	switch stakeState.Status {
 	case StakeStateV2StatusStake:
 		{
+			klog.Infof("StakeStateV2StatusStake")
 			err = stakeState.Stake.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
 			if err != nil {
 				return err
@@ -1197,7 +1293,11 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 			var isActive bool
 			if execCtx.GlobalCtx.Features.IsActive(features.RequireRentExemptSplitDestination) {
 				clock := ReadClockSysvar(&execCtx.Accounts)
-				stakeHistory := ReadStakeHistorySysvar(&execCtx.Accounts)
+				stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
+				if err != nil {
+					return err
+				}
+
 				stakeHistoryEntry := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
 				if stakeHistoryEntry.Effective > 0 {
 					isActive = true
@@ -1264,6 +1364,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 
 	case StakeStateV2StatusInitialized:
 		{
+			klog.Infof("StakeStateV2StatusInitialized")
 			err = stakeState.Initialized.Meta.Authorized.Check(signers, StakeAuthorizeStaker)
 			if err != nil {
 				return err
@@ -1293,6 +1394,7 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 
 	case StakeStateV2StatusUninitialized:
 		{
+			klog.Infof("StakeStateV2StatusUninitialized")
 			idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(stakeAcctIdx)
 			if err != nil {
 				return err
@@ -1352,6 +1454,8 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 }
 
 func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, srcAcctIdx uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, signers []solana.PublicKey) error {
+	klog.Infof("StakeProgramMerge")
+
 	srcAcct, err := instrCtx.BorrowInstructionAccount(txCtx, srcAcctIdx)
 	if err != nil {
 		return err
@@ -1382,7 +1486,7 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 	}
 	defer stakeAcct.Drop()
 
-	stakeAcctState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeAcctState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1394,10 +1498,11 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 
 	err = stakeAcctMergeKind.Meta().Authorized.Check(signers, StakeAuthorizeStaker)
 	if err != nil {
+		klog.Infof("staker did not sign")
 		return err
 	}
 
-	sourceAcctState, err := unmarshalStakeState(srcAcct.Data())
+	sourceAcctState, err := UnmarshalStakeState(srcAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1412,9 +1517,11 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 		return err
 	}
 
-	err = setStakeAccountState(stakeAcct, mergedState, execCtx.GlobalCtx.Features)
-	if err != nil {
-		return err
+	if mergedState != nil {
+		err = setStakeAccountState(stakeAcct, mergedState, execCtx.GlobalCtx.Features)
+		if err != nil {
+			return err
+		}
 	}
 
 	uninitializedState := &StakeStateV2{Status: StakeStateV2StatusUninitialized}
@@ -1438,6 +1545,8 @@ func StakeProgramMerge(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 }
 
 func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcctIdx uint64, lamports uint64, toIndex uint64, clock SysvarClock, stakeHistory SysvarStakeHistory, withdrawAuthorityIdx uint64, custodianIdx *uint64, newRateActivationEpoch *uint64, f features.Features) error {
+	klog.Infof("StakeProgramWithdraw")
+
 	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(withdrawAuthorityIdx)
 	if err != nil {
 		return err
@@ -1464,7 +1573,7 @@ func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stake
 	}
 	defer stakeAcct.Drop()
 
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1586,7 +1695,9 @@ func StakeProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, stake
 }
 
 func StakeProgramDeactivate(execCtx *ExecutionCtx, stakeAcct *BorrowedAccount, clock SysvarClock, signers []solana.PublicKey) error {
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	klog.Infof("StakeProgramDeactivate")
+
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1610,7 +1721,9 @@ func StakeProgramDeactivate(execCtx *ExecutionCtx, stakeAcct *BorrowedAccount, c
 }
 
 func StakeProgramSetLockup(stakeAcct *BorrowedAccount, lockup StakeInstrSetLockup, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	klog.Infof("StakeProgramSetLockup")
+
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1685,6 +1798,8 @@ func eligibleForDeactivateDelinquent(epochCredits []EpochCredits, currentEpoch u
 }
 
 func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, delinquentVoteAcctIdx uint64, referenceVoteAcctIdx uint64, currentEpoch uint64) error {
+	klog.Infof("StakeProgramDeactivateDelinquent")
+
 	delinquentVoteAcctIdxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(delinquentVoteAcctIdx)
 	if err != nil {
 		return err
@@ -1731,7 +1846,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 		return StakeErrInsufficientReferenceVotes
 	}
 
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1742,6 +1857,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 		}
 
 		if eligibleForDeactivateDelinquent(delinquentVoteState.EpochCredits, currentEpoch) {
+			klog.Infof("eligible for DeactivateDelinquent")
 			err = deactivateStake(execCtx, &stakeState.Stake.Stake, &stakeState.Stake.StakeFlags, currentEpoch)
 			if err != nil {
 				return err
@@ -1758,6 +1874,8 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 }
 
 func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, uninitializedStakeAcctIdx uint64, voteAcctIdx uint64, signers []solana.PublicKey) error {
+	klog.Infof("StakeProgramRedelegate")
+
 	clock := ReadClockSysvar(&execCtx.Accounts)
 
 	uninitializedStakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, uninitializedStakeAcctIdx)
@@ -1774,7 +1892,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		return InstrErrInvalidAccountData
 	}
 
-	uninitStakeState, err := unmarshalStakeState(uninitializedStakeAcct.Data())
+	uninitStakeState, err := UnmarshalStakeState(uninitializedStakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1799,7 +1917,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		return err
 	}
 
-	stakeState, err := unmarshalStakeState(stakeAcct.Data())
+	stakeState, err := UnmarshalStakeState(stakeAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1807,7 +1925,11 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	var stakeMeta *Meta
 	var effectiveStake uint64
 	if stakeState.Status == StakeStateV2StatusStake {
-		status := getStakeStatus(execCtx, &stakeState.Stake.Stake, clock)
+		status, err := getStakeStatus(execCtx, &stakeState.Stake.Stake, clock)
+		if err != nil {
+			return err
+		}
+
 		if status.Effective == 0 || status.Activating != 0 || status.Deactivating != 0 {
 			return StakeErrRedelegateTransientOrInactiveStake
 		}
@@ -1847,7 +1969,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	credits := versionedVoteState.ConvertToCurrent().Credits()
 	newState := StakeStateV2{Status: StakeStateV2StatusStake,
 		Stake: StakeStateV2Stake{Meta: uninitializedStakeMeta,
-			Stake: Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch},
+			Stake: Stake{Delegation: Delegation{VoterPubkey: votePubkey, StakeLamports: stakeAmount, ActivationEpoch: clock.Epoch, DeactivationEpoch: math.MaxUint64, WarmupCooldownRate: 0.25},
 				CreditsObserved: credits}, StakeFlags: StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted}}
 
 	err = setStakeAccountState(uninitializedStakeAcct, &newState, execCtx.GlobalCtx.Features)
