@@ -113,6 +113,10 @@ func ReadEpochRewardsSysvar(accts *accounts.Accounts) (SysvarEpochRewards, error
 		return SysvarEpochRewards{}, InstrErrUnsupportedSysvar
 	}
 
+	if epochRewardsSysvarAcct.Lamports == 0 {
+		return SysvarEpochRewards{}, InstrErrUnsupportedSysvar
+	}
+
 	dec := bin.NewBinDecoder(epochRewardsSysvarAcct.Data)
 
 	var epochRewards SysvarEpochRewards

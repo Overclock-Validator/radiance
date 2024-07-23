@@ -111,7 +111,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 	var foundEpochScheduleSysvar bool
 	for _, acct := range fixture.Input.Accounts {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarEpochScheduleAddr {
-			fmt.Printf("adding state for sysvar: SysvarEpochScheduleAddr\n")
+			fmt.Printf("adding state for sysvar: SysvarEpochSchedule\n")
 			epochScheduleAcct := fixtureAcctStateToAccount(acct)
 			execCtx.Accounts.SetAccount(&sealevel.SysvarEpochScheduleAddr, &epochScheduleAcct)
 			foundEpochScheduleSysvar = true
@@ -129,14 +129,29 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 	/// EpochRewards
 	for _, acct := range fixture.Input.Accounts {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarEpochRewardsAddr {
-			fmt.Printf("adding state for sysvar: SysvarEpochRewardsAddr\n")
+			fmt.Printf("adding state for sysvar: SysvarEpochRewards\n")
 			epochRewardsAcct := fixtureAcctStateToAccount(acct)
 			execCtx.Accounts.SetAccount(&sealevel.SysvarEpochRewardsAddr, &epochRewardsAcct)
 		}
 	}
 
-	execCtx.SysvarCache.PopulateRecentBlockHashesForTesting()
-	execCtx.LamportsPerSignature = 5000
+	/// RecentBlockhashes
+	for _, acct := range fixture.Input.Accounts {
+		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarRecentBlockHashesAddr {
+			fmt.Printf("adding state for sysvar: SysvarRecentBlockhashes\n")
+			recentBlockhashesAcct := fixtureAcctStateToAccount(acct)
+			execCtx.Accounts.SetAccount(&sealevel.SysvarRecentBlockHashesAddr, &recentBlockhashesAcct)
+			rbh, err := sealevel.ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			if err == nil {
+				if len(rbh) != 0 {
+					execCtx.Blockhash = rbh[len(rbh)-1].Blockhash
+					execCtx.LamportsPerSignature = rbh[len(rbh)-1].FeeCalculator.LamportsPerSignature
+				}
+			} else {
+				execCtx.LamportsPerSignature = 5000
+			}
+		}
+	}
 }
 
 func parseAndConfigureFeatures(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
@@ -239,14 +254,14 @@ func accountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixt
 
 				if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
 					fmt.Printf("**** %d: account states did not match\n", modifiedAcctIdx)
-					fmt.Printf("\na: %v\n\n", mithrilModifiedAcct.Data)
-					fmt.Printf("b: %v\n\n", fixtureModifiedAcct.Data)
+					fmt.Printf("\na (%d bytes): %v\n\n", len(mithrilModifiedAcct.Data), mithrilModifiedAcct.Data)
+					fmt.Printf("b (%d bytes): %v\n\n", len(fixtureModifiedAcct.Data), fixtureModifiedAcct.Data)
 
-					mithrilState, err := sealevel.UnmarshalStakeState(mithrilModifiedAcct.Data)
+					mithrilState, err := sealevel.UnmarshalNonceStateVersions(mithrilModifiedAcct.Data)
 					if err != nil {
 						return false
 					}
-					fixtureState, err := sealevel.UnmarshalStakeState(fixtureModifiedAcct.Data)
+					fixtureState, err := sealevel.UnmarshalNonceStateVersions(fixtureModifiedAcct.Data)
 					if err != nil {
 						return false
 					}

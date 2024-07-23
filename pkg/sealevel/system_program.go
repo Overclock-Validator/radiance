@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"unicode/utf8"
 
 	bin "github.com/gagliardetto/binary"
@@ -508,8 +507,6 @@ func (nonceStateVersions *NonceStateVersions) Marshal() ([]byte, error) {
 
 	buf.Write(nonceDataBytes)
 
-	fmt.Printf("NonceStateVersions Marshal len bytes = %d\n", buf.Len())
-
 	return buf.Bytes(), nil
 }
 
@@ -637,9 +634,7 @@ func (nonceData *NonceData) Marshal() ([]byte, error) {
 }
 
 func (nonceData *NonceData) IsSignerAuthority(signers []solana.PublicKey) bool {
-	fmt.Printf("IsSignerAuthority: nonceData.Authority = %s\n", nonceData.Authority)
 	for _, signer := range signers {
-		fmt.Printf("**** checking signer %s against %s\n", signer, nonceData.Authority)
 		if nonceData.Authority == signer {
 			return true
 		}
@@ -817,16 +812,21 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer acct.Drop()
 
-			var recentBlockHashes *SysvarRecentBlockhashes
-			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			err = CheckAcctForRecentBlockHashesSysvar(execCtx.TransactionContext, instrCtx, 1)
 			if err != nil {
 				return err
 			}
-			if len(*recentBlockHashes) == 0 {
+
+			var recentBlockHashes SysvarRecentBlockhashes
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+			if len(recentBlockHashes) == 0 {
 				return SystemProgErrNonceNoRecentBlockhashes
 			}
 
-			err = SystemProgramAdvanceNonceAccount(execCtx, acct, signers)
+			err = SystemProgramAdvanceNonceAccount(execCtx, acct, signers, &recentBlockHashes)
 		}
 
 	case SystemProgramInstrTypeWithdrawNonceAccount:
@@ -842,7 +842,13 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			_, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 2)
+			err = CheckAcctForRecentBlockHashesSysvar(execCtx.TransactionContext, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var recentBlockhashes SysvarRecentBlockhashes
+			recentBlockhashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -854,8 +860,9 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			rent := ReadRentSysvar(&execCtx.Accounts)
 
-			err = SystemProgramWithdrawNonceAccount(execCtx, instrCtx, 0, withdrawNonceAcct.Lamports, 1, &rent, signers)
+			err = SystemProgramWithdrawNonceAccount(execCtx, instrCtx, 0, withdrawNonceAcct.Lamports, 1, &rent, signers, &recentBlockhashes)
 		}
+
 	case SystemProgramInstrTypeInitializeNonceAccount:
 		{
 			var initNonceAcct SystemInstrInitializeNonceAccount
@@ -876,12 +883,17 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer acct.Drop()
 
-			var recentBlockHashes *SysvarRecentBlockhashes
-			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx, instrCtx, 1)
+			err = CheckAcctForRecentBlockHashesSysvar(execCtx.TransactionContext, instrCtx, 1)
 			if err != nil {
 				return err
 			}
-			if len(*recentBlockHashes) == 0 {
+
+			var recentBlockHashes SysvarRecentBlockhashes
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+			if len(recentBlockHashes) == 0 {
 				return SystemProgErrNonceNoRecentBlockhashes
 			}
 
@@ -892,7 +904,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			rent := ReadRentSysvar(&execCtx.Accounts)
 
-			err = SystemProgramInitializeNonceAccount(execCtx, acct, initNonceAcct.Pubkey, &rent)
+			err = SystemProgramInitializeNonceAccount(execCtx, acct, initNonceAcct.Pubkey, &rent, &recentBlockHashes)
 		}
 
 	case SystemProgramInstrTypeAuthorizeNonceAccount:
@@ -1258,7 +1270,7 @@ func durableNonce(hash [32]byte) [32]byte {
 	return durableNonce
 }
 
-func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, rent *SysvarRent) error {
+func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, nonceAuthority solana.PublicKey, rent *SysvarRent, recentBlockhashes *SysvarRecentBlockhashes) error {
 	klog.Infof("InitializeNonceAccount: acct %s", acct.Key())
 
 	if !acct.IsWritable() {
@@ -1282,13 +1294,14 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		return InstrErrInsufficientFunds
 	}
 
-	durableNonce := durableNonce(execCtx.Blockhash)
+	rbh := recentBlockhashes.GetLatest()
+	durableNonce := durableNonce(rbh.Blockhash)
 
 	newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
 		IsInitialized: true,
 		Authority:     nonceAuthority,
 		DurableNonce:  durableNonce,
-		FeeCalculator: FeeCalculator{LamportsPerSignature: execCtx.LamportsPerSignature},
+		FeeCalculator: FeeCalculator{LamportsPerSignature: rbh.FeeCalculator.LamportsPerSignature},
 	}}
 
 	newStateBytes, err := newNonceStateVersions.Marshal()
@@ -1359,7 +1372,7 @@ func SystemProgramUpgradeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 	return acct.SetState(execCtx.GlobalCtx.Features, newStateData)
 }
 
-func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *InstructionCtx, fromAcctIdx uint64, lamports uint64, toAcctIdx uint64, rent *SysvarRent, signers []solana.PublicKey) error {
+func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *InstructionCtx, fromAcctIdx uint64, lamports uint64, toAcctIdx uint64, rent *SysvarRent, signers []solana.PublicKey, recentBlockhashes *SysvarRecentBlockhashes) error {
 	klog.Infof("WithdrawNonceAccount")
 
 	from, err := instrCtx.BorrowInstructionAccount(execCtx.TransactionContext, fromAcctIdx)
@@ -1384,7 +1397,7 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	if state.IsInitialized {
 		signer = state.Authority
 		if lamports == from.Lamports() {
-			durableNonce := durableNonce(execCtx.Blockhash)
+			durableNonce := durableNonce(recentBlockhashes.GetLatest().Blockhash)
 			if durableNonce == state.DurableNonce {
 				klog.Infof("Withdraw nonce account: nonce can only advance once per slot")
 				return SystemProgErrNonceBlockhashNotExpired
@@ -1451,7 +1464,7 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	return nil
 }
 
-func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, signers []solana.PublicKey) error {
+func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccount, signers []solana.PublicKey, recentBlockhashes *SysvarRecentBlockhashes) error {
 	klog.Infof("AdvanceNonceAccount")
 
 	if !acct.IsWritable() {
@@ -1477,18 +1490,21 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrMissingRequiredSignature
 	}
 
-	nextDurableNonce := durableNonce(execCtx.Blockhash)
+	rbh := recentBlockhashes.GetLatest()
+	nextDurableNonce := durableNonce(rbh.Blockhash)
 	if state.DurableNonce == nextDurableNonce {
 		klog.Errorf("Advance nonce account: nonce can only advance once per slot")
 		return SystemProgErrNonceBlockhashNotExpired
 	}
 
-	state.FeeCalculator.LamportsPerSignature = execCtx.LamportsPerSignature
-
 	if nonceStateVersions.Type == NonceVersionCurrent {
 		state.DurableNonce = nextDurableNonce
+		state.FeeCalculator.LamportsPerSignature = rbh.FeeCalculator.LamportsPerSignature
 	} else {
 		nonceStateVersions.Upgrade()
+		upgradedState := nonceStateVersions.State()
+		upgradedState.DurableNonce = nextDurableNonce
+		upgradedState.FeeCalculator.LamportsPerSignature = rbh.FeeCalculator.LamportsPerSignature
 	}
 
 	newData, err := nonceStateVersions.Marshal()

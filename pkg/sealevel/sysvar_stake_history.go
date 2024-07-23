@@ -87,6 +87,10 @@ func ReadStakeHistorySysvar(accts *accounts.Accounts) (SysvarStakeHistory, error
 		return SysvarStakeHistory{}, InstrErrUnsupportedSysvar
 	}
 
+	if stakeHistorySysvarAcct.Lamports == 0 {
+		return SysvarStakeHistory{}, InstrErrUnsupportedSysvar
+	}
+
 	dec := bin.NewBinDecoder(stakeHistorySysvarAcct.Data)
 
 	var stakeHistory SysvarStakeHistory
