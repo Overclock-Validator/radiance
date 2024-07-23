@@ -1,11 +1,16 @@
 package conformance
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"testing"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/stretchr/testify/assert"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
 )
 
@@ -42,30 +47,7 @@ func instructionAcctsFromFixture(fixture *InstrFixture, transactionAccts sealeve
 	return instructionAccts
 }
 
-func newExecCtxAndInstrAcctsFromFixture(fixture *InstrFixture) (*sealevel.ExecutionCtx, []sealevel.InstructionAccount) {
-
-	programAcct := createProgramAcct(fixture.Input.ProgramId)
-	accts := make([]accounts.Account, 0)
-
-	for count := 0; count < len(fixture.Input.Accounts); count++ {
-		acct := fixtureAcctStateToAccount(fixture.Input.Accounts[count])
-		accts = append(accts, acct)
-	}
-
-	acctsForTx := make([]accounts.Account, 0)
-	acctsForTx = append(acctsForTx, programAcct)
-	acctsForTx = append(acctsForTx, accts...)
-
-	transactionAccts := sealevel.NewTransactionAccounts(acctsForTx)
-	instrAccts := instructionAcctsFromFixture(fixture, *transactionAccts)
-
-	txCtx := sealevel.NewTestTransactionCtx(*transactionAccts, 5, 64)
-
-	execCtx := sealevel.ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(fixture.Input.CuAvail)}
-
-	execCtx.Accounts = accounts.NewMemAccounts()
-
-	// set the sysvars up
+func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 	/// clock
 	var foundClockSysvar bool
 	for _, acct := range fixture.Input.Accounts {
@@ -155,6 +137,45 @@ func newExecCtxAndInstrAcctsFromFixture(fixture *InstrFixture) (*sealevel.Execut
 
 	execCtx.SysvarCache.PopulateRecentBlockHashesForTesting()
 	execCtx.LamportsPerSignature = 5000
+}
+
+func parseAndConfigureFeatures(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
+	f := features.NewFeaturesDefault()
+	execCtx.GlobalCtx.Features = *f
+
+	for _, ftr := range fixture.Input.EpochContext.Features.Features {
+		for _, featureGate := range features.AllFeatureGates {
+			featureIdInt := binary.LittleEndian.Uint64(featureGate.Address[:8])
+			if featureIdInt == ftr {
+				execCtx.GlobalCtx.Features.EnableFeature(featureGate, 0)
+			}
+		}
+	}
+}
+
+func newExecCtxAndInstrAcctsFromFixture(fixture *InstrFixture) (*sealevel.ExecutionCtx, []sealevel.InstructionAccount) {
+
+	programAcct := createProgramAcct(fixture.Input.ProgramId)
+	accts := make([]accounts.Account, 0)
+
+	for count := 0; count < len(fixture.Input.Accounts); count++ {
+		acct := fixtureAcctStateToAccount(fixture.Input.Accounts[count])
+		accts = append(accts, acct)
+	}
+
+	acctsForTx := make([]accounts.Account, 0)
+	acctsForTx = append(acctsForTx, programAcct)
+	acctsForTx = append(acctsForTx, accts...)
+
+	transactionAccts := sealevel.NewTransactionAccounts(acctsForTx)
+	instrAccts := instructionAcctsFromFixture(fixture, *transactionAccts)
+
+	txCtx := sealevel.NewTestTransactionCtx(*transactionAccts, 5, 64)
+
+	execCtx := sealevel.ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(fixture.Input.CuAvail)}
+	execCtx.Accounts = accounts.NewMemAccounts()
+	configureSysvars(&execCtx, fixture)
+	parseAndConfigureFeatures(&execCtx, fixture)
 
 	return &execCtx, instrAccts
 }
@@ -183,5 +204,103 @@ func returnValueIsExpectedValue(fixture *InstrFixture, err error) bool {
 		} else {
 			return true
 		}
+	}
+}
+
+func accountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {
+	txCtx := execCtx.TransactionContext
+	acctsModified := make([]accounts.Account, 0)
+
+	for idx, touched := range txCtx.Accounts.Touched {
+		if touched {
+			touchedAcct, err := txCtx.Accounts.GetAccount(uint64(idx))
+			assert.NoError(t, err)
+			acctsModified = append(acctsModified, *touchedAcct)
+		}
+	}
+
+	for _, mithrilModifiedAcct := range acctsModified {
+		var modifiedAcctFoundInTestcase bool
+		for modifiedAcctIdx, fixtureModifiedAcct := range fixture.Output.ModifiedAccounts {
+			if solana.PublicKeyFromBytes(fixtureModifiedAcct.Address) == mithrilModifiedAcct.Key {
+				modifiedAcctFoundInTestcase = true
+				if fixtureModifiedAcct.Lamports != mithrilModifiedAcct.Lamports {
+					return false
+				}
+				if fixtureModifiedAcct.Executable != mithrilModifiedAcct.Executable {
+					return false
+				}
+				if fixtureModifiedAcct.RentEpoch != mithrilModifiedAcct.RentEpoch {
+					return false
+				}
+				if solana.PublicKeyFromBytes(fixtureModifiedAcct.Owner[:]) != solana.PublicKeyFromBytes(mithrilModifiedAcct.Owner[:]) {
+					return false
+				}
+
+				if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
+					fmt.Printf("**** %d: account states did not match\n", modifiedAcctIdx)
+					fmt.Printf("\na: %v\n\n", mithrilModifiedAcct.Data)
+					fmt.Printf("b: %v\n\n", fixtureModifiedAcct.Data)
+
+					mithrilState, err := sealevel.UnmarshalStakeState(mithrilModifiedAcct.Data)
+					if err != nil {
+						return false
+					}
+					fixtureState, err := sealevel.UnmarshalStakeState(fixtureModifiedAcct.Data)
+					if err != nil {
+						return false
+					}
+
+					fmt.Printf("\nmithril state: %+v\n\n", mithrilState)
+					fmt.Printf("fixture state: %+v\n\n", fixtureState)
+
+					return false
+				}
+			}
+		}
+		if !modifiedAcctFoundInTestcase {
+			postBytes := mithrilModifiedAcct.Data
+			var preBytes []byte
+
+			foundAcct := false
+			for _, acct := range fixture.Input.Accounts {
+				if mithrilModifiedAcct.Key == solana.PublicKeyFromBytes(acct.Address) {
+					preBytes = acct.Data
+					foundAcct = true
+					break
+				}
+			}
+			if !foundAcct {
+				t.Fatalf("pre-account not found. should never happen.")
+			}
+
+			if !bytes.Equal(postBytes, preBytes) {
+				fmt.Printf("len(pre) %d vs len(post) %d\n", len(preBytes), len(postBytes))
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func instrCodeFromFixtureInstrData(fixture *InstrFixture) int32 {
+	var instrCode int32 = -1
+	if len(fixture.Input.Data) >= 4 {
+		instrCode = int32(binary.LittleEndian.Uint32(fixture.Input.Data[0:4]))
+	}
+	return instrCode
+}
+
+func printFixtureInfo(fixture *InstrFixture) {
+	instrCode := instrCodeFromFixtureInstrData(fixture)
+	fmt.Printf("instruction code: %d\n", instrCode)
+
+	for idx, acct := range fixture.Input.Accounts {
+		fmt.Printf("txAcct %d: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(acct.Address), acct.Lamports)
+	}
+
+	for idx, acct := range fixture.Input.InstrAccounts {
+		fmt.Printf("instrAcct %d: %s, isSigner: %t, isWritable: %t, Executable: %t, Lamports: %d\n", idx, solana.PublicKeyFromBytes(fixture.Input.Accounts[acct.Index].Address), acct.IsSigner, acct.IsWritable, fixture.Input.Accounts[acct.Index].Executable, fixture.Input.Accounts[acct.Index].Lamports)
 	}
 }
