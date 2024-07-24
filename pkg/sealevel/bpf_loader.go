@@ -146,7 +146,7 @@ func (extendProgram *UpgradeableLoaderInstrExtendProgram) MarshalWithEncoder(enc
 }
 
 func (buffer *UpgradeableLoaderStateBuffer) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	hasPubkey, err := decoder.ReadBool()
+	hasPubkey, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (programData *UpgradeableLoaderStateProgramData) UnmarshalWithDecoder(decod
 		return err
 	}
 
-	hasPubkey, err := decoder.ReadBool()
+	hasPubkey, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}

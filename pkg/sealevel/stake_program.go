@@ -144,7 +144,7 @@ func (withdraw *StakeInstrWithdraw) UnmarshalWithDecoder(decoder *bin.Decoder) e
 }
 
 func (lockup *StakeInstrSetLockup) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	timeStampExists, err := decoder.ReadBool()
+	timeStampExists, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (lockup *StakeInstrSetLockup) UnmarshalWithDecoder(decoder *bin.Decoder) er
 		lockup.UnixTimestamp = &ts
 	}
 
-	epochExists, err := decoder.ReadBool()
+	epochExists, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (lockup *StakeInstrSetLockup) UnmarshalWithDecoder(decoder *bin.Decoder) er
 		lockup.Epoch = &epoch
 	}
 
-	custodianExists, err := decoder.ReadBool()
+	custodianExists, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func (authCheckedWithSeed *StakeInstrAuthorizeCheckedWithSeed) UnmarshalWithDeco
 }
 
 func (lockup *StakeInstrSetLockupChecked) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	timeStampExists, err := decoder.ReadBool()
+	timeStampExists, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func (lockup *StakeInstrSetLockupChecked) UnmarshalWithDecoder(decoder *bin.Deco
 		lockup.UnixTimestamp = &ts
 	}
 
-	epochExists, err := decoder.ReadBool()
+	epochExists, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}

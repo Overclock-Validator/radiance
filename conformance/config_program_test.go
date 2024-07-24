@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestConformance_System_Program(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
+func TestConformance_Config_Program(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/config"
 	fileInfos, err := ioutil.ReadDir(basePath)
 	assert.NoError(t, err)
 
@@ -89,9 +89,9 @@ func TestConformance_System_Program(t *testing.T) {
 	assert.Equal(t, false, hasFailedTestcases, "failing testcases found")
 }
 
-func TestConformance_System_Program_Single_Testcase(t *testing.T) {
-	basePath := "test-vectors/instr/fixtures/system"
-	fn := "0d25312f08d93023e6eccdf8f4f62155b9c7756b_3157987.fix"
+func TestConformance_Config_Program_Single_Testcase(t *testing.T) {
+	basePath := "test-vectors/instr/fixtures/config"
+	fn := "instr-1111111111111111111111111111111111111111111111111111111111111111-1301.fix"
 
 	fname := fmt.Sprintf("%s/%s", basePath, fn)
 

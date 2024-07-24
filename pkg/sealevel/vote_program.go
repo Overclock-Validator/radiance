@@ -205,7 +205,7 @@ func (vote *VoteInstrVote) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 	copy(vote.Hash[:], hash)
 
-	hasTimestamp, err := decoder.ReadBool()
+	hasTimestamp, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *b
 		updateVoteState.Lockouts.PushBack(lockout)
 	}
 
-	hasRoot, err := decoder.ReadBool()
+	hasRoot, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *b
 	}
 	copy(updateVoteState.Hash[:], hash)
 
-	hasTimestamp, err := decoder.ReadBool()
+	hasTimestamp, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -470,7 +470,7 @@ func (cuvs *CompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) e
 	}
 	copy(cuvs.Hash[:], hash)
 
-	hasTimestamp, err := decoder.ReadBool()
+	hasTimestamp, err := ReadBool(decoder)
 	if hasTimestamp {
 		timestamp, err := decoder.ReadUint64(bin.LE)
 		if err != nil {

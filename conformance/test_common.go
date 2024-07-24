@@ -162,6 +162,7 @@ func parseAndConfigureFeatures(execCtx *sealevel.ExecutionCtx, fixture *InstrFix
 		for _, featureGate := range features.AllFeatureGates {
 			featureIdInt := binary.LittleEndian.Uint64(featureGate.Address[:8])
 			if featureIdInt == ftr {
+				fmt.Printf("enabling feature %s\n", featureGate.Name)
 				execCtx.GlobalCtx.Features.EnableFeature(featureGate, 0)
 			}
 		}
@@ -312,10 +313,10 @@ func printFixtureInfo(fixture *InstrFixture) {
 	fmt.Printf("instruction code: %d\n", instrCode)
 
 	for idx, acct := range fixture.Input.Accounts {
-		fmt.Printf("txAcct %d: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(acct.Address), acct.Lamports)
+		fmt.Printf("txAcct %d: %s, Owner: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(acct.Address), solana.PublicKeyFromBytes(acct.Owner), acct.Lamports)
 	}
 
 	for idx, acct := range fixture.Input.InstrAccounts {
-		fmt.Printf("instrAcct %d: %s, isSigner: %t, isWritable: %t, Executable: %t, Lamports: %d\n", idx, solana.PublicKeyFromBytes(fixture.Input.Accounts[acct.Index].Address), acct.IsSigner, acct.IsWritable, fixture.Input.Accounts[acct.Index].Executable, fixture.Input.Accounts[acct.Index].Lamports)
+		fmt.Printf("instrAcct %d: %s, isSigner: %t, isWritable: %t, Executable: %t, Owner: %s, Lamports: %d\n", idx, solana.PublicKeyFromBytes(fixture.Input.Accounts[acct.Index].Address), acct.IsSigner, acct.IsWritable, fixture.Input.Accounts[acct.Index].Executable, solana.PublicKeyFromBytes(fixture.Input.Accounts[acct.Index].Owner), fixture.Input.Accounts[acct.Index].Lamports)
 	}
 }

@@ -20,7 +20,7 @@ func (configKey *ConfigKey) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 	copy(configKey.Pubkey[:], pubKey)
 
-	configKey.IsSigner, err = decoder.ReadBool()
+	configKey.IsSigner, err = ReadBool(decoder)
 	return err
 }
 
@@ -43,7 +43,7 @@ func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
 
 	var configKeys []ConfigKey
 
-	for i := 0; i < numKeys; i++ {
+	for i := 0; i < int(numKeys); i++ {
 		var ck ConfigKey
 		err = ck.UnmarshalWithDecoder(dec)
 		if err != nil {
@@ -53,7 +53,7 @@ func unmarshalConfigKeys(data []byte, checkMaxLen bool) ([]ConfigKey, error) {
 	}
 
 	if checkMaxLen && dec.Position() > 1232 {
-		return nil, SyscallErrTooManyBytesConsumed
+		return nil, InstrErrInvalidAccountData
 	}
 
 	return configKeys, nil
@@ -92,13 +92,13 @@ func signerOnlyConfigKeys(configKeys []ConfigKey) []ConfigKey {
 func deduplicateConfigKeySigners(configKeys []ConfigKey) []ConfigKey {
 
 	var dedupeConfigKeys []ConfigKey
-	cm := make(map[solana.PublicKey]bool)
+	cm := make(map[ConfigKey]bool)
 
 	for _, ck := range configKeys {
-		_, alreadyExists := cm[ck.Pubkey]
+		_, alreadyExists := cm[ck]
 		if !alreadyExists {
 			dedupeConfigKeys = append(dedupeConfigKeys, ck)
-			cm[ck.Pubkey] = true
+			cm[ck] = true
 		}
 	}
 	return dedupeConfigKeys
@@ -217,6 +217,11 @@ func ConfigProgramExecute(ctx *ExecutionCtx) error {
 	}
 
 	klog.Infof("writing new config account state")
-	err = configAccount.SetData(ctx.GlobalCtx.Features, instrData)
+	dst, err := configAccount.DataMutable(ctx.GlobalCtx.Features)
+	if err != nil {
+		return err
+	}
+
+	copy(dst, instrData)
 	return err
 }

@@ -3,8 +3,10 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
+	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 )
 
@@ -585,4 +587,21 @@ func (psi *ProcessedSiblingInstruction) Marshal() []byte {
 	}
 
 	return buf.Bytes()
+}
+
+func ReadBool(decoder *bin.Decoder) (bool, error) {
+	if decoder.Remaining() < 1 {
+		return false, fmt.Errorf("fewer than 1 byte remaining")
+	}
+
+	b, err := decoder.ReadByte()
+	if err != nil {
+		err = fmt.Errorf("readBool, %s", err)
+	}
+
+	if b != 0 && b != 1 {
+		return false, fmt.Errorf("malformed bool")
+	}
+
+	return b != 0, nil
 }
