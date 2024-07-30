@@ -3,7 +3,6 @@ package conformance
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -293,45 +292,6 @@ func accountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixt
 					fmt.Printf("**** %d: account states did not match\n", modifiedAcctIdx)
 					fmt.Printf("\na (%d bytes): %+v\n\n", len(mithrilModifiedAcct.Data), mithrilModifiedAcct.Data)
 					fmt.Printf("b (%d bytes): %+v\n\n", len(fixtureModifiedAcct.Data), fixtureModifiedAcct.Data)
-
-					mithrilState, err := sealevel.UnmarshalVersionedVoteState(mithrilModifiedAcct.Data)
-					if err != nil {
-						return false
-					}
-					fixtureState, err := sealevel.UnmarshalVersionedVoteState(fixtureModifiedAcct.Data)
-					if err != nil {
-						return false
-					}
-
-					var s1 []byte
-					var s2 []byte
-
-					if mithrilState.Type != fixtureState.Type {
-						fmt.Printf("************************************* votestate type mismatch...\n")
-					}
-
-					fmt.Printf("type of vote state: %d\n", mithrilState.Type)
-					if mithrilState.Type == sealevel.VoteStateVersionV0_23_5 {
-						s1, _ = json.MarshalIndent(mithrilState.V0_23_5, "", "\t")
-					} else if mithrilState.Type == sealevel.VoteStateVersionV1_14_11 {
-						s1, _ = json.MarshalIndent(mithrilState.V1_14_11, "", "\t")
-					} else {
-						s1, _ = json.MarshalIndent(mithrilState.Current, "", "\t")
-					}
-
-					if fixtureState.Type == sealevel.VoteStateVersionV0_23_5 {
-						s2, _ = json.MarshalIndent(fixtureState.V0_23_5, "", "\t")
-					} else if mithrilState.Type == sealevel.VoteStateVersionV1_14_11 {
-						s2, _ = json.MarshalIndent(fixtureState.V1_14_11, "", "\t")
-					} else {
-						s2, _ = json.MarshalIndent(fixtureState.Current, "", "\t")
-					}
-
-					fmt.Printf("\nmithril state: %s\n\n", s1)
-					fmt.Printf("fixture state: %s\n\n", s2)
-
-					//fmt.Printf("\nmithril state: %v\n\n", mithrilState)
-					//fmt.Printf("fixture state: %v\n\n", fixtureState)
 
 					return false
 				}

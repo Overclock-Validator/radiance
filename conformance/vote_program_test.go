@@ -80,7 +80,8 @@ func TestConformance_Vote_Program(t *testing.T) {
 
 		instrCode := instrCodeFromFixtureInstrData(fixture)
 
-		if instrCode == -1 || instrCode == 1769234798 || instrCode == 1613178663 || instrCode == 399877894 || instrCode == 14 {
+		// skip testcases that were not meant for the vote program
+		if instrCode < 0 || instrCode > 13 {
 			continue
 		}
 
