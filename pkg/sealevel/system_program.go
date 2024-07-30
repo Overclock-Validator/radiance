@@ -858,7 +858,12 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			rent := ReadRentSysvar(&execCtx.Accounts)
+
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = SystemProgramWithdrawNonceAccount(execCtx, instrCtx, 0, withdrawNonceAcct.Lamports, 1, &rent, signers, &recentBlockhashes)
 		}
@@ -902,7 +907,12 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			if err != nil {
 				return err
 			}
-			rent := ReadRentSysvar(&execCtx.Accounts)
+
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = SystemProgramInitializeNonceAccount(execCtx, acct, initNonceAcct.Pubkey, &rent, &recentBlockHashes)
 		}

@@ -34,7 +34,7 @@ func (sh *SysvarStakeHistory) UnmarshalWithDecoder(decoder *bin.Decoder) (err er
 
 	stakeHistory := SysvarStakeHistory{}
 
-	for count := 0; count < int(entriesLen); count++ {
+	for count := uint64(0); count < entriesLen; count++ {
 
 		stakeHistoryPair := StakeHistoryPair{}
 		stakeHistoryPair.Epoch, err = decoder.ReadUint64(bin.LE)

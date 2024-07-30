@@ -91,7 +91,7 @@ func TestConformance_System_Program(t *testing.T) {
 
 func TestConformance_System_Program_Single_Testcase(t *testing.T) {
 	basePath := "test-vectors/instr/fixtures/system"
-	fn := "0d25312f08d93023e6eccdf8f4f62155b9c7756b_3157987.fix"
+	fn := "instr-117xVUxhtEKnTkmvUY9zCJSynLiS7hA62bAmXo4kNsRyLw1vpgYhJbcm2Tkfb7ZMbVt6KUUf5WkUgfagr6ppGw-2164.fix"
 
 	fname := fmt.Sprintf("%s/%s", basePath, fn)
 

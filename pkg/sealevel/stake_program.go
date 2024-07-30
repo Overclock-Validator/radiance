@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"unicode/utf8"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -204,6 +205,9 @@ func (authWithSeed *StakeInstrAuthorizeWithSeed) UnmarshalWithDecoder(decoder *b
 	if err != nil {
 		return err
 	}
+	if !utf8.ValidString(authWithSeed.AuthoritySeed) {
+		return InstrErrInvalidInstructionData
+	}
 
 	pk, err = decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
@@ -240,6 +244,9 @@ func (authCheckedWithSeed *StakeInstrAuthorizeCheckedWithSeed) UnmarshalWithDeco
 	authCheckedWithSeed.AuthoritySeed, err = decoder.ReadRustString()
 	if err != nil {
 		return err
+	}
+	if !utf8.ValidString(authCheckedWithSeed.AuthoritySeed) {
+		return InstrErrInvalidInstructionData
 	}
 
 	pk, err := decoder.ReadBytes(solana.PublicKeyLength)
@@ -367,8 +374,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer me.Drop()
 
-			rent := ReadRentSysvar(&execCtx.Accounts)
 			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -395,8 +407,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer me.Drop()
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -439,8 +456,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -472,8 +494,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -544,8 +571,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -589,19 +621,24 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
 			if err != nil {
 				return err
 			}
 
 			var stakeHistory SysvarStakeHistory
 			stakeHistory, err = ReadStakeHistorySysvar(&execCtx.Accounts)
-			if err != nil {
-				return err
-			}
-
-			err = checkAcctForStakeHistorySysvar(txCtx, instrCtx, 3)
 			if err != nil {
 				return err
 			}
@@ -619,7 +656,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				custodianIndex = &i
 			}
 
-			err = StakeProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, clock, stakeHistory, 4, custodianIndex, newWarmupCooldownRateEpoch(execCtx), execCtx.GlobalCtx.Features)
+			var epoch *uint64
+			epoch, err = newWarmupCooldownRateEpoch(execCtx)
+			if err != nil {
+				return err
+			}
+			err = StakeProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, clock, stakeHistory, 4, custodianIndex, epoch, execCtx.GlobalCtx.Features)
 		}
 
 	case StakeProgramInstrTypeDeactivate:
@@ -635,8 +677,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer me.Drop()
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -663,7 +710,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer me.Drop()
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = StakeProgramSetLockup(me, lockup, signers, clock, execCtx.GlobalCtx.Features)
 		}
@@ -721,7 +772,8 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 
 			authorized := Authorized{Staker: stakerPubkey, Withdrawer: withdrawerPubkey}
 
-			rent := ReadRentSysvar(&execCtx.Accounts)
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
 			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
 			if err != nil {
 				return err
@@ -749,8 +801,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer me.Drop()
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -814,8 +871,13 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -880,7 +942,12 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
 			lockup := StakeInstrSetLockup{UnixTimestamp: setLockupChecked.UnixTimestamp, Epoch: setLockupChecked.Epoch, Custodian: custodianPubkey}
 
 			err = StakeProgramSetLockup(me, lockup, signers, clock, execCtx.GlobalCtx.Features)
@@ -912,7 +979,11 @@ func StakeProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = StakeProgramDeactivateDelinquent(execCtx, txCtx, instrCtx, me, 1, 2, clock.Epoch)
 		}
@@ -1100,7 +1171,7 @@ func StakeProgramDelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx
 	}
 
 	votePubkey := voteAcct.Key()
-	versionedVoteState, voteUnmarshalErr := unmarshalVersionedVoteState(voteAcct.Data())
+	versionedVoteState, voteUnmarshalErr := UnmarshalVersionedVoteState(voteAcct.Data())
 	voteAcct.Drop()
 
 	stakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, stakeAcctIdx)
@@ -1217,7 +1288,11 @@ func validateSplitAmount(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx 
 		return validatedSplitInfo{}, InstrErrInsufficientFunds
 	}
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return validatedSplitInfo{}, err
+	}
+
 	dstRentExemptReserve := rent.MinimumBalance(dstDataLen)
 
 	if execCtx.GlobalCtx.Features.IsActive(features.RequireRentExemptSplitDestination) &&
@@ -1292,13 +1367,21 @@ func StakeProgramSplit(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *I
 
 			var isActive bool
 			if execCtx.GlobalCtx.Features.IsActive(features.RequireRentExemptSplitDestination) {
-				clock := ReadClockSysvar(&execCtx.Accounts)
+				clock, err := ReadClockSysvar(&execCtx.Accounts)
+				if err != nil {
+					return err
+				}
+
 				stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
 				if err != nil {
 					return err
 				}
 
-				stakeHistoryEntry := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+				epoch, err := newWarmupCooldownRateEpoch(execCtx)
+				if err != nil {
+					return err
+				}
+				stakeHistoryEntry := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, epoch)
 				if stakeHistoryEntry.Effective > 0 {
 					isActive = true
 				}
@@ -1820,7 +1903,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 		return InstrErrIncorrectProgramId
 	}
 
-	delinquentVoteStateVersioned, err := unmarshalVersionedVoteState(delinquentVoteAcct.Data())
+	delinquentVoteStateVersioned, err := UnmarshalVersionedVoteState(delinquentVoteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1836,7 +1919,7 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 		return InstrErrIncorrectProgramId
 	}
 
-	referenceVoteStateVersioned, err := unmarshalVersionedVoteState(referenceVoteAcct.Data())
+	referenceVoteStateVersioned, err := UnmarshalVersionedVoteState(referenceVoteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1876,7 +1959,10 @@ func StakeProgramDeactivateDelinquent(execCtx *ExecutionCtx, txCtx *TransactionC
 func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrCtx *InstructionCtx, stakeAcct *BorrowedAccount, uninitializedStakeAcctIdx uint64, voteAcctIdx uint64, signers []solana.PublicKey) error {
 	klog.Infof("StakeProgramRedelegate")
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
 
 	uninitializedStakeAcct, err := instrCtx.BorrowInstructionAccount(txCtx, uninitializedStakeAcctIdx)
 	if err != nil {
@@ -1912,7 +1998,7 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 	}
 
 	votePubkey := voteAcct.Key()
-	versionedVoteState, err := unmarshalVersionedVoteState(voteAcct.Data())
+	versionedVoteState, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1956,7 +2042,10 @@ func StakeProgramRedelegate(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 		return err
 	}
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
 
 	uninitializedStakeMeta := *stakeMeta
 	uninitializedStakeMeta.RentExemptReserve = rent.MinimumBalance(uint64(len(uninitializedStakeAcct.Data())))

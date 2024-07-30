@@ -3,6 +3,7 @@ package conformance
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -52,20 +53,32 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 	var foundClockSysvar bool
 	for _, acct := range fixture.Input.Accounts {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarClockAddr {
-			fmt.Printf("adding state for sysvar: Clock\n")
 			clockAcct := fixtureAcctStateToAccount(acct)
-			execCtx.Accounts.SetAccount(&sealevel.SysvarClockAddr, &clockAcct)
-			foundClockSysvar = true
+			fmt.Printf("adding state for sysvar: Clock. len of sysvar data = %d, len of sysvar struct %d\n", len(clockAcct.Data), sealevel.SysvarClockStructLen)
+
+			if clockAcct.Lamports != 0 {
+				execCtx.Accounts.SetAccount(&sealevel.SysvarClockAddr, &clockAcct)
+			}
+
+			_, err := sealevel.ReadClockSysvar(&execCtx.Accounts)
+			if err == nil {
+				foundClockSysvar = true
+			}
 		}
 	}
 
 	if !foundClockSysvar {
+		fmt.Printf("******** setting default clock sysvar\n")
 		var clock sealevel.SysvarClock
 		clock.Slot = 10
 		clockAcct := accounts.Account{}
+		clockAcct.Lamports = 1
 		execCtx.Accounts.SetAccount(&sealevel.SysvarClockAddr, &clockAcct)
 		sealevel.WriteClockSysvar(&execCtx.Accounts, clock)
 	}
+
+	clock, _ := sealevel.ReadClockSysvar(&execCtx.Accounts)
+	fmt.Printf("clock sysvar just set: %+v\n", clock)
 
 	/// rent
 	var foundRentSysvar bool
@@ -73,8 +86,15 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarRentAddr {
 			fmt.Printf("adding state for sysvar: Rent\n")
 			rentAcct := fixtureAcctStateToAccount(acct)
+			fmt.Printf("len: %d\n", len(rentAcct.Data))
+
 			execCtx.Accounts.SetAccount(&sealevel.SysvarRentAddr, &rentAcct)
-			foundRentSysvar = true
+
+			_, err := sealevel.ReadRentSysvar(&execCtx.Accounts)
+			if err == nil {
+				foundRentSysvar = true
+			}
+			break
 		}
 	}
 
@@ -85,15 +105,19 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		rent.BurnPercent = 50
 
 		rentAcct := accounts.Account{}
+		rentAcct.Lamports = 1
 		execCtx.Accounts.SetAccount(&sealevel.SysvarRentAddr, &rentAcct)
 		sealevel.WriteRentSysvar(&execCtx.Accounts, rent)
 	}
 
+	rent, _ := sealevel.ReadRentSysvar(&execCtx.Accounts)
+	execCtx.TransactionContext.Rent = rent
+
 	/// SlotHashes
 	for _, acct := range fixture.Input.Accounts {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarSlotHashesAddr {
-			fmt.Printf("adding state for sysvar: SlotHashes\n")
 			slotHashesAcct := fixtureAcctStateToAccount(acct)
+			fmt.Printf("adding state for sysvar: SlotHashes (len = %d)\n", len(slotHashesAcct.Data))
 			execCtx.Accounts.SetAccount(&sealevel.SysvarSlotHashesAddr, &slotHashesAcct)
 		}
 	}
@@ -113,15 +137,25 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarEpochScheduleAddr {
 			fmt.Printf("adding state for sysvar: SysvarEpochSchedule\n")
 			epochScheduleAcct := fixtureAcctStateToAccount(acct)
+			if len(epochScheduleAcct.Data) < sealevel.SysvarEpochScheduleStructLen {
+				fmt.Printf("******** epoch schedule data less than SysvarEpochScheduleStructLen\n")
+				break
+			}
 			execCtx.Accounts.SetAccount(&sealevel.SysvarEpochScheduleAddr, &epochScheduleAcct)
-			foundEpochScheduleSysvar = true
+			_, err := sealevel.ReadEpochScheduleSysvar(&execCtx.Accounts)
+			if err == nil {
+				foundEpochScheduleSysvar = true
+			}
+
 		}
 	}
 
 	if !foundEpochScheduleSysvar {
+		fmt.Printf("******** adding default epoch schedule sysvar\n")
 		epochSchedule := sealevel.SysvarEpochSchedule{SlotsPerEpoch: 432000, LeaderScheduleSlotOffset: 432000, Warmup: true, FirstNormalEpoch: 14, FirstNormalSlot: 524256}
 
 		epochScheduleAcct := accounts.Account{}
+		epochScheduleAcct.Lamports = 1
 		execCtx.Accounts.SetAccount(&sealevel.SysvarEpochScheduleAddr, &epochScheduleAcct)
 		sealevel.WriteEpochScheduleSysvar(&execCtx.Accounts, epochSchedule)
 	}
@@ -131,7 +165,9 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		if solana.PublicKeyFromBytes(acct.Address) == sealevel.SysvarEpochRewardsAddr {
 			fmt.Printf("adding state for sysvar: SysvarEpochRewards\n")
 			epochRewardsAcct := fixtureAcctStateToAccount(acct)
-			execCtx.Accounts.SetAccount(&sealevel.SysvarEpochRewardsAddr, &epochRewardsAcct)
+			if len(epochRewardsAcct.Data) == sealevel.SysvarEpochRewardsStructLen {
+				execCtx.Accounts.SetAccount(&sealevel.SysvarEpochRewardsAddr, &epochRewardsAcct)
+			}
 		}
 	}
 
@@ -255,20 +291,47 @@ func accountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixt
 
 				if !bytes.Equal(fixtureModifiedAcct.Data, mithrilModifiedAcct.Data) {
 					fmt.Printf("**** %d: account states did not match\n", modifiedAcctIdx)
-					fmt.Printf("\na (%d bytes): %v\n\n", len(mithrilModifiedAcct.Data), mithrilModifiedAcct.Data)
-					fmt.Printf("b (%d bytes): %v\n\n", len(fixtureModifiedAcct.Data), fixtureModifiedAcct.Data)
+					fmt.Printf("\na (%d bytes): %+v\n\n", len(mithrilModifiedAcct.Data), mithrilModifiedAcct.Data)
+					fmt.Printf("b (%d bytes): %+v\n\n", len(fixtureModifiedAcct.Data), fixtureModifiedAcct.Data)
 
-					mithrilState, err := sealevel.UnmarshalNonceStateVersions(mithrilModifiedAcct.Data)
+					mithrilState, err := sealevel.UnmarshalVersionedVoteState(mithrilModifiedAcct.Data)
 					if err != nil {
 						return false
 					}
-					fixtureState, err := sealevel.UnmarshalNonceStateVersions(fixtureModifiedAcct.Data)
+					fixtureState, err := sealevel.UnmarshalVersionedVoteState(fixtureModifiedAcct.Data)
 					if err != nil {
 						return false
 					}
 
-					fmt.Printf("\nmithril state: %+v\n\n", mithrilState)
-					fmt.Printf("fixture state: %+v\n\n", fixtureState)
+					var s1 []byte
+					var s2 []byte
+
+					if mithrilState.Type != fixtureState.Type {
+						fmt.Printf("************************************* votestate type mismatch...\n")
+					}
+
+					fmt.Printf("type of vote state: %d\n", mithrilState.Type)
+					if mithrilState.Type == sealevel.VoteStateVersionV0_23_5 {
+						s1, _ = json.MarshalIndent(mithrilState.V0_23_5, "", "\t")
+					} else if mithrilState.Type == sealevel.VoteStateVersionV1_14_11 {
+						s1, _ = json.MarshalIndent(mithrilState.V1_14_11, "", "\t")
+					} else {
+						s1, _ = json.MarshalIndent(mithrilState.Current, "", "\t")
+					}
+
+					if fixtureState.Type == sealevel.VoteStateVersionV0_23_5 {
+						s2, _ = json.MarshalIndent(fixtureState.V0_23_5, "", "\t")
+					} else if mithrilState.Type == sealevel.VoteStateVersionV1_14_11 {
+						s2, _ = json.MarshalIndent(fixtureState.V1_14_11, "", "\t")
+					} else {
+						s2, _ = json.MarshalIndent(fixtureState.Current, "", "\t")
+					}
+
+					fmt.Printf("\nmithril state: %s\n\n", s1)
+					fmt.Printf("fixture state: %s\n\n", s2)
+
+					//fmt.Printf("\nmithril state: %v\n\n", mithrilState)
+					//fmt.Printf("fixture state: %v\n\n", fixtureState)
 
 					return false
 				}

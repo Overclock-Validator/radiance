@@ -28,9 +28,9 @@ func (sh *SysvarSlotHashes) UnmarshalWithDecoder(decoder *bin.Decoder) (err erro
 		return fmt.Errorf("failed to read length of SlotHashes vec when decoding SysvarSlotHashes: %w", err)
 	}
 
-	slotHashes := *sh
+	slotHashes := SysvarSlotHashes{}
 
-	for count := 0; count < int(hashesLen); count++ {
+	for count := uint64(0); count < hashesLen; count++ {
 		slot, err := decoder.ReadUint64(bin.LE)
 		if err != nil {
 			return fmt.Errorf("failed to read Slot when decoding a SlotHash in SysvarSlotHashes: %w", err)
@@ -45,6 +45,8 @@ func (sh *SysvarSlotHashes) UnmarshalWithDecoder(decoder *bin.Decoder) (err erro
 
 		slotHashes = append(slotHashes, slotHash)
 	}
+
+	*sh = slotHashes
 
 	return
 }
@@ -75,18 +77,25 @@ func (sh *SysvarSlotHashes) Position(slot uint64) (uint64, error) {
 	return 0, fmt.Errorf("not found")
 }
 
-func ReadSlotHashesSysvar(accts *accounts.Accounts) SysvarSlotHashes {
+func ReadSlotHashesSysvar(accts *accounts.Accounts) (SysvarSlotHashes, error) {
 	slotHashesSysvarAcct, err := (*accts).GetAccount(&SysvarSlotHashesAddr)
 	if err != nil {
-		panic("failed to read SlotHashes sysvar account")
+		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
+	}
+
+	if slotHashesSysvarAcct.Lamports == 0 {
+		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
 	dec := bin.NewBinDecoder(slotHashesSysvarAcct.Data)
 
 	var slotHashes SysvarSlotHashes
-	slotHashes.MustUnmarshalWithDecoder(dec)
+	err = slotHashes.UnmarshalWithDecoder(dec)
+	if err != nil {
+		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
+	}
 
-	return slotHashes
+	return slotHashes, nil
 }
 
 func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes) {
@@ -124,6 +133,32 @@ func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes
 		err = fmt.Errorf("failed to write newly serialized SlotHashes sysvar to sysvar account: %w", err)
 		panic(err)
 	}
+}
+
+func (slotHashes *SysvarSlotHashes) FromInstrAcct(execCtx *ExecutionCtx, instrAcctIdx uint64) error {
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	sysvarAcct, err := instrCtx.BorrowInstructionAccount(txCtx, instrAcctIdx)
+	if err != nil {
+		return err
+	}
+
+	if sysvarAcct.Key() != SysvarSlotHashesAddr {
+		return InstrErrInvalidArgument
+	}
+
+	acct, _ := execCtx.Accounts.GetAccount(&SysvarSlotHashesAddr)
+	decoder := bin.NewBinDecoder(acct.Data)
+	err = slotHashes.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return InstrErrUnsupportedSysvar
+	}
+
+	return nil
 }
 
 func checkAcctForSlotHashesSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {

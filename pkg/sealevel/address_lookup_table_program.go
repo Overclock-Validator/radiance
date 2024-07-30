@@ -401,7 +401,10 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 
 	payerAcct.Drop()
 
-	slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+	slotHashes, err := ReadSlotHashesSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
 	_, err = slotHashes.Get(untrustedRecentSlot)
 	if err != nil {
 		return InstrErrInvalidInstructionData
@@ -432,7 +435,10 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	}
 
 	tableAcctDataLen := uint64(AddressLookupTableMetaSize)
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
 
 	minBalance := rent.MinimumBalance(tableAcctDataLen)
 	if minBalance > 1 {
@@ -621,7 +627,11 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 		return InstrErrInvalidInstructionData
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	if clock.Slot != lookupTable.Meta.LastExtendedSlot {
 		lookupTable.Meta.LastExtendedSlot = clock.Slot
 		lookupTable.Meta.LastExtendedSlotStartIndex = byte(len(lookupTable.Addresses))
@@ -639,7 +649,11 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	}
 	lookupTableAcct.Drop()
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	minBalance := rent.MinimumBalance(newTableDataLen)
 	if minBalance > 1 {
 		minBalance = 1
@@ -729,7 +743,11 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidArgument
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	lookupTable.Meta.DeactivationSlot = clock.Slot
 	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
 	lookupTableAcct.Drop()
@@ -812,8 +830,15 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrIncorrectAuthority
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
-	slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
+	slotHashes, err := ReadSlotHashesSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
 
 	status := lookupTable.Meta.Status(clock.Slot, slotHashes)
 	switch status.Status {

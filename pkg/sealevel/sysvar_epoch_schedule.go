@@ -40,7 +40,7 @@ func (ses *SysvarEpochSchedule) UnmarshalWithDecoder(decoder *bin.Decoder) (err 
 	}
 	ses.LeaderScheduleSlotOffset = leaderScheduleSlotOffset
 
-	warmup, err := decoder.ReadBool()
+	warmup, err := ReadBool(decoder)
 	if err != nil {
 		return fmt.Errorf("failed to read Warmup when decoding SysvarEpochSchedule: %w", err)
 	}
@@ -92,18 +92,18 @@ func (sr *SysvarEpochSchedule) GetEpochAndSlotIndex(slot uint64) (uint64, uint64
 	}
 }
 
-func ReadEpochScheduleSysvar(accts *accounts.Accounts) SysvarEpochSchedule {
+func ReadEpochScheduleSysvar(accts *accounts.Accounts) (SysvarEpochSchedule, error) {
 	epochScheduleSysvarAcct, err := (*accts).GetAccount(&SysvarEpochScheduleAddr)
 	if err != nil {
-		panic("failed to read epoch schedule sysvar account")
+		return SysvarEpochSchedule{}, InstrErrUnsupportedSysvar
 	}
 
 	dec := bin.NewBinDecoder(epochScheduleSysvarAcct.Data)
 
 	var epochSchedule SysvarEpochSchedule
-	epochSchedule.MustUnmarshalWithDecoder(dec)
+	err = epochSchedule.UnmarshalWithDecoder(dec)
 
-	return epochSchedule
+	return epochSchedule, err
 }
 
 func WriteEpochScheduleSysvar(accts *accounts.Accounts, epochSchedule SysvarEpochSchedule) {

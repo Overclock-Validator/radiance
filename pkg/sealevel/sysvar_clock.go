@@ -63,16 +63,24 @@ func (sc *SysvarClock) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func ReadClockSysvar(accts *accounts.Accounts) SysvarClock {
+func ReadClockSysvar(accts *accounts.Accounts) (SysvarClock, error) {
 	clockAccount, err := (*accts).GetAccount(&SysvarClockAddr)
 	if err != nil {
-		panic("failed to read clock sysvar account")
+		return SysvarClock{}, InstrErrUnsupportedSysvar
+	}
+
+	if clockAccount.Lamports == 0 {
+		return SysvarClock{}, InstrErrUnsupportedSysvar
 	}
 
 	dec := bin.NewBinDecoder(clockAccount.Data)
 	var clock SysvarClock
-	clock.MustUnmarshalWithDecoder(dec)
-	return clock
+	err = clock.UnmarshalWithDecoder(dec)
+	if err != nil {
+		return SysvarClock{}, InstrErrUnsupportedSysvar
+	}
+
+	return clock, nil
 }
 
 func WriteClockSysvar(accts *accounts.Accounts, clock SysvarClock) {

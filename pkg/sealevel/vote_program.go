@@ -3,6 +3,7 @@ package sealevel
 import (
 	"errors"
 	"math"
+	"unicode/utf8"
 
 	"github.com/edwingeng/deque/v2"
 	bin "github.com/gagliardetto/binary"
@@ -72,7 +73,7 @@ type VoteInstrVoteAuthorize struct {
 type VoteInstrVote struct {
 	Slots     []uint64
 	Hash      [32]byte
-	Timestamp *uint64
+	Timestamp *int64
 }
 
 type VoteInstrWithdraw struct {
@@ -97,7 +98,7 @@ type VoteInstrUpdateVoteState struct {
 	Lockouts  deque.Deque[VoteLockout]
 	Root      *uint64
 	Hash      [32]byte
-	Timestamp *uint64
+	Timestamp *int64
 }
 
 type VoteInstrUpdateVoteStateSwitch struct {
@@ -127,7 +128,7 @@ type CompactUpdateVoteState struct {
 	Root           uint64
 	LockoutOffsets []LockoutOffset
 	Hash           [32]byte
-	Timestamp      *uint64
+	Timestamp      *int64
 }
 
 type VoteInstrCompactUpdateVoteState struct {
@@ -187,10 +188,6 @@ func (vote *VoteInstrVote) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 		return err
 	}
 
-	if slotsLen > 35 {
-		return InstrErrInvalidInstructionData
-	}
-
 	for count := uint64(0); count < slotsLen; count++ {
 		slot, err := decoder.ReadUint64(bin.LE)
 		if err != nil {
@@ -211,12 +208,17 @@ func (vote *VoteInstrVote) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	}
 
 	if hasTimestamp {
-		timestamp, err := decoder.ReadUint64(bin.LE)
+		timestamp, err := decoder.ReadInt64(bin.LE)
 		if err != nil {
 			return err
 		}
 		vote.Timestamp = &timestamp
 	}
+
+	if decoder.Position() > 1232 {
+		return InstrErrInvalidInstructionData
+	}
+
 	return nil
 }
 
@@ -243,16 +245,22 @@ func (voteSwitch *VoteInstrVoteSwitch) UnmarshalWithDecoder(decoder *bin.Decoder
 		return err
 	}
 	copy(voteSwitch.Hash[:], hash)
+
+	if decoder.Position() > 1232 {
+		return InstrErrInvalidInstructionData
+	}
+
 	return nil
 }
 
 func (voteAuthChecked *VoteInstrVoteAuthorizeChecked) UnmarshalWithDecoder(decoder *bin.Decoder) error {
-	pk, err := decoder.ReadBytes(solana.PublicKeyLength)
+	/*pk, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
 		return err
 	}
-	copy(voteAuthChecked.Pubkey[:], pk)
+	copy(voteAuthChecked.Pubkey[:], pk)*/
 
+	var err error
 	voteAuthChecked.VoteAuthorize, err = decoder.ReadUint32(bin.LE)
 	if err != nil {
 		return err
@@ -270,9 +278,14 @@ func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *b
 	if err != nil {
 		return err
 	}
-	if numLockouts > 1228 {
-		return InstrErrInvalidInstructionData
+
+	_, err = safemath.CheckedMulU64(numLockouts, 12)
+	if err != nil {
+		return err
 	}
+
+	lockouts := deque.NewDeque[VoteLockout]()
+	updateVoteState.Lockouts = *lockouts
 
 	for count := uint64(0); count < numLockouts; count++ {
 		var lockout VoteLockout
@@ -308,11 +321,15 @@ func (updateVoteState *VoteInstrUpdateVoteState) UnmarshalWithDecoder(decoder *b
 	}
 
 	if hasTimestamp {
-		timestamp, err := decoder.ReadUint64(bin.LE)
+		timestamp, err := decoder.ReadInt64(bin.LE)
 		if err != nil {
 			return err
 		}
 		updateVoteState.Timestamp = &timestamp
+	}
+
+	if decoder.Position() > 1232 {
+		return InstrErrInvalidInstructionData
 	}
 
 	return nil
@@ -329,6 +346,11 @@ func (uvss *VoteInstrUpdateVoteStateSwitch) UnmarshalWithDecoder(decoder *bin.De
 		return err
 	}
 	copy(uvss.Hash[:], hash)
+
+	if decoder.Position() > 1232 {
+		return InstrErrInvalidInstructionData
+	}
+
 	return nil
 }
 
@@ -337,22 +359,20 @@ func (updateVoteState *VoteInstrUpdateVoteState) BuildFromCompactUpdateVoteState
 		updateVoteState.Root = &compactUpdateVoteState.Root
 	}
 
-	lockoutsLen := uint64(len(compactUpdateVoteState.LockoutOffsets))
-	if lockoutsLen > 1228 {
-		return InstrErrInvalidInstructionData
-	}
-
 	var slot uint64
 	if updateVoteState.Root != nil {
 		slot = *updateVoteState.Root
 	}
 
+	lockouts := deque.NewDeque[VoteLockout]()
+	updateVoteState.Lockouts = *lockouts
 	for _, lockoutOffset := range compactUpdateVoteState.LockoutOffsets {
 		nextSlot, err := safemath.CheckedAddU64(slot, lockoutOffset.Offset)
 		if err != nil {
 			return InstrErrInvalidInstructionData
 		}
 		updateVoteState.Lockouts.PushBack(VoteLockout{Slot: nextSlot, ConfirmationCount: uint32(lockoutOffset.ConfirmationCount)})
+		slot = nextSlot
 	}
 
 	updateVoteState.Hash = compactUpdateVoteState.Hash
@@ -405,6 +425,9 @@ func (authWithSeed *VoteInstrAuthorizeWithSeed) UnmarshalWithDecoder(decoder *bi
 	if err != nil {
 		return err
 	}
+	if !utf8.ValidString(authWithSeed.CurrentAuthorityDerivedKeySeed) {
+		return InstrErrInvalidInstructionData
+	}
 
 	newAuthority, err := decoder.ReadBytes(solana.PublicKeyLength)
 	if err != nil {
@@ -429,6 +452,13 @@ func (acws *VoteInstrAuthorizeCheckedWithSeed) UnmarshalWithDecoder(decoder *bin
 	copy(acws.CurrentAuthorityDerivedKeyOwner[:], currentAuthorityDerivedKeyOwner)
 
 	acws.CurrentAuthorityDerivedKeySeed, err = decoder.ReadRustString()
+	if err != nil {
+		return err
+	}
+	if !utf8.ValidString(acws.CurrentAuthorityDerivedKeySeed) {
+		return InstrErrInvalidInstructionData
+	}
+
 	return err
 }
 
@@ -471,8 +501,12 @@ func (cuvs *CompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) e
 	copy(cuvs.Hash[:], hash)
 
 	hasTimestamp, err := ReadBool(decoder)
+	if err != nil {
+		return err
+	}
+
 	if hasTimestamp {
-		timestamp, err := decoder.ReadUint64(bin.LE)
+		timestamp, err := decoder.ReadInt64(bin.LE)
 		if err != nil {
 			return err
 		}
@@ -484,7 +518,7 @@ func (cuvs *CompactUpdateVoteState) UnmarshalWithDecoder(decoder *bin.Decoder) e
 func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	err := execCtx.ComputeMeter.Consume(CUVoteProgramDefaultComputeUnits)
 	if err != nil {
-		return err
+		return InstrErrComputationalBudgetExceeded
 	}
 
 	txCtx := execCtx.TransactionContext
@@ -497,7 +531,6 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
-	defer me.Drop()
 
 	if me.Owner() != VoteProgramAddr {
 		return InstrErrInvalidAccountOwner
@@ -507,6 +540,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 	if err != nil {
 		return err
 	}
+	me.Drop()
 
 	decoder := bin.NewBinDecoder(instrCtx.Data)
 
@@ -528,8 +562,12 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-			rent := ReadRentSysvar(&execCtx.Accounts)
 			err = checkAcctForRentSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -539,8 +577,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -557,8 +600,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -595,17 +643,20 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			var idx uint64
+			idx, err = instrCtx.IndexOfInstructionAccountInTransaction(3)
 			if err != nil {
 				return err
 			}
 
-			newAuthority, err := txCtx.KeyOfAccountAtIndex(idx)
+			var newAuthority solana.PublicKey
+			newAuthority, err = txCtx.KeyOfAccountAtIndex(idx)
 			if err != nil {
 				return err
 			}
 
-			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			var isSigner bool
+			isSigner, err = instrCtx.IsInstructionAccountSigner(3)
 			if err != nil {
 				return err
 			}
@@ -624,12 +675,14 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(1)
+			var idx uint64
+			idx, err = instrCtx.IndexOfInstructionAccountInTransaction(1)
 			if err != nil {
 				return err
 			}
 
-			nodePubkey, err := txCtx.KeyOfAccountAtIndex(idx)
+			var nodePubkey solana.PublicKey
+			nodePubkey, err = txCtx.KeyOfAccountAtIndex(idx)
 			if err != nil {
 				return err
 			}
@@ -646,8 +699,17 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-			clock := ReadClockSysvar(&execCtx.Accounts)
-			epochSchedule := ReadEpochScheduleSysvar(&execCtx.Accounts)
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			var epochSchedule SysvarEpochSchedule
+			epochSchedule, err = ReadEpochScheduleSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = VoteProgramUpdateCommission(me, updateCommission.Commission, signers, epochSchedule, clock, execCtx.GlobalCtx.Features)
 		}
@@ -657,14 +719,14 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 		fallthrough
 	case VoteProgramInstrTypeVote:
 		{
-			var vote *VoteInstrVote
+			var vote VoteInstrVote
 			if isVoteSwitch {
 				var voteSwitch VoteInstrVoteSwitch
 				err = voteSwitch.UnmarshalWithDecoder(decoder)
 				if err != nil {
 					return InstrErrInvalidInstructionData
 				}
-				vote = &voteSwitch.Vote
+				vote = voteSwitch.Vote
 			} else {
 				err = vote.UnmarshalWithDecoder(decoder)
 				if err != nil {
@@ -673,17 +735,27 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-
-			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
-			checkAcctForSlotHashesSysvar(txCtx, instrCtx, 1)
-
-			clock := ReadClockSysvar(&execCtx.Accounts)
-			err := checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			err = checkAcctForSlotHashesSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+			var slotHashes SysvarSlotHashes
+			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
 
-			err = VoteProgramProcessVote(me, slotHashes, clock, vote, signers, execCtx.GlobalCtx.Features)
+			err = checkAcctForClockSysvar(txCtx, instrCtx, 2)
+			if err != nil {
+				return err
+			}
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramProcessVote(me, slotHashes, clock, &vote, signers, execCtx.GlobalCtx.Features)
 		}
 	case VoteProgramInstrTypeUpdateVoteStateSwitch:
 		isUpdateVoteStateSwitch = true
@@ -691,27 +763,36 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 	case VoteProgramInstrTypeUpdateVoteState:
 		{
-			var updateVoteState *VoteInstrUpdateVoteState
+			var updateVoteState VoteInstrUpdateVoteState
 			if isUpdateVoteStateSwitch {
 				var updateVoteStateSwitch VoteInstrUpdateVoteStateSwitch
 				err = updateVoteStateSwitch.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return err
+					return InstrErrInvalidInstructionData
 				}
-				updateVoteState = &updateVoteStateSwitch.UpdateVoteState
+				updateVoteState = updateVoteStateSwitch.UpdateVoteState
 			} else {
 				err = updateVoteState.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return err
+					return InstrErrInvalidInstructionData
 				}
 			}
 
 			// TODO: switch to using a sysvar cache
 
-			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var slotHashes SysvarSlotHashes
+			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
-			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, &updateVoteState, signers, execCtx.GlobalCtx.Features)
 		}
 
 	case VoteProgramInstrTypeCompactUpdateVoteStateSwitch:
@@ -725,22 +806,31 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				var compactUpdateVoteStateSwitch VoteInstrCompactUpdateVoteStateSwitch
 				err = compactUpdateVoteStateSwitch.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return err
+					return InstrErrInvalidInstructionData
 				}
 				updateVoteState = &compactUpdateVoteStateSwitch.UpdateVoteState
 			} else {
 				var compactUpdateVoteState VoteInstrCompactUpdateVoteState
 				err = compactUpdateVoteState.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return err
+					return InstrErrInvalidInstructionData
 				}
 				updateVoteState = &compactUpdateVoteState.UpdateVoteState
 			}
 
 			// TODO: switch to using a sysvar cache
 
-			slotHashes := ReadSlotHashesSysvar(&execCtx.Accounts)
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var slotHashes SysvarSlotHashes
+			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
 
 			err = VoteProgramProcessVoteStateUpdate(me, slotHashes, clock, updateVoteState, signers, execCtx.GlobalCtx.Features)
 		}
@@ -758,15 +848,26 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			rent := ReadRentSysvar(&execCtx.Accounts)
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			var rent SysvarRent
+			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
+			me.Drop()
 
 			err = VoteProgramWithdraw(txCtx, instrCtx, 0, withdraw.Lamports, 1, signers, rent, clock, execCtx.GlobalCtx.Features)
 		}
 
 	case VoteProgramInstrTypeAuthorizeChecked:
 		{
-			var voteAuthorize VoteInstrVoteAuthorize
+			var voteAuthorize VoteInstrVoteAuthorizeChecked
 			err = voteAuthorize.UnmarshalWithDecoder(decoder)
 			if err != nil {
 				return InstrErrInvalidInstructionData
@@ -777,17 +878,20 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 
-			idx, err := instrCtx.IndexOfInstructionAccountInTransaction(3)
+			var idx uint64
+			idx, err = instrCtx.IndexOfInstructionAccountInTransaction(3)
 			if err != nil {
 				return err
 			}
 
-			voterPubkey, err := txCtx.KeyOfAccountAtIndex(idx)
+			var voterPubkey solana.PublicKey
+			voterPubkey, err = txCtx.KeyOfAccountAtIndex(idx)
 			if err != nil {
 				return err
 			}
 
-			isSigner, err := instrCtx.IsInstructionAccountSigner(3)
+			var isSigner bool
+			isSigner, err = instrCtx.IsInstructionAccountSigner(3)
 			if err != nil {
 				return err
 			}
@@ -797,8 +901,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			// TODO: switch to using a sysvar cache
-			clock := ReadClockSysvar(&execCtx.Accounts)
 			err = checkAcctForClockSysvar(txCtx, instrCtx, 1)
+			if err != nil {
+				return err
+			}
+
+			var clock SysvarClock
+			clock, err = ReadClockSysvar(&execCtx.Accounts)
 			if err != nil {
 				return err
 			}
@@ -819,7 +928,7 @@ func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteIns
 		return InstrErrInvalidAccountData
 	}
 
-	versionedVoteState, err := unmarshalVersionedVoteState(voteAccount.Data())
+	versionedVoteState, err := UnmarshalVersionedVoteState(voteAccount.Data())
 	if err != nil {
 		return err
 	}
@@ -839,7 +948,7 @@ func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteIns
 
 func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey, voteAuthorize uint32, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
 
-	voteStateVersions, err := unmarshalVersionedVoteState(voteAcct.Data())
+	voteStateVersions, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -889,8 +998,11 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 	txCtx := execCtx.TransactionContext
 
 	// TODO: switch to using a sysvar cache
-	clock := ReadClockSysvar(&execCtx.Accounts)
 	err := checkAcctForClockSysvar(txCtx, instrCtx, 1)
+	if err != nil {
+		return err
+	}
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
 	if err != nil {
 		return err
 	}
@@ -912,7 +1024,7 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 			return err
 		}
 
-		authKey, err := solana.CreateWithSeed(basePubkey, currentAuthorityDerivedKeySeed, currentAuthorityDerivedKeyOwner)
+		authKey, err := ValidateAndCreateWithSeed(basePubkey, currentAuthorityDerivedKeySeed, currentAuthorityDerivedKeyOwner)
 		if err != nil {
 			return err
 		}
@@ -924,7 +1036,7 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 }
 
 func VoteProgramUpdateValidatorIdentity(voteAcct *BorrowedAccount, nodePubkey solana.PublicKey, signers []solana.PublicKey, f features.Features) error {
-	voteStateVersions, err := unmarshalVersionedVoteState(voteAcct.Data())
+	voteStateVersions, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -948,26 +1060,26 @@ func VoteProgramUpdateValidatorIdentity(voteAcct *BorrowedAccount, nodePubkey so
 }
 
 func isCommissionUpdateAllowed(slot uint64, epochSchedule SysvarEpochSchedule) bool {
-	relativeSlot := safemath.SaturatingSubU64(slot, epochSchedule.FirstNormalSlot) % epochSchedule.SlotsPerEpoch
-	return safemath.SaturatingMulU64(relativeSlot, 2) <= epochSchedule.SlotsPerEpoch
+	if epochSchedule.SlotsPerEpoch > 0 {
+		relativeSlot := safemath.SaturatingSubU64(slot, epochSchedule.FirstNormalSlot)
+		relativeSlot %= epochSchedule.SlotsPerEpoch
+		return safemath.SaturatingMulU64(relativeSlot, 2) <= epochSchedule.SlotsPerEpoch
+	} else {
+		return true
+	}
 }
 
 func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, signers []solana.PublicKey, epochSchedule SysvarEpochSchedule, clock SysvarClock, f features.Features) error {
 	var voteState *VoteState
 
-	var enforceCommissionUpdateRule bool
+	enforceCommissionUpdateRule := true
 	if f.IsActive(features.AllowCommissionDecreaseAtAnyTime) {
-		voteStateVersioned, err := unmarshalVersionedVoteState(voteAcct.Data())
-		if err == nil { // successfully deserialized
-			voteState = voteStateVersioned.ConvertToCurrent()
-			if commission > voteState.Commission {
-				enforceCommissionUpdateRule = true
-			}
-		} else { // failed to deserialize
-			enforceCommissionUpdateRule = true
+		voteStateVersioned, err := UnmarshalVersionedVoteState(voteAcct.Data())
+		if err != nil {
+			return err
 		}
-	} else {
-		enforceCommissionUpdateRule = true
+		voteState = voteStateVersioned.ConvertToCurrent()
+		enforceCommissionUpdateRule = commission > voteState.Commission
 	}
 
 	if enforceCommissionUpdateRule && f.IsActive(features.CommissionUpdatesOnlyAllowedInFirstHalfOfEpoch) {
@@ -977,7 +1089,7 @@ func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, sig
 	}
 
 	if voteState == nil {
-		voteStateVersioned, err := unmarshalVersionedVoteState(voteAcct.Data())
+		voteStateVersioned, err := UnmarshalVersionedVoteState(voteAcct.Data())
 		if err != nil {
 			return err
 		}
@@ -996,7 +1108,7 @@ func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, sig
 }
 
 func verifyAndGetVoteState(voteAcct *BorrowedAccount, clock SysvarClock, signers []solana.PublicKey) (*VoteState, error) {
-	versioned, err := unmarshalVersionedVoteState(voteAcct.Data())
+	versioned, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return nil, err
 	}
@@ -1192,9 +1304,9 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 				landedVotes = append(landedVotes, v)
 				return true
 			})
-			for i, j := 0, len(landedVotes)-1; i < j; i, j = i+1, j-1 {
+			/*for i, j := 0, len(landedVotes)-1; i < j; i, j = i+1, j-1 {
 				landedVotes[i], landedVotes[j] = landedVotes[j], landedVotes[i]
-			}
+			}*/
 
 			for _, vote := range landedVotes {
 				if vote.Lockout.Slot <= proposedRoot {
@@ -1218,12 +1330,14 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 			proposedVoteSlot = voteStateUpdate.Lockouts.Peek(int(voteStateUpdateIndex)).Slot
 		}
 
-		i, err := safemath.CheckedSubU64(voteStateUpdateIndex, 1)
-		if err != nil {
-			panic("`vote_state_update_index` is positive when checking `SlotsNotOrdered`")
-		}
-		if rootToCheck == nil && voteStateUpdateIndex > 0 && proposedVoteSlot <= voteStateUpdate.Lockouts.Peek(int(i)).Slot {
-			return VoteErrSlotsNotOrdered
+		if rootToCheck == nil && voteStateUpdateIndex > 0 {
+			i, err := safemath.CheckedSubU64(voteStateUpdateIndex, 1)
+			if err != nil {
+				panic("`vote_state_update_index` is positive when checking `SlotsNotOrdered`")
+			}
+			if proposedVoteSlot <= voteStateUpdate.Lockouts.Peek(int(i)).Slot {
+				return VoteErrSlotsNotOrdered
+			}
 		}
 
 		j, err := safemath.CheckedSubU64(slotHashesIndex, 1)
@@ -1329,7 +1443,7 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 	return nil
 }
 
-func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote], newRoot *uint64, timestamp *uint64, epoch uint64, currentSlot uint64, f features.Features) error {
+func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote], newRoot *uint64, timestamp *int64, epoch uint64, currentSlot uint64, f features.Features) error {
 	if newState.IsEmpty() {
 		panic("newState should not be empty")
 	}
@@ -1488,7 +1602,40 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 	}
 
 	voteState.RootSlot = newRoot
-	voteState.Votes = newState
+	voteState.Votes = *newState
+
+	return nil
+}
+
+func checkAndFilterProposedVoteState(voteState *VoteState, proposedLockouts *deque.Deque[VoteLockout], proposedRoot *uint64, slotHashes SysvarSlotHashes) error {
+
+	if proposedLockouts.IsEmpty() {
+		return VoteErrEmptySlots
+	}
+
+	l, ok := proposedLockouts.Back()
+	if !ok {
+		panic("must be nonempty, checked above")
+	}
+	lastProposedSlot := l.Slot
+
+	var lastVoteSlot uint64
+	lo, ok := voteState.Votes.Back()
+	if ok {
+		lastVoteSlot = lo.Lockout.Slot
+		if lastProposedSlot <= lastVoteSlot {
+			return VoteErrVoteTooOld
+		}
+	}
+
+	if len(slotHashes) == 0 {
+		return VoteErrSlotsMismatch
+	}
+
+	return nil
+}
+
+func doProcessVoteStateUpdate(voteState *VoteState, slotHashes SysvarSlotHashes, epoch uint64, slot uint64, voteStateUpdate *VoteInstrUpdateVoteState, f features.Features) error {
 
 	return nil
 }
@@ -1504,7 +1651,7 @@ func VoteProgramProcessVoteStateUpdate(voteAcct *BorrowedAccount, slotHashes Sys
 		return err
 	}
 
-	newState := new(deque.Deque[LandedVote])
+	newState := deque.NewDeque[LandedVote]()
 	voteStateUpdate.Lockouts.Range(func(i int, lockout VoteLockout) bool {
 		newState.PushBack(LandedVote{Latency: 0, Lockout: lockout})
 		return true
@@ -1521,13 +1668,15 @@ func VoteProgramProcessVoteStateUpdate(voteAcct *BorrowedAccount, slotHashes Sys
 }
 
 func VoteProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, voteAcctIdx uint64, lamports uint64, toAcctIdx uint64, signers []solana.PublicKey, rent SysvarRent, clock SysvarClock, f features.Features) error {
+	klog.Infof("VoteProgramWithdraw")
+
 	voteAcct, err := instrCtx.BorrowInstructionAccount(txCtx, voteAcctIdx)
 	if err != nil {
 		return err
 	}
 	defer voteAcct.Drop()
 
-	versionedVoteState, err := unmarshalVersionedVoteState(voteAcct.Data())
+	versionedVoteState, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return err
 	}
@@ -1557,6 +1706,8 @@ func VoteProgramWithdraw(txCtx *TransactionCtx, instrCtx *InstructionCtx, voteAc
 			return VoteErrActiveVoteAccountClose
 		} else {
 			newDefaultVoteState := new(VoteState)
+			newDefaultVoteState.PriorVoters.Index = 31
+			newDefaultVoteState.PriorVoters.IsEmpty = true
 			err = setVoteAccountState(voteAcct, newDefaultVoteState, f)
 			if err != nil {
 				return err

@@ -796,21 +796,27 @@ func setStakeAccountState(acct *BorrowedAccount, stakeState *StakeStateV2, f fea
 	return err
 }
 
-func newWarmupCooldownRateEpoch(execCtx *ExecutionCtx) *uint64 {
+func newWarmupCooldownRateEpoch(execCtx *ExecutionCtx) (*uint64, error) {
 	f := execCtx.GlobalCtx.Features
 	slot, existed := f.ActivationSlot(features.ReduceStakeWarmupCooldown)
 	if !existed {
-		return nil
+		return nil, nil
 	}
 
-	epochSchedule := ReadEpochScheduleSysvar(&execCtx.Accounts)
+	epochSchedule, err := ReadEpochScheduleSysvar(&execCtx.Accounts)
+	if err != nil {
+		return nil, err
+	}
 
 	epoch := epochSchedule.GetEpoch(slot)
-	return &epoch
+	return &epoch, nil
 }
 
 func modifyStakeForRedelegation(execCtx *ExecutionCtx, stake *Stake, stakeLamports uint64, voterPubkey solana.PublicKey, voteState *VoteState, clock SysvarClock, stakeHistory SysvarStakeHistory) error {
-	newRateActivationEpoch := newWarmupCooldownRateEpoch(execCtx)
+	newRateActivationEpoch, err := newWarmupCooldownRateEpoch(execCtx)
+	if err != nil {
+		return err
+	}
 
 	if stake.Stake(clock.Epoch, stakeHistory, newRateActivationEpoch) != 0 {
 		var stakeLamportsOk bool
@@ -840,7 +846,12 @@ func getMergeKindIfMergeable(execCtx *ExecutionCtx, stakeState *StakeStateV2, st
 	switch stakeState.Status {
 	case StakeStateV2StatusStake:
 		{
-			status := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+			epoch, err := newWarmupCooldownRateEpoch(execCtx)
+			if err != nil {
+				return nil, err
+			}
+
+			status := stakeState.Stake.Stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, epoch)
 			if status.Effective == 0 && status.Activating == 0 && status.Deactivating == 0 {
 				return &MergeKind{Status: MergeKindStatusInactive, Inactive: MergeKindInactive{Meta: stakeState.Stake.Meta, StakeLamports: stakeLamports, StakeFlags: stakeState.Stake.StakeFlags}}, nil
 			} else if status.Effective == 0 {
@@ -993,7 +1004,11 @@ func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags
 				return err
 			}
 
-			status := stake.Delegation.StakeActivatingAndDeactivating(epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx))
+			newRateActivationEpoch, err := newWarmupCooldownRateEpoch(execCtx)
+			if err != nil {
+				return err
+			}
+			status := stake.Delegation.StakeActivatingAndDeactivating(epoch, stakeHistory, newRateActivationEpoch)
 			if status.Activating != 0 {
 				return StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted
 			} else {
@@ -1014,5 +1029,10 @@ func getStakeStatus(execCtx *ExecutionCtx, stake *Stake, clock SysvarClock) (Sta
 	if err != nil {
 		return StakeHistoryEntry{}, err
 	}
-	return stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newWarmupCooldownRateEpoch(execCtx)), nil
+
+	newRateActivationEpoch, err := newWarmupCooldownRateEpoch(execCtx)
+	if err != nil {
+		return StakeHistoryEntry{}, err
+	}
+	return stake.Delegation.StakeActivatingAndDeactivating(clock.Epoch, stakeHistory, newRateActivationEpoch), nil
 }

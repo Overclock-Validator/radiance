@@ -244,6 +244,26 @@ var solanaNumericalErrCodes = map[error]int{
 	StakeErrRedelegateToSameVoteAccount:                                    14,
 	StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted: 15,
 	StakeErrEpochRewardsActive:                                             16,
+
+	/* vote program errors */
+	VoteErrVoteTooOld:                  0,
+	VoteErrSlotsMismatch:               1,
+	VoteErrSlotHashMismatch:            2,
+	VoteErrEmptySlots:                  3,
+	VoteErrTimestampTooOld:             4,
+	VoteErrTooSoonToReauthorize:        5,
+	VoteErrLockoutConflict:             6,
+	VoteErrNewVoteStateLockoutMismatch: 7,
+	VoteErrSlotsNotOrdered:             8,
+	VoteErrConfirmationsNotOrdered:     9,
+	VoteErrZeroConfirmations:           10,
+	VoteErrConfirmationTooLarge:        11,
+	VoteErrRootRollback:                12,
+	VoteErrTooManyVotes:                15,
+	VoteErrVotesTooOldAllFiltered:      16,
+	VoteErrRootOnDifferentFork:         17,
+	VoteErrActiveVoteAccountClose:      18,
+	VoteErrCommissionUpdateTooLate:     19,
 }
 
 var customErrs = map[error]bool{
@@ -271,6 +291,24 @@ var customErrs = map[error]bool{
 	StakeErrMinimumDelinquentEpochsForDeactivationNotMet:                   true,
 	StakeErrRedelegatedStakeMustFullyActivateBeforeDeactivationIsPermitted: true,
 	StakeErrEpochRewardsActive:                                             true,
+	VoteErrVoteTooOld:                                                      true,
+	VoteErrSlotsMismatch:                                                   true,
+	VoteErrSlotHashMismatch:                                                true,
+	VoteErrEmptySlots:                                                      true,
+	VoteErrTimestampTooOld:                                                 true,
+	VoteErrTooSoonToReauthorize:                                            true,
+	VoteErrLockoutConflict:                                                 true,
+	VoteErrNewVoteStateLockoutMismatch:                                     true,
+	VoteErrSlotsNotOrdered:                                                 true,
+	VoteErrConfirmationsNotOrdered:                                         true,
+	VoteErrZeroConfirmations:                                               true,
+	VoteErrConfirmationTooLarge:                                            true,
+	VoteErrTooManyVotes:                                                    true,
+	VoteErrCommissionUpdateTooLate:                                         true,
+	VoteErrRootOnDifferentFork:                                             true,
+	VoteErrVotesTooOldAllFiltered:                                          true,
+	VoteErrActiveVoteAccountClose:                                          true,
+	VoteErrRootRollback:                                                    true,
 }
 
 func IsCustomErr(err error) bool {

@@ -91,7 +91,7 @@ func TestConformance_Stake_Program(t *testing.T) {
 
 func TestConformance_Stake_Program_Single_Testcase(t *testing.T) {
 	basePath := "test-vectors/instr/fixtures/stake"
-	fn := "instr-1111111111111111111111111111111111111111111111111111111111111111-0292.fix"
+	fn := "instr-11Eu3urzXSSgMfk5EvFK3siuxfYhoWa18QBPrXcqiD98xi69QNneMj7qHudtFE8qTUpyCzNsZzMeL95A7e3w5i-0107.fix"
 
 	fname := fmt.Sprintf("%s/%s", basePath, fn)
 

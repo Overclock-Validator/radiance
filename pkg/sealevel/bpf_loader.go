@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -984,13 +983,21 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	err = checkAcctForRentSysvar(txCtx, instrCtx, 4)
 	if err != nil {
 		return err
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	err = checkAcctForClockSysvar(txCtx, instrCtx, 5)
 	if err != nil {
 		return err
@@ -1252,13 +1259,21 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return err
 	}
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	err = checkAcctForRentSysvar(txCtx, instrCtx, 4)
 	if err != nil {
 		return err
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	err = checkAcctForClockSysvar(txCtx, instrCtx, 5)
 	if err != nil {
 		return err
@@ -1908,7 +1923,11 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 				return InstrErrIncorrectProgramId
 			}
 
-			clock := ReadClockSysvar(&execCtx.Accounts)
+			clock, err := ReadClockSysvar(&execCtx.Accounts)
+			if err != nil {
+				return err
+			}
+
 			if clock.Slot == closeAcctState.ProgramData.Slot {
 				klog.Infof("program was deployed in this block already")
 				return InstrErrInvalidArgument
@@ -2021,7 +2040,6 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 
 	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
 	if err != nil {
-		fmt.Printf("failed to unmarshal program acct")
 		return err
 	}
 
@@ -2049,7 +2067,11 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return InstrErrInvalidRealloc
 	}
 
-	clock := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	clockSlot := clock.Slot
 
 	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data())
@@ -2072,7 +2094,11 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return InstrErrInvalidAccountData
 	}
 
-	rent := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	if err != nil {
+		return err
+	}
+
 	balance := programDataAcct.Lamports()
 	minBalance := rent.MinimumBalance(newLen)
 	if minBalance > 1 {

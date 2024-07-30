@@ -2,7 +2,7 @@ package sealevel
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"math"
 
 	"github.com/edwingeng/deque/v2"
@@ -59,7 +59,7 @@ type EpochCredits struct {
 
 type BlockTimestamp struct {
 	Slot      uint64
-	Timestamp uint64
+	Timestamp int64
 }
 
 type AuthorizedVoter struct {
@@ -98,7 +98,7 @@ type VoteState1_14_11 struct {
 	NodePubkey           solana.PublicKey
 	AuthorizedWithdrawer solana.PublicKey
 	Commission           byte
-	Votes                *deque.Deque[VoteLockout]
+	Votes                deque.Deque[VoteLockout]
 	RootSlot             *uint64
 	AuthorizedVoters     AuthorizedVoters
 	PriorVoters          PriorVoters
@@ -110,7 +110,7 @@ type VoteState struct {
 	NodePubkey           solana.PublicKey
 	AuthorizedWithdrawer solana.PublicKey
 	Commission           byte
-	Votes                *deque.Deque[LandedVote]
+	Votes                deque.Deque[LandedVote]
 	RootSlot             *uint64
 	AuthorizedVoters     AuthorizedVoters
 	PriorVoters          PriorVoters
@@ -141,13 +141,12 @@ func (priorVoter *PriorVoter) UnmarshalWithDecoder(decoder *bin.Decoder, isVersi
 
 	if isVersion0_23_5 {
 		priorVoter.Slot, err = decoder.ReadUint64(bin.LE)
-
 	}
 
 	return err
 }
 
-func (priorVoter *PriorVoter) MarshalWithEncoder(encoder *bin.Encoder) error {
+func (priorVoter *PriorVoter) MarshalWithEncoder(encoder *bin.Encoder, isVersion0_23_5 bool) error {
 	err := encoder.WriteBytes(priorVoter.Pubkey[:], false)
 	if err != nil {
 		return err
@@ -163,9 +162,8 @@ func (priorVoter *PriorVoter) MarshalWithEncoder(encoder *bin.Encoder) error {
 		return err
 	}
 
-	err = encoder.WriteUint64(priorVoter.Slot, bin.LE)
-	if err != nil {
-		return err
+	if isVersion0_23_5 {
+		err = encoder.WriteUint64(priorVoter.Slot, bin.LE)
 	}
 
 	return nil
@@ -189,7 +187,7 @@ func (priorVoters *PriorVoters0_23_5) MarshalWithEncoder(encoder *bin.Encoder) e
 	var err error
 
 	for count := 0; count < 32; count++ {
-		err = priorVoters.Buf[count].MarshalWithEncoder(encoder)
+		err = priorVoters.Buf[count].MarshalWithEncoder(encoder, true)
 		if err != nil {
 			return err
 		}
@@ -217,7 +215,7 @@ func (priorVoters *PriorVoters) UnmarshalWithDecoder(decoder *bin.Decoder) error
 		return err
 	}
 
-	priorVoters.IsEmpty, err = decoder.ReadBool()
+	priorVoters.IsEmpty, err = ReadBool(decoder)
 	return err
 }
 
@@ -225,7 +223,7 @@ func (priorVoters *PriorVoters) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
 
 	for count := 0; count < 32; count++ {
-		err = priorVoters.Buf[count].MarshalWithEncoder(encoder)
+		err = priorVoters.Buf[count].MarshalWithEncoder(encoder, false)
 		if err != nil {
 			return err
 		}
@@ -246,16 +244,37 @@ func (priorVoters *PriorVoters) MarshalWithEncoder(encoder *bin.Encoder) error {
 
 func (priorVoters *PriorVoters) Last() *PriorVoter {
 	if !priorVoters.IsEmpty {
-		return &priorVoters.Buf[priorVoters.Index]
+		if priorVoters.Index >= uint64(len(priorVoters.Buf)) {
+			return nil
+		} else {
+			return &priorVoters.Buf[priorVoters.Index]
+		}
 	} else {
 		return nil
 	}
 }
 
 func (priorVoters *PriorVoters) Append(priorVoter PriorVoter) {
-	priorVoters.Index++
+	newIdx, err := safemath.CheckedAddU64(priorVoters.Index, 1)
+	if err != nil {
+		panic("overflow in PriorVoters.Append()")
+	}
+
+	newIdx %= 32
+	priorVoters.Index = newIdx
 	priorVoters.Buf[priorVoters.Index] = priorVoter
 	priorVoters.IsEmpty = false
+}
+
+func (priorVoters *PriorVoters0_23_5) Append(priorVoter PriorVoter) {
+	newIdx, err := safemath.CheckedAddU64(priorVoters.Index, 1)
+	if err != nil {
+		panic("overflow in PriorVoters.Append()")
+	}
+
+	newIdx %= 32
+	priorVoters.Index = newIdx
+	priorVoters.Buf[priorVoters.Index] = priorVoter
 }
 
 func (epochCredits *EpochCredits) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -321,7 +340,7 @@ func (blockTimestamp *BlockTimestamp) UnmarshalWithDecoder(decoder *bin.Decoder)
 		return err
 	}
 
-	blockTimestamp.Timestamp, err = decoder.ReadUint64(bin.LE)
+	blockTimestamp.Timestamp, err = decoder.ReadInt64(bin.LE)
 	return err
 }
 
@@ -333,7 +352,7 @@ func (blockTimestamp *BlockTimestamp) MarshalWithEncoder(encoder *bin.Encoder) e
 		return err
 	}
 
-	err = encoder.WriteUint64(blockTimestamp.Timestamp, bin.LE)
+	err = encoder.WriteInt64(blockTimestamp.Timestamp, bin.LE)
 	return err
 }
 
@@ -386,7 +405,7 @@ func (voteState *VoteState0_23_5) UnmarshalWithDecoder(decoder *bin.Decoder) err
 		voteState.Votes.PushBack(lockout)
 	}
 
-	hasRootSlot, err := decoder.ReadBool()
+	hasRootSlot, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -530,7 +549,8 @@ func (authVoters *AuthorizedVoters) UnmarshalWithDecoder(decoder *bin.Decoder) e
 		return err
 	}
 
-	for count := uint64(0); count < numAuthVoters; count++ {
+	count := uint64(0)
+	for ; count < numAuthVoters; count++ {
 		var authVoter AuthorizedVoter
 		err = authVoter.UnmarshalWithDecoder(decoder)
 		if err != nil {
@@ -538,6 +558,7 @@ func (authVoters *AuthorizedVoters) UnmarshalWithDecoder(decoder *bin.Decoder) e
 		}
 		authVoters.AuthorizedVoters.Set(authVoter.Epoch, authVoter.Pubkey)
 	}
+
 	return nil
 }
 
@@ -546,13 +567,33 @@ func (authVoters *AuthorizedVoters) MarshalWithEncoder(encoder *bin.Encoder) err
 	if err != nil {
 		return err
 	}
-	for iter := authVoters.AuthorizedVoters.Iter(); iter.Next(); {
-		authVoter := AuthorizedVoter{Epoch: iter.Key(), Pubkey: iter.Value()}
+
+	iter := authVoters.AuthorizedVoters.Iter()
+	hasMore := iter.First()
+
+	if !hasMore {
+		return nil
+	}
+
+	for ; hasMore; hasMore = iter.Next() {
+		key := iter.Key()
+		val := iter.Value()
+		authVoter := AuthorizedVoter{Epoch: key, Pubkey: val}
 		err = authVoter.MarshalWithEncoder(encoder)
 		if err != nil {
 			return err
 		}
 	}
+
+	/*for count := 0; count < authVoters.AuthorizedVoters.Len(); count++ {
+		key, val, _ := authVoters.AuthorizedVoters.GetAt(count)
+		authVoter := AuthorizedVoter{Epoch: key, Pubkey: val}
+		err = authVoter.MarshalWithEncoder(encoder)
+		if err != nil {
+			return err
+		}
+	}*/
+
 	return nil
 }
 
@@ -561,19 +602,28 @@ func (authVoters *AuthorizedVoters) GetOrCalculateAuthorizedVoterForEpoch(epoch 
 	if exists {
 		return res, true, nil
 	} else {
-		var prevPk solana.PublicKey
-		authVoters.AuthorizedVoters.Ascend(0, func(key uint64, value solana.PublicKey) bool {
-			if key == epoch {
-				return false
-			} else {
-				prevPk = value
-				return true
+		latestEpoch := uint64(0)
+		var prevPk *solana.PublicKey
+
+		iter := authVoters.AuthorizedVoters.Iter()
+		hasEntries := iter.First()
+		if !hasEntries {
+			return solana.PublicKey{}, false, fmt.Errorf("not found")
+		}
+
+		for ; hasEntries; hasEntries = iter.Next() {
+			key := iter.Key()
+			val := iter.Value()
+			if key < epoch && (latestEpoch == 0 || key > latestEpoch) {
+				latestEpoch = key
+				prevPk = &val
 			}
-		})
-		if prevPk.IsZero() {
-			return prevPk, false, errors.New("Tried to query for the authorized voter of an epoch earlier than the current epoch. Earlier epochs have been purged")
+		}
+
+		if prevPk == nil {
+			return solana.PublicKey{}, false, fmt.Errorf("not found")
 		} else {
-			return prevPk, false, nil
+			return *prevPk, false, nil
 		}
 	}
 }
@@ -592,17 +642,28 @@ func (authVoters *AuthorizedVoters) GetAndCacheAuthorizedVoterForEpoch(epoch uin
 
 func (authVoters *AuthorizedVoters) PurgeAuthorizedVoters(currentEpoch uint64) bool {
 	var expiredKeys []uint64
-	authVoters.AuthorizedVoters.Ascend(0, func(key uint64, value solana.PublicKey) bool {
+
+	keys, _ := authVoters.AuthorizedVoters.KeyValues()
+	for _, key := range keys {
+		if key < currentEpoch {
+			expiredKeys = append(expiredKeys, key)
+		}
+	}
+
+	/*authVoters.AuthorizedVoters.Ascend(0, func(key uint64, value solana.PublicKey) bool {
 		if key == currentEpoch {
 			return false
 		} else {
 			expiredKeys = append(expiredKeys, key)
 			return true
 		}
-	})
+	})*/
 
 	for _, key := range expiredKeys {
-		authVoters.AuthorizedVoters.Delete(key)
+		_, success := authVoters.AuthorizedVoters.Delete(key)
+		if !success {
+			panic("there was no key to remove - programming error")
+		}
 	}
 
 	if authVoters.AuthorizedVoters.Len() == 0 {
@@ -675,6 +736,8 @@ func (voteState *VoteState1_14_11) UnmarshalWithDecoder(decoder *bin.Decoder) er
 		return err
 	}
 
+	votes := deque.NewDeque[VoteLockout]()
+	voteState.Votes = *votes
 	for count := uint64(0); count < numLockouts; count++ {
 		var lockout VoteLockout
 		err = lockout.UnmarshalWithDecoder(decoder)
@@ -684,7 +747,7 @@ func (voteState *VoteState1_14_11) UnmarshalWithDecoder(decoder *bin.Decoder) er
 		voteState.Votes.PushBack(lockout)
 	}
 
-	hasRootSlot, err := decoder.ReadBool()
+	hasRootSlot, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -821,7 +884,8 @@ func (voteState *VoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 		return err
 	}
 
-	voteState.Votes = deque.NewDeque[LandedVote]()
+	votes := deque.NewDeque[LandedVote]()
+	voteState.Votes = *votes
 	for count := uint64(0); count < numLockouts; count++ {
 		var landedVote LandedVote
 		err = landedVote.UnmarshalWithDecoder(decoder)
@@ -831,7 +895,7 @@ func (voteState *VoteState) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 		voteState.Votes.PushBack(landedVote)
 	}
 
-	hasRootSlot, err := decoder.ReadBool()
+	hasRootSlot, err := ReadBool(decoder)
 	if err != nil {
 		return err
 	}
@@ -974,7 +1038,7 @@ func (voteState *VoteState) SetNewAuthorizedVoter(authorized solana.PublicKey, c
 		return err
 	}
 
-	_, exists := voteState.AuthorizedVoters.AuthorizedVoters.Get(currentEpoch)
+	_, exists := voteState.AuthorizedVoters.AuthorizedVoters.Get(targetEpoch)
 	if exists {
 		return VoteErrTooSoonToReauthorize
 	}
@@ -993,10 +1057,12 @@ func (voteState *VoteState) SetNewAuthorizedVoter(authorized solana.PublicKey, c
 		last := voteState.PriorVoters.Last()
 		if last != nil {
 			epochOfLastAuthorizedSwitch = last.EpochEnd
+		} else {
+			epochOfLastAuthorizedSwitch = 0
 		}
 
 		if targetEpoch <= latestEpoch {
-			panic("invariant targetEpoch > latestEpoch must hold")
+			return InstrErrInvalidAccountData
 		}
 
 		voteState.PriorVoters.Append(PriorVoter{Pubkey: latestAuthPubkey, EpochStart: epochOfLastAuthorizedSwitch, EpochEnd: targetEpoch})
@@ -1151,9 +1217,10 @@ func (voteState *VoteState) ProcessNextVoteSlot(nextVoteSlot uint64, epoch uint6
 	voteState.DoubleLockouts()
 }
 
-func (voteState *VoteState) ProcessTimestamp(slot uint64, timestamp uint64) error {
+func (voteState *VoteState) ProcessTimestamp(slot uint64, timestamp int64) error {
 	if (slot < voteState.LastTimestamp.Slot || timestamp < voteState.LastTimestamp.Timestamp) ||
-		(slot == voteState.LastTimestamp.Slot && BlockTimestamp{Slot: slot, Timestamp: timestamp} != voteState.LastTimestamp &&
+		(slot == voteState.LastTimestamp.Slot &&
+			(slot != voteState.LastTimestamp.Slot || timestamp != voteState.LastTimestamp.Timestamp) &&
 			voteState.LastTimestamp.Slot != 0) {
 		return VoteErrTimestampTooOld
 	}
@@ -1184,7 +1251,7 @@ func (voteStateVersions *VoteStateVersions) UnmarshalWithDecoder(decoder *bin.De
 		}
 	default:
 		{
-			klog.Infof("invalid vote state type")
+			klog.Infof("invalid vote state type: %d", voteStateVersions.Type)
 			err = InstrErrInvalidAccountData
 		}
 	}
@@ -1252,9 +1319,11 @@ func (voteStateVersions *VoteStateVersions) ConvertToCurrent() *VoteState {
 				AuthorizedVoters:     authVoters,
 				EpochCredits:         state.EpochCredits,
 				LastTimestamp:        state.LastTimestamp,
+				PriorVoters:          PriorVoters{Index: 31, IsEmpty: true},
 			}
 
-			newVoteState.Votes = deque.NewDeque[LandedVote]()
+			votes := deque.NewDeque[LandedVote]()
+			newVoteState.Votes = *votes
 
 			state.Votes.Range(func(i int, lockout VoteLockout) bool {
 				newVoteState.Votes.PushBack(LandedVote{Latency: 0, Lockout: lockout})
@@ -1277,6 +1346,9 @@ func (voteStateVersions *VoteStateVersions) ConvertToCurrent() *VoteState {
 				EpochCredits:         state.EpochCredits,
 				LastTimestamp:        state.LastTimestamp}
 
+			votes := deque.NewDeque[LandedVote]()
+			newVoteState.Votes = *votes
+
 			state.Votes.Range(func(i int, lockout VoteLockout) bool {
 				newVoteState.Votes.PushBack(LandedVote{Latency: 0, Lockout: lockout})
 				return true
@@ -1297,7 +1369,7 @@ func (voteStateVersions *VoteStateVersions) ConvertToCurrent() *VoteState {
 	}
 }
 
-func unmarshalVersionedVoteState(data []byte) (*VoteStateVersions, error) {
+func UnmarshalVersionedVoteState(data []byte) (*VoteStateVersions, error) {
 	versioned := new(VoteStateVersions)
 	decoder := bin.NewBinDecoder(data)
 
@@ -1332,6 +1404,9 @@ func newVoteState1_14_11FromCurrent(voteState *VoteState) *VoteState1_14_11 {
 	newVoteState.EpochCredits = voteState.EpochCredits
 	newVoteState.LastTimestamp = voteState.LastTimestamp
 
+	votes := deque.NewDeque[VoteLockout]()
+	newVoteState.Votes = *votes
+
 	voteState.Votes.Range(func(i int, landedVote LandedVote) bool {
 		newVoteState.Votes.PushBack(landedVote.Lockout)
 		return true
@@ -1350,18 +1425,29 @@ func newVoteStateFromVoteInit(voteInit VoteInstrVoteInit, clock SysvarClock) *Vo
 
 	voteState.AuthorizedWithdrawer = voteInit.AuthorizedWithdrawer
 	voteState.Commission = voteInit.Commission
+	voteState.PriorVoters.Index = 31
+	voteState.PriorVoters.IsEmpty = true
+
 	return voteState
 }
 
 func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features.Features) error {
-	// "Only if vote_state_add_vote_latency feature is enabled should the new version of vote state be stored"
+	var err error
 	if f.IsActive(features.VoteStateAddVoteLatency) {
-		// "If the account is not large enough to store the vote state, then attempt a realloc to make it large enough.
-		// The realloc can only proceed if the vote account has balance sufficient for rent exemption at the new size."
-		if len(acct.Data()) < VoteStateV3Size &&
-			(!acct.IsRentExemptAtDataLength(VoteStateV3Size) || acct.SetDataLength(VoteStateV3Size, f) != nil) {
-			// "Account cannot be resized to the size of a vote state as it will not be rent exempt, or failed to be
-			// resized for other reasons.  So store the V1_14_11 version."
+		vsz := VoteStateV3Size
+		resizeNeeded := len(acct.Data()) < vsz
+
+		resizeRentExempt := acct.IsRentExemptAtDataLength(uint64(vsz))
+		resizeFailed := false
+
+		if resizeNeeded && resizeRentExempt {
+			err = acct.SetDataLength(VoteStateV3Size, f)
+			if err != nil {
+				resizeFailed = true
+			}
+		}
+
+		if resizeNeeded && (!resizeRentExempt || resizeFailed) {
 			newVoteState := newVoteState1_14_11FromCurrent(voteState)
 			newVoteStateVersioned := new(VoteStateVersions)
 			newVoteStateVersioned.Type = VoteStateVersionV1_14_11
@@ -1372,20 +1458,18 @@ func setVoteAccountState(acct *BorrowedAccount, voteState *VoteState, f features
 			}
 			err = acct.SetState(f, voteStateBytes)
 			return err
-		} else {
-			// "Vote account is large enough to store the newest version of vote state"
-			newVoteStateVersioned := new(VoteStateVersions)
-			newVoteStateVersioned.Type = VoteStateVersionCurrent
-			newVoteStateVersioned.Current = *voteState
-			voteStateBytes, err := marshalVersionedVoteState(newVoteStateVersioned)
-			if err != nil {
-				return err
-			}
-			err = acct.SetState(f, voteStateBytes)
+		}
+
+		newCurrent := new(VoteStateVersions)
+		newCurrent.Type = VoteStateVersionCurrent
+		newCurrent.Current = *voteState
+		voteStateBytes, err := marshalVersionedVoteState(newCurrent)
+		if err != nil {
 			return err
 		}
+		err = acct.SetState(f, voteStateBytes)
+		return err
 	} else {
-		// "Else when the vote_state_add_vote_latency feature is not enabled, then the V1_14_11 version is stored"
 		newVoteState := newVoteState1_14_11FromCurrent(voteState)
 		newVoteStateVersioned := new(VoteStateVersions)
 		newVoteStateVersioned.Type = VoteStateVersionV1_14_11

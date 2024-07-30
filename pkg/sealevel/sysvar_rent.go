@@ -61,7 +61,7 @@ func (sr *SysvarRent) IsExempt(balance uint64, dataLen uint64) bool {
 	return balance >= sr.MinimumBalance(dataLen)
 }
 
-func ReadRentSysvar(accts *accounts.Accounts) SysvarRent {
+func ReadRentSysvar(accts *accounts.Accounts) (SysvarRent, error) {
 	rentAcct, err := (*accts).GetAccount(&SysvarRentAddr)
 	if err != nil {
 		panic("failed to read rent sysvar account")
@@ -70,9 +70,12 @@ func ReadRentSysvar(accts *accounts.Accounts) SysvarRent {
 	dec := bin.NewBinDecoder(rentAcct.Data)
 
 	var rent SysvarRent
-	rent.MustUnmarshalWithDecoder(dec)
+	err = rent.UnmarshalWithDecoder(dec)
+	if err != nil {
+		return SysvarRent{}, InstrErrUnsupportedSysvar
+	}
 
-	return rent
+	return rent, nil
 }
 
 func WriteRentSysvar(accts *accounts.Accounts, rent SysvarRent) {

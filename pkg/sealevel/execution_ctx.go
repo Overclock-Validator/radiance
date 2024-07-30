@@ -1,8 +1,6 @@
 package sealevel
 
 import (
-	"fmt"
-
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
@@ -187,7 +185,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 		builtinId = ownerId
 	}
 
-	klog.Infof("resolving native program")
+	klog.Infof("resolving native program (%s)", builtinId)
 	nativeProgramFn, err := resolveNativeProgramById(builtinId)
 	if err == IsPrecompile {
 		// TODO: handle precompile calls (ed25519, secp256k)
@@ -270,7 +268,7 @@ func (execCtx *ExecutionCtx) NativeInvoke(instruction Instruction, signers []sol
 	if err != nil {
 		return err
 	}
-	fmt.Printf("programIndices: %d\n", programIndices)
+
 	err = execCtx.ProcessInstruction(instruction.Data, instrAccts, programIndices)
 	return err
 }

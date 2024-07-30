@@ -17,12 +17,17 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
 		return
 	}
 
-	clockDst, err := vm.Translate(addr, SysvarClockStructLen, true)
+	var clockDst []byte
+	clockDst, err = vm.Translate(addr, SysvarClockStructLen, true)
 	if err != nil {
 		return
 	}
 
-	clock := ReadClockSysvar(getAccounts(vm))
+	var clock SysvarClock
+	clock, err = ReadClockSysvar(getAccounts(vm))
+	if err != nil {
+		return
+	}
 
 	binary.LittleEndian.PutUint64(clockDst[:8], clock.Slot)
 	binary.LittleEndian.PutUint64(clockDst[8:16], uint64(clock.EpochStartTimestamp))
@@ -51,7 +56,7 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err error) {
 		return
 	}
 
-	rent := ReadRentSysvar(getAccounts(vm))
+	rent, _ := ReadRentSysvar(getAccounts(vm))
 
 	binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
 	binary.LittleEndian.PutUint64(rentDst[8:16], uint64(rent.ExemptionThreshold))
@@ -78,7 +83,10 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (r0 uint64, err 
 		return
 	}
 
-	epochSchedule := ReadEpochScheduleSysvar(getAccounts(vm))
+	epochSchedule, err := ReadEpochScheduleSysvar(getAccounts(vm))
+	if err != nil {
+		return
+	}
 
 	binary.LittleEndian.PutUint64(epochScheduleDst[:8], epochSchedule.SlotsPerEpoch)
 	binary.LittleEndian.PutUint64(epochScheduleDst[8:16], uint64(epochSchedule.LeaderScheduleSlotOffset))
