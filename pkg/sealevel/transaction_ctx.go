@@ -30,6 +30,7 @@ type TransactionCtx struct {
 	AccountsResizeDelta      int64
 	Rent                     SysvarRent
 	HeapSize                 uint32
+	AllInstructions          []Instruction
 }
 
 func NewTransactionAccounts(accts []accounts.Account) *TransactionAccounts {

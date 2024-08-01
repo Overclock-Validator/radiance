@@ -31,7 +31,7 @@ const Secp256kPrecompileAddrStr = "KeccakSecp256k11111111111111111111111111111"
 
 var Secp256kPrecompileAddr = base58.MustDecodeFromString(Secp256kPrecompileAddrStr)
 
-const Ed25519PrecompileAddrStr = "KeccakSecp256k11111111111111111111111111111"
+const Ed25519PrecompileAddrStr = "Ed25519SigVerify111111111111111111111111111"
 
 var Ed25519PrecompileAddr = base58.MustDecodeFromString(Ed25519PrecompileAddrStr)
 
@@ -85,7 +85,7 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 	case Secp256kPrecompileAddr:
 		return nil, IsPrecompile
 	case Ed25519PrecompileAddr:
-		return nil, IsPrecompile
+		return Ed25519ProgramExecute, nil
 	}
 
 	return nil, InstrErrUnsupportedProgramId

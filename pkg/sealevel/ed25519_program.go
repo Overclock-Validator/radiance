@@ -2,14 +2,15 @@ package sealevel
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"encoding/binary"
 	"io"
 	"math"
 
-	"go.firedancer.io/radiance/pkg/safemath"
+	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
+	"go.firedancer.io/radiance/pkg/features"
 )
 
+const DataStart = (SignatureOffsetsSerializedSize + SignatureOffsetStarts)
 const SignatureOffsetStarts = 2
 const SignatureOffsetsSerializedSize = 14
 
@@ -65,75 +66,100 @@ func (offsets *Ed25519SignatureOffsets) UnmarshalWithDecoder(buf io.Reader) erro
 	return nil
 }
 
-func ed25519GetDataSlice(data []byte, instructionDatas [][]byte, instructionIndex, offsetStart uint16, size uint64) ([]byte, int) {
+func ed25519GetDataSlice(txCtx *TransactionCtx, index uint16, offset uint16, size uint16) ([]byte, error) {
 
-	var instruction []byte
-	if instructionIndex == math.MaxUint16 {
-		instruction = data
+	var data []byte
+	var dataSize uint64
+
+	// data from current instruction
+	if index == math.MaxUint16 {
+		instrCtx, _ := txCtx.CurrentInstructionCtx()
+		data = instrCtx.Data
+		dataSize = uint64(len(data))
 	} else {
-		signatureIndex := int(instructionIndex)
-		if signatureIndex >= len(instructionDatas) {
-			return nil, PrecompileErrCodeInvalidDataOffsets
+		if int(index) >= len(txCtx.AllInstructions) {
+			return nil, PrecompileErrDataOffset
 		}
-		instruction = instructionDatas[signatureIndex]
+		data = txCtx.AllInstructions[index].Data
+		dataSize = uint64(len(data))
 	}
 
-	start := uint64(offsetStart)
-	end := safemath.SaturatingAddU64(start, size)
-	if end > uint64(len(instruction)) {
-		return nil, PrecompileErrCodeInvalidDataOffsets
+	if uint64(offset)+uint64(size) > dataSize {
+		return nil, PrecompileErrSignature
 	}
-	return instruction[start:end], InstrErrCodeSuccess
+
+	return data[offset : offset+size], nil
 }
 
-func Ed25519ProgramExecute(data []byte, instructionDatas [][]byte) int {
+func Ed25519ProgramExecute(execCtx *ExecutionCtx) error {
+
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
+	}
+
+	data := instrCtx.Data
 	dataLen := uint64(len(data))
 
-	if dataLen < SignatureOffsetStarts {
-		return PrecompileErrCodeInvalidInstructionDataSize
+	if dataLen < DataStart {
+		if dataLen == 2 && data[0] == 0 {
+			return nil
+		}
+		return PrecompileErrInstrDataSize
 	}
 
 	numSignatures := data[0]
 
-	if numSignatures == 0 && dataLen > SignatureOffsetStarts {
-		return PrecompileErrCodeInvalidInstructionDataSize
+	if numSignatures == 0 {
+		return PrecompileErrInstrDataSize
 	}
 
 	expectedDataSize := (uint64(numSignatures) * SignatureOffsetsSerializedSize) + SignatureOffsetStarts
 	if dataLen < expectedDataSize {
-		return PrecompileErrCodeInvalidInstructionDataSize
+		return PrecompileErrInstrDataSize
 	}
 
+	off := SignatureOffsetStarts
 	for count := uint64(0); count < uint64(numSignatures); count++ {
-
-		start := (count * SignatureOffsetsSerializedSize) + SignatureOffsetStarts
-		end := start + SignatureOffsetsSerializedSize
-
 		var offsets Ed25519SignatureOffsets
-		err := offsets.UnmarshalWithDecoder(bytes.NewReader(data[start:end]))
+		err := offsets.UnmarshalWithDecoder(bytes.NewReader(data[off:]))
 		if err != nil {
-			return PrecompileErrCodeInvalidDataOffsets
+			panic("shouldn't happen")
 		}
 
-		signature, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
-		if errCode != InstrErrCodeSuccess {
-			return errCode
+		off += SignatureOffsetsSerializedSize
+
+		signature, err := ed25519GetDataSlice(txCtx, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
+		if err != nil {
+			return PrecompileErrDataOffset
 		}
 
-		pubkey, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
-		if errCode != InstrErrCodeSuccess {
-			return errCode
+		pubkey, err := ed25519GetDataSlice(txCtx, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
+		if err != nil {
+			return PrecompileErrDataOffset
 		}
 
-		msg, errCode := ed25519GetDataSlice(data, instructionDatas, offsets.MessageInstructionIndex, offsets.MessageDataOffset, uint64(offsets.MessageDataSize))
-		if errCode != InstrErrCodeSuccess {
-			return errCode
+		msg, err := ed25519GetDataSlice(txCtx, offsets.MessageInstructionIndex, offsets.MessageDataOffset, offsets.MessageDataSize)
+		if err != nil {
+			return PrecompileErrDataOffset
 		}
 
-		if !ed25519.Verify(pubkey, msg, signature) {
-			return PrecompileErrCodeInvalidSignature
+		pk := ed25519.PublicKey(pubkey)
+
+		if execCtx.GlobalCtx.Features.IsActive(features.Ed25519PrecompileVerifyStrict) {
+			verifyOptions := ed25519.VerifyOptions{AllowSmallOrderA: false, AllowSmallOrderR: false, CofactorlessVerify: true}
+			opts := ed25519.Options{Verify: &verifyOptions}
+
+			if !ed25519.VerifyWithOptions(pk, msg[:offsets.MessageDataSize], signature[:64], &opts) {
+				return PrecompileErrSignature
+			}
+		} else {
+			if !ed25519.Verify(pk, msg[:offsets.MessageDataSize], signature[:64]) {
+				return PrecompileErrSignature
+			}
 		}
 	}
 
-	return InstrErrCodeSuccess
+	return nil
 }

@@ -73,6 +73,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mostynb/zstdpool-freelist v0.0.0-20201229113212-927304c0c3b1 // indirect
+	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
@@ -85,6 +86,7 @@ require (
 	github.com/ryanavella/wide v0.0.0-20190709032049-e93517939246
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091 // indirect
+	github.com/tendermint/ed25519 v0.0.0-20171027050219-d8387025d2b9
 	github.com/tidwall/btree v1.7.0
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	github.com/zeebo/blake3 v0.2.3

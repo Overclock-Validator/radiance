@@ -222,6 +222,8 @@ func newExecCtxAndInstrAcctsFromFixture(fixture *InstrFixture) (*sealevel.Execut
 	instrAccts := instructionAcctsFromFixture(fixture, *transactionAccts)
 
 	txCtx := sealevel.NewTestTransactionCtx(*transactionAccts, 5, 64)
+	instr := sealevel.Instruction{Data: fixture.Input.Data}
+	txCtx.AllInstructions = append(txCtx.AllInstructions, instr)
 
 	execCtx := sealevel.ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(fixture.Input.CuAvail)}
 	execCtx.Accounts = accounts.NewMemAccounts()
@@ -256,6 +258,28 @@ func returnValueIsExpectedValue(fixture *InstrFixture, err error) bool {
 			return true
 		}
 	}
+}
+
+func precompileReturnValueIsExpectedValue(fixture *InstrFixture, err error) bool {
+	if err == nil && fixture.Output.Result == 0 {
+		fmt.Printf("err == nil && fixture.Output.Result == 0\n")
+		return true
+	} else if err == nil && fixture.Output.Result != 0 {
+		fmt.Printf("mithril returned success, and testcase reported %d\n", fixture.Output.Result)
+		return false
+	} else if fixture.Output.Result == 0 && err != nil {
+		return false
+	}
+
+	returnedSolanaErrCode := int32(sealevel.TranslateErrToErrCode(err) + 1)
+	matches := fixture.Output.Result == returnedSolanaErrCode
+	if !matches {
+		fmt.Printf("mithril returned %s, result %d\n", err, fixture.Output.Result-1)
+		return false
+	} else {
+		return true
+	}
+
 }
 
 func accountStateChangesMatch(t *testing.T, execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) bool {

@@ -88,7 +88,11 @@ var (
 
 // precompile errors
 var (
-	PrecompileErrInvalidInstructionDataSize = errors.New("ErrInvalidInstructionDataSize")
+	PrecompileErrPublicKey     = errors.New("PrecompileErrPublicKey")
+	PrecompileErrRecoveryId    = errors.New("PrecompileErrRecoveryId")
+	PrecompileErrSignature     = errors.New("PrecompileErrSignature")
+	PrecompileErrDataOffset    = errors.New("PrecompileErrDataOffset")
+	PrecompileErrInstrDataSize = errors.New("PrecompileErrInstrDataSize")
 )
 
 // instruction errors - Solana numerical error codes
@@ -264,6 +268,13 @@ var solanaNumericalErrCodes = map[error]int{
 	VoteErrRootOnDifferentFork:         17,
 	VoteErrActiveVoteAccountClose:      18,
 	VoteErrCommissionUpdateTooLate:     19,
+
+	/* precompile errors*/
+	PrecompileErrPublicKey:     0,
+	PrecompileErrRecoveryId:    1,
+	PrecompileErrSignature:     2,
+	PrecompileErrDataOffset:    3,
+	PrecompileErrInstrDataSize: 4,
 }
 
 var customErrs = map[error]bool{
@@ -309,6 +320,11 @@ var customErrs = map[error]bool{
 	VoteErrVotesTooOldAllFiltered:                                          true,
 	VoteErrActiveVoteAccountClose:                                          true,
 	VoteErrRootRollback:                                                    true,
+	PrecompileErrPublicKey:                                                 true,
+	PrecompileErrRecoveryId:                                                true,
+	PrecompileErrSignature:                                                 true,
+	PrecompileErrDataOffset:                                                true,
+	PrecompileErrInstrDataSize:                                             true,
 }
 
 func IsCustomErr(err error) bool {

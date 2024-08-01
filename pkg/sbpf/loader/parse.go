@@ -326,7 +326,7 @@ func (l *Loader) parseDynamicTable() error {
 		if dyn.Tag >= int64(len(l.dynamic)) {
 			continue
 		}
-		// XXX: how does Agave's rBPF ELF parser deal with this?
+
 		if dyn.Tag < 0 {
 			continue
 		}

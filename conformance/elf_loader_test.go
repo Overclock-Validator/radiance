@@ -91,7 +91,10 @@ func TestConformance_Elf_Loader(t *testing.T) {
 			fmt.Printf("******** FAILURE [1]: testcase %s loaded successfully but fixture indicated failure to load\n", fn)
 			failedTestcases = append(failedTestcases, fn)
 		} else if fixture.Output != nil && err != nil {
-			fmt.Printf("******** FAILURE [2]: fixture indicates success, but loader returned an error: %s\n", err)
+			fmt.Printf("******** FAILURE [2]: fixture indicates success, but loader returned an error: %s\n\n", err)
+			fmt.Printf("******** output: %s\n", fixture.Output)
+			outputStr := fmt.Sprintf("%s", fixture.Output)
+			fmt.Printf("%d\n", len(outputStr))
 			failedTestcases = append(failedTestcases, fn)
 		} else {
 			panic("is this even possible??")

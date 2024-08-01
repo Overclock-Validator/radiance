@@ -23,10 +23,12 @@ var RequireRentExemptSplitDestination = FeatureGate{Name: "RequireRentExemptSpli
 var DeprecateExecutableMetaUpdateInBpfLoader = FeatureGate{Name: "DeprecateExecutableMetaUpdateInBpfLoader", Address: base58.MustDecodeFromString("k6uR1J9VtKJnTukBV2Eo15BEy434MBg8bT6hHQgmU8v")}
 var RelaxAuthoritySignerCheckForLookupTableCreation = FeatureGate{Name: "RelaxAuthoritySignerCheckForLookupTableCreation", Address: base58.MustDecodeFromString("FKAcEvNgSY79RpqsPNUV5gDyumopH4cEHqUxyfm8b8Ap")}
 var DedupeConfigProgramSigners = FeatureGate{Name: "DedupeConfigProgramSigners", Address: base58.MustDecodeFromString("8kEuAshXLsgkUEdcFVLqrjCGGHVWFW99ZZpxvAzzMtBp")}
+var Ed25519PrecompileVerifyStrict = FeatureGate{Name: "Ed25519PrecompileVerifyStrict", Address: base58.MustDecodeFromString("ed9tNscbWLYBooxWA7FE2B5KHWs8A6sxfY8EzezEcoo")}
 
 var AllFeatureGates = []FeatureGate{StopTruncatingStringsInSyscalls, EnablePartitionedEpochReward, LastRestartSlotSysvar,
 	Libsecp256k1FailOnBadCount, Libsecp256k1FailOnBadCount2, EnableBpfLoaderSetAuthorityCheckedIx,
 	LoosenCpiSizeRestriction, IncreaseTxAccountLockLimit, VoteStateAddVoteLatency, AllowCommissionDecreaseAtAnyTime,
 	CommissionUpdatesOnlyAllowedInFirstHalfOfEpoch, TimelyVoteCredits, ReduceStakeWarmupCooldown,
 	StakeRaiseMinimumDelegationTo1Sol, StakeRedelegateInstruction, RequireRentExemptSplitDestination,
-	DeprecateExecutableMetaUpdateInBpfLoader, RelaxAuthoritySignerCheckForLookupTableCreation, DedupeConfigProgramSigners}
+	DeprecateExecutableMetaUpdateInBpfLoader, RelaxAuthoritySignerCheckForLookupTableCreation, DedupeConfigProgramSigners,
+	Ed25519PrecompileVerifyStrict}
