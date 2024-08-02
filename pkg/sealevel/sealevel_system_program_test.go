@@ -55,6 +55,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -64,6 +65,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -122,6 +124,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Not_Enough_Accts_Failure(t *tes
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -131,6 +134,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Not_Enough_Accts_Failure(t *tes
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -181,6 +185,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Lamports_Failure(t
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -190,6 +195,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Lamports_Failure(t
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -241,6 +247,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Signer_Failure(t *
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -250,6 +257,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Signer_Failure(t *
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -301,6 +309,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Too_Much_Space_Allocated_Failur
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -310,6 +319,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Too_Much_Space_Allocated_Failur
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -361,6 +371,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Data_Failure(t *te
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -370,6 +381,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Has_Data_Failure(t *te
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -421,6 +433,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Owned_By_System_Fa
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -430,6 +443,7 @@ func TestExecute_Tx_System_Program_CreateAccount_New_Acct_Not_Owned_By_System_Fa
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -481,6 +495,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Funding_Acct_Not_Signer(t *test
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -490,6 +505,7 @@ func TestExecute_Tx_System_Program_CreateAccount_Funding_Acct_Not_Signer(t *test
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -531,6 +547,7 @@ func TestExecute_Tx_System_Program_Assign_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -540,6 +557,7 @@ func TestExecute_Tx_System_Program_Assign_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -585,6 +603,7 @@ func TestExecute_Tx_System_Program_Assign_Not_Signer_Failure(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -594,6 +613,7 @@ func TestExecute_Tx_System_Program_Assign_Not_Signer_Failure(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -642,6 +662,7 @@ func TestExecute_Tx_System_Program_Transfer_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -651,6 +672,7 @@ func TestExecute_Tx_System_Program_Transfer_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -707,6 +729,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Not_Signer_Failure(t *testing.T
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -716,6 +739,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Not_Signer_Failure(t *testing.T
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -764,6 +788,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Has_Data_Failure(t *testing.T) 
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -773,6 +798,7 @@ func TestExecute_Tx_System_Program_Transfer_From_Has_Data_Failure(t *testing.T) 
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -821,6 +847,7 @@ func TestExecute_Tx_System_Program_Transfer_Not_Enough_Lamports_In_From_Acct(t *
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -830,6 +857,7 @@ func TestExecute_Tx_System_Program_Transfer_Not_Enough_Lamports_In_From_Acct(t *
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -879,6 +907,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -888,6 +917,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -943,6 +973,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Addr_Doesnt_Match_Derived_Addr
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -952,6 +983,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Addr_Doesnt_Match_Derived_Addr
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -1001,6 +1033,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Base_Not_Signer_Failure(t *tes
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -1010,6 +1043,7 @@ func TestExecute_Tx_System_Program_AssignWithSeed_Base_Not_Signer_Failure(t *tes
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
