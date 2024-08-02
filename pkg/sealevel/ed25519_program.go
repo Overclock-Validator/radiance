@@ -66,7 +66,7 @@ func (offsets *Ed25519SignatureOffsets) UnmarshalWithDecoder(buf io.Reader) erro
 	return nil
 }
 
-func ed25519GetDataSlice(txCtx *TransactionCtx, index uint16, offset uint16, size uint16) ([]byte, error) {
+func PrecompileGetDataSlice(txCtx *TransactionCtx, index uint16, offset uint16, size uint16) ([]byte, error) {
 
 	var data []byte
 	var dataSize uint64
@@ -130,17 +130,17 @@ func Ed25519ProgramExecute(execCtx *ExecutionCtx) error {
 
 		off += SignatureOffsetsSerializedSize
 
-		signature, err := ed25519GetDataSlice(txCtx, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
+		signature, err := PrecompileGetDataSlice(txCtx, offsets.SignatureInstructionIndex, offsets.SignatureOffset, SignatureSerializedSize)
 		if err != nil {
 			return PrecompileErrDataOffset
 		}
 
-		pubkey, err := ed25519GetDataSlice(txCtx, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
+		pubkey, err := PrecompileGetDataSlice(txCtx, offsets.PublicKeyInstructionIndex, offsets.PublicKeyOffset, PubkeySerializedSize)
 		if err != nil {
 			return PrecompileErrDataOffset
 		}
 
-		msg, err := ed25519GetDataSlice(txCtx, offsets.MessageInstructionIndex, offsets.MessageDataOffset, offsets.MessageDataSize)
+		msg, err := PrecompileGetDataSlice(txCtx, offsets.MessageInstructionIndex, offsets.MessageDataOffset, offsets.MessageDataSize)
 		if err != nil {
 			return PrecompileErrDataOffset
 		}

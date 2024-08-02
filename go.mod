@@ -45,6 +45,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dustinxie/ecc v0.0.0-20210511000915-959544187564
 	github.com/edwingeng/deque/v2 v2.1.1
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/fatih/color v1.14.1 // indirect
@@ -89,6 +90,7 @@ require (
 	github.com/tendermint/ed25519 v0.0.0-20171027050219-d8387025d2b9
 	github.com/tidwall/btree v1.7.0
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
+	github.com/wealdtech/go-merkletree v1.0.0
 	github.com/zeebo/blake3 v0.2.3
 	go.mongodb.org/mongo-driver v1.11.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect

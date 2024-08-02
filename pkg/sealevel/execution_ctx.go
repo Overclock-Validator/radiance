@@ -187,10 +187,7 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 
 	klog.Infof("resolving native program (%s)", builtinId)
 	nativeProgramFn, err := resolveNativeProgramById(builtinId)
-	if err == IsPrecompile {
-		// TODO: handle precompile calls (ed25519, secp256k)
-		return InstrErrUnsupportedProgramId
-	} else if err != nil { // unrecognised builtin
+	if err != nil { // unrecognised builtin
 		return err
 	}
 

@@ -82,10 +82,10 @@ func resolveNativeProgramById(programId [32]byte) (func(ctx *ExecutionCtx) error
 		return BpfLoaderProgramExecute, nil
 	case BpfLoader2Addr:
 		return BpfLoaderProgramExecute, nil
-	case Secp256kPrecompileAddr:
-		return nil, IsPrecompile
 	case Ed25519PrecompileAddr:
 		return Ed25519ProgramExecute, nil
+	case Secp256kPrecompileAddr:
+		return Secp256k1ProgramExecute, nil
 	}
 
 	return nil, InstrErrUnsupportedProgramId

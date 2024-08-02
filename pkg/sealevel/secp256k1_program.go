@@ -8,12 +8,13 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/features"
 	"golang.org/x/crypto/sha3"
-	"k8s.io/klog/v2"
 )
 
 const Secp256k1SignatureOffsetsSerializedSize = 11
 const Secp256k1SignatureSerializedSize = 64
 const Secp256k1HashedPubkeySerializedSize = 20
+const Secp256k1SignatureOffsetsStart = 1
+const Secp256k1DataStart = (Secp256k1SignatureOffsetsSerializedSize + Secp256k1SignatureOffsetsStart)
 
 type SecppSignatureOffsets struct {
 	SignatureOffset            uint16
@@ -123,111 +124,77 @@ func parseAndValidateSignature(sigBytes []byte) error {
 	return nil
 }
 
-func secp256k1GetDataSlice(instructionDatas [][]byte, instructionIndex byte, offsetStart uint16, size uint64) ([]byte, int) {
-	signatureIndex := uint64(instructionIndex)
-	if signatureIndex >= uint64(len(instructionDatas)) {
-		return nil, PrecompileErrCodeInvalidDataOffsets
+func Secp256k1ProgramExecute(execCtx *ExecutionCtx) error {
+
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return err
 	}
 
-	signatureInstruction := instructionDatas[signatureIndex]
-	start := uint64(offsetStart)
-	end := start + size
-	if end > uint64(len(signatureInstruction)) {
-		return nil, PrecompileErrCodeInvalidSignature
+	data := instrCtx.Data
+	dataLen := uint64(len(data))
+
+	if dataLen < Secp256k1DataStart {
+		if dataLen == 1 && data[0] == 0 {
+			return nil
+		}
+		return PrecompileErrInstrDataSize
 	}
 
-	return signatureInstruction[start:end], InstrErrCodeSuccess
-}
+	numSignatures := data[0]
 
-func constructEthPubkey(pubkey []byte) []byte {
-	hasher := sha3.NewLegacyKeccak256()
-	hasher.Write(pubkey)
-	digest := hasher.Sum(nil)[12:]
-	return digest
-}
-
-func Secp256k1ProgramExecute(data []byte, instructionDatas [][]byte, f features.Features) int {
-	if len(data) == 0 {
-		return PrecompileErrCodeInvalidInstructionDataSize
+	if (execCtx.GlobalCtx.Features.IsActive(features.Libsecp256k1FailOnBadCount) ||
+		execCtx.GlobalCtx.Features.IsActive(features.Libsecp256k1FailOnBadCount2)) && numSignatures == 0 && dataLen > 1 {
+		return PrecompileErrInstrDataSize
 	}
 
-	count := uint64(data[0])
-
-	if (f.IsActive(features.Libsecp256k1FailOnBadCount) ||
-		f.IsActive(features.Libsecp256k1FailOnBadCount2)) &&
-		count == 0 && len(data) > 1 {
-		return PrecompileErrCodeInvalidInstructionDataSize
+	expectedDataSize := (uint64(numSignatures) * Secp256k1SignatureOffsetsSerializedSize) + Secp256k1SignatureOffsetsStart
+	if dataLen < expectedDataSize {
+		return PrecompileErrInstrDataSize
 	}
 
-	expectedDataSize := (count * Secp256k1SignatureOffsetsSerializedSize) + 1
-	if uint64(len(data)) < expectedDataSize {
-		return PrecompileErrCodeInvalidInstructionDataSize
-	}
+	dec := bin.NewBinDecoder(data[Secp256k1SignatureOffsetsStart:])
 
-	for i := uint64(0); i < count; i++ {
-
-		start := (i * Secp256k1SignatureOffsetsSerializedSize) + 1
-		end := start + Secp256k1SignatureOffsetsSerializedSize
-
+	for count := uint64(0); count < uint64(numSignatures); count++ {
 		var secpOffsets SecppSignatureOffsets
-		dec := bin.NewBinDecoder(data[start:end])
 		err := secpOffsets.UnmarshalWithDecoder(dec)
 		if err != nil {
-			return PrecompileErrCodeInvalidSignature
+			panic("shouldn't happen, lengths already checked")
 		}
 
-		signatureIndex := uint64(secpOffsets.SignatureInstructionIndex)
-		if signatureIndex >= uint64(len(instructionDatas)) {
-			return PrecompileErrCodeInvalidInstructionDataSize
-		}
-
-		signatureInstruction := instructionDatas[signatureIndex]
-		sigStart := uint64(secpOffsets.SignatureOffset)
-		sigEnd := sigStart + Secp256k1SignatureSerializedSize
-		if sigEnd >= uint64(len(signatureInstruction)) {
-			return PrecompileErrCodeInvalidSignature
-		}
-
-		signature := signatureInstruction[sigStart:sigEnd]
-		err = parseAndValidateSignature(signature)
+		signature, err := PrecompileGetDataSlice(txCtx, uint16(secpOffsets.SignatureInstructionIndex), secpOffsets.SignatureOffset, SignatureSerializedSize+1)
 		if err != nil {
-			klog.Errorf("error parsing signature: %s\n", err)
-			return PrecompileErrCodeInvalidSignature
+			return PrecompileErrDataOffset
 		}
 
-		recoveryId := signatureInstruction[sigEnd]
-		if recoveryId >= 4 {
-			return PrecompileErrCodeInvalidRecoveryId
+		ethAddr, err := PrecompileGetDataSlice(txCtx, uint16(secpOffsets.EthAddressInstructionIndex), secpOffsets.EthAddressOffset, Secp256k1HashedPubkeySerializedSize)
+		if err != nil {
+			return PrecompileErrDataOffset
 		}
 
-		ethAddressSlice, errCode := secp256k1GetDataSlice(instructionDatas, secpOffsets.EthAddressInstructionIndex, secpOffsets.EthAddressOffset, Secp256k1HashedPubkeySerializedSize)
-		if errCode != InstrErrCodeSuccess {
-			return errCode
-		}
-
-		messageSlice, errCode := secp256k1GetDataSlice(instructionDatas, secpOffsets.MessageInstructionIndex, secpOffsets.MessageDataOffset, uint64(secpOffsets.MessageDataSize))
-		if errCode != InstrErrCodeSuccess {
-			return errCode
+		msg, err := PrecompileGetDataSlice(txCtx, uint16(secpOffsets.MessageInstructionIndex), secpOffsets.MessageDataOffset, secpOffsets.MessageDataSize)
+		if err != nil {
+			return PrecompileErrDataOffset
 		}
 
 		hasher := sha3.NewLegacyKeccak256()
-		hasher.Write(messageSlice)
+		hasher.Write(msg)
 		messageHash := hasher.Sum(nil)
 
-		sigAndRecoveryId := make([]byte, 65)
-		copy(sigAndRecoveryId, signature)
-		sigAndRecoveryId[64] = byte(recoveryId)
-
-		recoveredPubKey, err := secp256k1.RecoverPubkey(messageHash, sigAndRecoveryId)
+		recoveredPubkeyBytes, err := secp256k1.RecoverPubkey(messageHash, signature)
 		if err != nil {
-			return PrecompileErrCodeInvalidSignature
+			return PrecompileErrSignature
 		}
-		ethAddress := constructEthPubkey(recoveredPubKey)
 
-		if !bytes.Equal(ethAddressSlice, ethAddress) {
-			return PrecompileErrCodeInvalidSignature
+		hasher.Reset()
+		hasher.Write(recoveredPubkeyBytes[1:])
+		digest := hasher.Sum(nil)[sha3.NewLegacyKeccak256().Size()-Secp256k1HashedPubkeySerializedSize:] // 12
+
+		if !bytes.Equal(ethAddr, digest) {
+			return PrecompileErrSignature
 		}
 	}
 
-	return InstrErrCodeSuccess
+	return nil
 }

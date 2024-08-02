@@ -10,8 +10,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestConformance_Precompile_Ed25519_Program(t *testing.T) {
-	basePath := "test-vectors/precompile/fixtures/ed25519"
+func TestConformance_Precompile_Secp256k1_Program(t *testing.T) {
+	basePath := "test-vectors/precompile/fixtures/secp256k1"
 	fileInfos, err := ioutil.ReadDir(basePath)
 	assert.NoError(t, err)
 
@@ -43,9 +43,9 @@ func TestConformance_Precompile_Ed25519_Program(t *testing.T) {
 		err = execCtx.ProcessInstruction(fixture.Input.Data, instrAccts, []uint64{0})
 
 		if err == nil && fixture.Output.Result != 0 {
-			failedTestcases = append(failedTestcases, fmt.Sprintf("failed testcase: %s. ed25519 returned success, but fixture reports %d\n", fname, fixture.Output.Result-1))
+			failedTestcases = append(failedTestcases, fmt.Sprintf("failed testcase: %s. secp256k1 returned success, but fixture reports %d\n", fname, fixture.Output.Result-1))
 		} else if fixture.Output.Result == 0 && err != nil {
-			failedTestcases = append(failedTestcases, fmt.Sprintf("failed testcase: %s. ed25519 returned %s, but fixture reports success\n", fname, err))
+			failedTestcases = append(failedTestcases, fmt.Sprintf("failed testcase: %s. secp256k1 returned %s, but fixture reports success\n", fname, err))
 		}
 	}
 
