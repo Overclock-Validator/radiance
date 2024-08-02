@@ -49,8 +49,16 @@ func TestExecute_Tx_BpfLoader_InitializeBuffer_Success(t *testing.T) {
 	binary.LittleEndian.AppendUint32(instrData, UpgradeableLoaderInstrTypeInitializeBuffer)
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
-
 	assert.Equal(t, nil, err)
+
+	// check account state after initialize instruction
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	bufferAcctPostData := bufferAcctPost.Data
+	bufferAcctPostState, err := unmarshalUpgradeableLoaderState(bufferAcctPostData)
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(UpgradeableLoaderStateTypeBuffer), bufferAcctPostState.Type)
+	assert.Equal(t, authorityAcct.Key, *bufferAcctPostState.Buffer.AuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_InitializeBuffer_Buffer_Acct_Already_Initialize_Failure(t *testing.T) {
@@ -137,6 +145,15 @@ func TestExecute_Tx_BpfLoader_Write_Success(t *testing.T) {
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+
+	// check the new account state for presence of the newly written data ('a' x 100)
+	startingOffset := upgradeableLoaderSizeOfBufferMetaData + uint64(writeInstr.Offset)
+	bufferAcctBytesPost := bufferAcctPost.Data[startingOffset : startingOffset+uint64(len(writeInstr.Bytes))]
+	isEqual := bytes.Equal(writeInstr.Bytes, bufferAcctBytesPost)
+	assert.Equal(t, true, isEqual)
 }
 
 func TestExecute_Tx_BpfLoader_Write_Offset_Too_Large_Failure(t *testing.T) {
@@ -376,6 +393,15 @@ func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Success(t *testing.T) {
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+
+	// check account state after SetAuthority instruction; new authority addr should be newAuthorityAcct
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	bufferAcctPostData := bufferAcctPost.Data
+	bufferAcctPostState, err := unmarshalUpgradeableLoaderState(bufferAcctPostData)
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(UpgradeableLoaderStateTypeBuffer), bufferAcctPostState.Type)
+	assert.Equal(t, newAuthorityAcct.Key, *bufferAcctPostState.Buffer.AuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Success(t *testing.T) {
@@ -421,6 +447,15 @@ func TestExecute_Tx_BpfLoader_SetAuthority_ProgramData_Success(t *testing.T) {
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+
+	// check account state after SetAuthority instruction; new authority addr should be newAuthorityAcct
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	bufferAcctPostData := bufferAcctPost.Data
+	bufferAcctPostState, err := unmarshalUpgradeableLoaderState(bufferAcctPostData)
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(UpgradeableLoaderStateTypeProgramData), bufferAcctPostState.Type)
+	assert.Equal(t, newAuthorityAcct.Key, *bufferAcctPostState.ProgramData.UpgradeAuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_SetAuthority_Buffer_Immutable_Failure(t *testing.T) {
@@ -870,6 +905,15 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Success(t *testing.T) {
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault(), GlobalCtx: global.GlobalCtx{Features: *f}}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+
+	// check account state after SetAuthority instruction; new authority addr should be newAuthorityAcct
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	bufferAcctPostData := bufferAcctPost.Data
+	bufferAcctPostState, err := unmarshalUpgradeableLoaderState(bufferAcctPostData)
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(UpgradeableLoaderStateTypeBuffer), bufferAcctPostState.Type)
+	assert.Equal(t, newAuthorityAcct.Key, *bufferAcctPostState.Buffer.AuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Success(t *testing.T) {
@@ -917,6 +961,15 @@ func TestExecute_Tx_BpfLoader_SetAuthorityChecked_ProgramData_Success(t *testing
 	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault(), GlobalCtx: global.GlobalCtx{Features: *f}}
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+
+	// check account state after SetAuthority instruction; new authority addr should be newAuthorityAcct
+	bufferAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	bufferAcctPostData := bufferAcctPost.Data
+	bufferAcctPostState, err := unmarshalUpgradeableLoaderState(bufferAcctPostData)
+	assert.NoError(t, err)
+	assert.Equal(t, uint32(UpgradeableLoaderStateTypeProgramData), bufferAcctPostState.Type)
+	assert.Equal(t, newAuthorityAcct.Key, *bufferAcctPostState.ProgramData.UpgradeAuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_SetAuthorityChecked_Buffer_Immutable_Failure(t *testing.T) {
@@ -1731,6 +1784,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -1804,6 +1858,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Not_Enough_Accounts_Failure(t *t
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -1867,6 +1922,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Program_Acct_Not_Writable_Failur
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -1931,6 +1987,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Program_Acct_Wrong_Owner_Failure
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -1995,6 +2052,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Already_Deployed_In_This_Block_F
 	var clock SysvarClock
 	clock.Slot = 1337 // same slot as in the programdata Slot field
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -2059,6 +2117,7 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_ProgramData_Not_A_Program_Acct_F
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
@@ -2123,19 +2182,12 @@ func TestExecute_Tx_BpfLoader_Close_ProgramData_Nonclosable_Account_Failure(t *t
 	var clock SysvarClock
 	clock.Slot = 0
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, InstrErrInvalidArgument, err)
 }
-
-/// # Account references
-///   0. `[writable]` The ProgramData account.
-///   1. `[writable]` The ProgramData account's associated Program account.
-///   2. `[]` System program (`solana_sdk::system_program::id()`), optional, used to transfer
-///      lamports from the payer to the ProgramData account.
-///   3. `[signer]` The payer account, optional, that will pay necessary rent exemption costs
-///      for the increased storage size.
 
 func TestExecute_Tx_BpfLoader_ExtendProgram_Success(t *testing.T) {
 	// bpf loader acct
@@ -2199,6 +2251,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2208,6 +2261,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -2299,6 +2353,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Extend_By_Zero_Bytes_Failure(t *test
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2308,6 +2363,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_Extend_By_Zero_Bytes_Failure(t *test
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -2377,6 +2433,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Not_Enou
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2386,6 +2443,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Not_Enou
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -2468,6 +2526,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Success(
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2477,6 +2536,7 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Success(
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
@@ -2512,28 +2572,6 @@ func TestExecute_Tx_BpfLoader_ExtendProgram_With_Rent_Exemption_Payment_Success(
 
 	assert.Equal(t, programDataPost.Lamports-origProgramDataBalance, origPayerBalance-payerAcctPost.Lamports)
 }
-
-/// Upgrade a program.
-///
-/// A program can be updated as long as the program's authority has not been
-/// set to `None`.
-///
-/// The Buffer account must contain sufficient lamports to fund the
-/// ProgramData account to be rent-exempt, any additional lamports left over
-/// will be transferred to the spill account, leaving the Buffer account
-/// balance at zero.
-///
-/// # Account references
-///   0. `[writable]` The ProgramData account.
-///   1. `[writable]` The Program account.
-///   2. `[writable]` The Buffer account where the program data has been
-///      written.  The buffer account's authority must match the program's
-///      authority
-///   3. `[writable]` The spill account.
-///   4. `[]` Rent sysvar.
-///   5. `[]` Clock sysvar.
-///   6. `[signer]` The program's authority.
-//Upgrade,
 
 func TestExecute_Tx_BpfLoader_Upgrade_Success(t *testing.T) {
 	// bpf loader acct
@@ -2619,6 +2657,7 @@ func TestExecute_Tx_BpfLoader_Upgrade_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2707,8 +2746,8 @@ func TestExecute_Tx_BpfLoader_Upgrade_Buffer_Wrong_Authority_Failure(t *testing.
 	instrData := make([]byte, 4)
 	binary.LittleEndian.PutUint32(instrData, UpgradeableLoaderInstrTypeUpgrade)
 
-	fakeClockAcct := accounts.Account{Key: SysvarClockAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
-	fakeRent := accounts.Account{Key: SysvarRentAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+	fakeClockAcct := accounts.Account{Key: SysvarClockAddr, Lamports: 1, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+	fakeRent := accounts.Account{Key: SysvarRentAddr, Lamports: 1, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
 
 	transactionAccts := NewTransactionAccounts([]accounts.Account{loaderAcct, programDataAcct, programAcct, bufferAcct, spillAcct, fakeRent, fakeClockAcct, authorityAcct})
 
@@ -2778,7 +2817,7 @@ func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
 	payerPrivKey, err := solana.NewRandomPrivateKey()
 	assert.NoError(t, err)
 	payerPubkey := payerPrivKey.PublicKey()
-	payerAcct := accounts.Account{Key: payerPubkey, Lamports: 200000, Data: make([]byte, 0), Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+	payerAcct := accounts.Account{Key: payerPubkey, Lamports: 200000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
 
 	// program account
 	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeUninitialized}
@@ -2808,8 +2847,8 @@ func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
 	err = deploy.MarshalWithEncoder(instrEncoder)
 	instrData := instrWriter.Bytes()
 
-	fakeClockAcct := accounts.Account{Key: SysvarClockAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
-	fakeRent := accounts.Account{Key: SysvarRentAddr, Lamports: 0, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+	fakeClockAcct := accounts.Account{Key: SysvarClockAddr, Lamports: 1, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+	fakeRent := accounts.Account{Key: SysvarRentAddr, Lamports: 1, Data: programBytes, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
 
 	transactionAccts := NewTransactionAccounts([]accounts.Account{loaderAcct, payerAcct, programDataAcct, programAcct, bufferAcct, fakeRent, fakeClockAcct, systemAcct, authorityAcct})
 
@@ -2832,6 +2871,7 @@ func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2841,25 +2881,24 @@ func TestExecute_Tx_BpfLoader_DeployWithMaxDataLen_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
 
+	// check programdata account state after instr; does it contain the new program bytes?
 	programDataPost, err := txCtx.Accounts.GetAccount(2)
 	assert.NoError(t, err)
-
 	programBytesPost := programDataPost.Data[upgradeableLoaderSizeOfProgramDataMetaData:]
-
 	for count := 0; count < len(validProgramBytes); count++ {
 		assert.Equal(t, validProgramBytes[count], programBytesPost[count])
 	}
 
 	programDataStatePost, err := unmarshalUpgradeableLoaderState(programDataPost.Data)
 	assert.NoError(t, err)
-
-	assert.Equal(t, *programDataStatePost.ProgramData.UpgradeAuthorityAddress, authorityPubkey)
+	assert.Equal(t, authorityPubkey, *programDataStatePost.ProgramData.UpgradeAuthorityAddress)
 }
 
 func TestExecute_Tx_BpfLoader_Invoke_Bpf_Program_Success(t *testing.T) {
@@ -2910,6 +2949,7 @@ func TestExecute_Tx_BpfLoader_Invoke_Bpf_Program_Success(t *testing.T) {
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2919,6 +2959,7 @@ func TestExecute_Tx_BpfLoader_Invoke_Bpf_Program_Success(t *testing.T) {
 	rent.BurnPercent = 0
 
 	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)
 
