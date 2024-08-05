@@ -45,6 +45,7 @@ require (
 	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
+	github.com/bwesterb/go-ristretto v1.2.3
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustinxie/ecc v0.0.0-20210511000915-959544187564
 	github.com/edwingeng/deque/v2 v2.1.1

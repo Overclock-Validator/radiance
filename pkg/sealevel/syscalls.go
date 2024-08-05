@@ -23,6 +23,10 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 	reg.Register("sol_secp256k1_recover", SyscallSecp256k1Recover)
 	reg.Register("sol_poseidon", SyscallPoseidon)
 
+	if f.IsActive(features.Curve25519SyscallEnabled) {
+		reg.Register("sol_curve_validate_point", SyscallValidatePoint)
+	}
+
 	reg.Register("sol_memcpy_", SyscallMemcpy)
 	reg.Register("sol_memcmp_", SyscallMemcmp)
 	reg.Register("sol_memset_", SyscallMemset)

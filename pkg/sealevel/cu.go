@@ -23,4 +23,6 @@ const (
 	CUHeapCostDefault                         = 8
 	CUAddressLookupTableDefaultComputeUnits   = 750
 	CUComputeBudgetProgramDefaultComputeUnits = 150
+	CUCurve25519EdwardsValidatePointCost      = 159
+	CUCurve25519RistrettoValidatePointCost    = 169
 )
