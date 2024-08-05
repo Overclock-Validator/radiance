@@ -3,12 +3,16 @@ package sealevel
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
+	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"golang.org/x/crypto/sha3"
+	"k8s.io/klog/v2"
 )
 
 // SyscallSha256Impl is the implementation for the sol_sha256 syscall
@@ -261,3 +265,109 @@ func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureA
 }
 
 var SyscallSecp256k1Recover = sbpf.SyscallFunc4(SyscallSecp256k1RecoverImpl)
+
+const PoseidonCostCoefficientA = 61
+const PoseidonCostCoefficientC = 542
+
+func SwapEndianness(xs []byte) []byte {
+	ys := make([]byte, len(xs))
+	for i, b := range xs {
+		ys[len(xs)-1-i] = b
+	}
+	return ys
+}
+
+func PoseidonHash(input [][]byte, isBigEndian bool) ([]byte, error) {
+	inputBigInts := make([]*big.Int, 0)
+
+	for _, inputSlice := range input {
+		if len(inputSlice) > 32 {
+			return nil, fmt.Errorf("input too long")
+		}
+		bigInt := new(big.Int).SetBytes(inputSlice)
+		inputBigInts = append(inputBigInts, bigInt)
+	}
+
+	initState := new(big.Int)
+	output, err := poseidon.HashWithState(inputBigInts, initState)
+	if err != nil {
+		return nil, fmt.Errorf("hashing error")
+	}
+
+	hashBytes := output.Bytes()
+
+	if len(hashBytes) == 31 {
+		fixed := make([]byte, 32)
+		copy(fixed[1:], hashBytes)
+		hashBytes = fixed
+	}
+
+	if !isBigEndian {
+		hashBytes = SwapEndianness(hashBytes)
+	}
+
+	return hashBytes, nil
+}
+
+func SyscallPoseidonImpl(vm sbpf.VM, parameters, endianness, valsAddr, valsLen, resultAddr uint64) (uint64, error) {
+	execCtx := executionCtx(vm)
+	if parameters != 0 {
+		return syscallErrCustom("PoseidonSyscallError::InvalidParameters")
+	}
+
+	if endianness != 0 && endianness != 1 {
+		return syscallErrCustom("PoseidonSyscallError::InvalidEndianness")
+	}
+
+	if valsLen > 12 {
+		klog.Infof("Poseidon hashing %d sequences is not supported", valsLen)
+		return syscallErrCustom("PoseidonSyscallError::InvalidLength")
+	}
+
+	// no need to use saturating math here; this can't overflow anyway, as per the valsLen check above
+	cost := (valsLen * valsLen * PoseidonCostCoefficientA) + PoseidonCostCoefficientC
+
+	err := execCtx.ComputeMeter.Consume(cost)
+	if err != nil {
+		return syscallCuErr()
+	}
+
+	hashResult, err := vm.Translate(resultAddr, 32, true)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	if valsLen == 0 {
+		return syscallSuccess(1)
+	}
+
+	inputBytes, err := vm.Translate(valsAddr, valsLen*16, false)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	inputs := make([][]byte, 0)
+	reader := bytes.NewReader(inputBytes)
+
+	for count := uint64(0); count < valsLen; count++ {
+		var vec VectorDescrC
+		vec.Unmarshal(reader)
+		inputSlice, err := vm.Translate(vec.Addr, vec.Len, false)
+		if err != nil {
+			return syscallErr(err)
+		}
+		inputs = append(inputs, inputSlice)
+	}
+
+	isBigEndian := endianness == 0
+
+	hash, err := PoseidonHash(inputs, isBigEndian)
+	if err != nil {
+		return syscallSuccess(1)
+	}
+
+	copy(hashResult, hash)
+	return syscallSuccess(0)
+}
+
+var SyscallPoseidon = sbpf.SyscallFunc5(SyscallPoseidonImpl)

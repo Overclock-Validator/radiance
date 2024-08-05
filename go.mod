@@ -34,6 +34,7 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 )
 
@@ -58,6 +59,7 @@ require (
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
+	github.com/iden3/go-iden3-crypto v0.0.16
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/native v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -89,6 +91,7 @@ require (
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091 // indirect
 	github.com/tendermint/ed25519 v0.0.0-20171027050219-d8387025d2b9
 	github.com/tidwall/btree v1.7.0
+	github.com/triplewz/poseidon v0.0.1
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	github.com/wealdtech/go-merkletree v1.0.0
 	github.com/zeebo/blake3 v0.2.3

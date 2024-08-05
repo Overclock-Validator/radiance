@@ -21,6 +21,7 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 	reg.Register("sol_keccak256", SyscallKeccak256)
 	reg.Register("sol_blake3", SyscallBlake3)
 	reg.Register("sol_secp256k1_recover", SyscallSecp256k1Recover)
+	reg.Register("sol_poseidon", SyscallPoseidon)
 
 	reg.Register("sol_memcpy_", SyscallMemcpy)
 	reg.Register("sol_memcmp_", SyscallMemcmp)
