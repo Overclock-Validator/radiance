@@ -2,20 +2,51 @@ package sealevel
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"math/big"
 
 	"filippo.io/edwards25519"
+	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+	"github.com/keep-network/keep-core/pkg/altbn128"
 	r255 "github.com/taurusgroup/frost-ed25519/pkg/ristretto"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
-const Curve25519Edwards = 0
-const Curve25519Ristretto = 1
+// curve types
+const (
+	Curve25519Edwards   = 0
+	Curve25519Ristretto = 1
+)
 
-const CurvePointBytesLen = 32
-const CurveScalarBytesLen = 32
+const (
+	CurvePointBytesLen  = 32
+	CurveScalarBytesLen = 32
+)
+
+// curve operations
+const (
+	CurveOpAdd = 0
+	CurveOpSub = 1
+	CurveOpMul = 2
+)
+
+// bn128 compression operations
+const (
+	Bn128G1Compress   = 0
+	Bn128G1Decompress = 1
+	Bn128G2Compress   = 2
+	Bn128G2Decompress = 3
+)
+
+const (
+	Bn128G1Len           = 64
+	Bn128G2Len           = 128
+	Bn128G1CompressedLen = 32
+	Bn128G2CompressedLen = 64
+)
 
 func SyscallCurveValidatePointImpl(vm sbpf.VM, curveId, pointAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
@@ -268,17 +299,11 @@ func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr,
 
 var SyscallCurveMultiscalarMultiplication = sbpf.SyscallFunc5(SyscallCurveMultiscalarMultiplicationImpl)
 
-const (
-	curveOpAdd = 0
-	curveOpSub = 1
-	curveOpMul = 2
-)
-
 func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAddr, resultPointAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
 
 	switch groupOp {
-	case curveOpAdd:
+	case CurveOpAdd:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519EdwardsAddCost)
 			if err != nil {
@@ -316,7 +341,7 @@ func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAd
 			return syscallSuccess(0)
 		}
 
-	case curveOpSub:
+	case CurveOpSub:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519EdwardsSubCost)
 			if err != nil {
@@ -352,7 +377,7 @@ func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAd
 			return syscallSuccess(0)
 		}
 
-	case curveOpMul:
+	case CurveOpMul:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519EdwardsMulCost)
 			if err != nil {
@@ -405,7 +430,7 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 	execCtx := executionCtx(vm)
 
 	switch groupOp {
-	case curveOpAdd:
+	case CurveOpAdd:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519RistrettoAddCost)
 			if err != nil {
@@ -435,7 +460,7 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 			return syscallSuccess(0)
 		}
 
-	case curveOpSub:
+	case CurveOpSub:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519RistrettoSubCost)
 			if err != nil {
@@ -465,7 +490,7 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 			return syscallSuccess(0)
 		}
 
-	case curveOpMul:
+	case CurveOpMul:
 		{
 			err := execCtx.ComputeMeter.Consume(CUCurve25519RistrettoAddCost)
 			if err != nil {
@@ -540,3 +565,191 @@ func SyscallCurveGroupOpsImpl(vm sbpf.VM, curveId, groupOp, leftInputAddr, right
 }
 
 var SyscallCurveGroupOps = sbpf.SyscallFunc5(SyscallCurveGroupOpsImpl)
+
+// gfP2, G2FromInts(), and LeftPadTo32Bytes() are borrowed from https://github.com/keep-network/keep-core
+// because their altbn128 package does not export the gfP2 type, which is needed to call G2FromInts()
+
+type gfP2 struct {
+	x, y *big.Int
+}
+
+func LeftPadTo32Bytes(bytes []byte) ([]byte, error) {
+	expectedByteLen := 32
+	if len(bytes) > expectedByteLen {
+		return nil, fmt.Errorf(
+			"cannot pad %v byte array to %v bytes", len(bytes), expectedByteLen,
+		)
+	}
+
+	result := make([]byte, 0)
+	if len(bytes) < expectedByteLen {
+		result = make([]byte, expectedByteLen-len(bytes))
+	}
+	result = append(result, bytes...)
+
+	return result, nil
+}
+
+func G2FromInts(x *gfP2, y *gfP2) (*bn256.G2, error) {
+
+	if len(x.x.Bytes()) > 32 || len(x.y.Bytes()) > 32 || len(y.x.Bytes()) > 32 || len(y.y.Bytes()) > 32 {
+		return nil, errors.New("points on G2 are limited to two 256-bit coordinates")
+	}
+
+	paddedXX, _ := LeftPadTo32Bytes(x.x.Bytes())
+	paddedXY, _ := LeftPadTo32Bytes(x.y.Bytes())
+	paddedX := append(paddedXY, paddedXX...)
+
+	paddedYX, _ := LeftPadTo32Bytes(y.x.Bytes())
+	paddedYY, _ := LeftPadTo32Bytes(y.y.Bytes())
+	paddedY := append(paddedYY, paddedYX...)
+
+	m := append(paddedX, paddedY...)
+
+	g2 := new(bn256.G2)
+
+	_, err := g2.Unmarshal(m)
+
+	return g2, err
+}
+
+func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultAddr uint64) (uint64, error) {
+
+	var cost uint64
+	var outputLen uint64
+
+	switch op {
+	case Bn128G1Compress:
+		{
+			cost = CUSyscallBaseCost + CUBn128G1Compress
+			outputLen = Bn128G1CompressedLen
+		}
+
+	case Bn128G1Decompress:
+		{
+			cost = CUSyscallBaseCost + CUBn128G1Decompress
+			outputLen = Bn128G1Len
+		}
+
+	case Bn128G2Compress:
+		{
+			cost = CUSyscallBaseCost + CUBn128G2Compress
+			outputLen = Bn128G2CompressedLen
+		}
+
+	case Bn128G2Decompress:
+		{
+			cost = CUSyscallBaseCost + CUBn128G2Decompress
+			outputLen = Bn128G2Len
+		}
+
+	default:
+		{
+			return syscallErrCustom("SyscallError::InvalidAttribute")
+		}
+	}
+
+	execCtx := executionCtx(vm)
+	err := execCtx.ComputeMeter.Consume(cost)
+	if err != nil {
+		return syscallCuErr()
+	}
+
+	inputSlice, err := vm.Translate(inputAddr, inputLen, false)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	callResult, err := vm.Translate(resultAddr, outputLen, true)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	switch op {
+	case Bn128G1Compress:
+		{
+			if inputLen != Bn128G1Len {
+				return syscallSuccess(1)
+			}
+
+			x := new(big.Int).SetBytes(inputSlice[:32])
+			y := new(big.Int).SetBytes(inputSlice[32:])
+
+			pointUncompressed, err := altbn128.G1FromInts(x, y)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			pointCompressed := altbn128.G1Point{G1: pointUncompressed}.Compress()
+			copy(callResult, pointCompressed)
+
+			return syscallSuccess(0)
+		}
+
+	case Bn128G1Decompress:
+		{
+			if inputLen != Bn128G1CompressedLen {
+				return syscallSuccess(1)
+			}
+
+			point, err := altbn128.DecompressToG1(inputSlice)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			pointBytes := point.Marshal()
+			copy(callResult, pointBytes)
+
+			return syscallSuccess(0)
+		}
+
+	case Bn128G2Compress:
+		{
+			if inputLen != Bn128G2Len {
+				return syscallSuccess(1)
+			}
+
+			x1 := new(big.Int).SetBytes(inputSlice[:32])
+			y1 := new(big.Int).SetBytes(inputSlice[32:64])
+			x2 := new(big.Int).SetBytes(inputSlice[64:96])
+			y2 := new(big.Int).SetBytes(inputSlice[96:128])
+
+			xVal := gfP2{x: x1, y: y1}
+			yVal := gfP2{x: x2, y: y2}
+
+			pointUncompressed, err := G2FromInts(&xVal, &yVal)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			pointCompressed := altbn128.G2Point{G2: pointUncompressed}.Compress()
+			copy(callResult, pointCompressed)
+
+			return syscallSuccess(0)
+		}
+
+	case Bn128G2Decompress:
+		{
+			if inputLen != Bn128G2CompressedLen {
+				return syscallSuccess(1)
+			}
+
+			point, err := altbn128.DecompressToG2(inputSlice)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			pointBytes := point.Marshal()
+			copy(callResult, pointBytes)
+
+			return syscallSuccess(0)
+		}
+
+	default:
+		{
+			return syscallErrCustom("SyscallError::InvalidAttribute")
+		}
+	}
+}
+
+var SyscallAltBn128Compression = sbpf.SyscallFunc4(SyscallAltBn128CompressionImpl)

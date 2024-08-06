@@ -29,6 +29,10 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 		reg.Register("sol_curve_group_op", SyscallCurveGroupOps)
 	}
 
+	if f.IsActive(features.EnableAltbn128CompressionSyscall) {
+		reg.Register("sol_alt_bn128_compression", SyscallAltBn128Compression)
+	}
+
 	reg.Register("sol_memcpy_", SyscallMemcpy)
 	reg.Register("sol_memcmp_", SyscallMemcmp)
 	reg.Register("sol_memset_", SyscallMemset)

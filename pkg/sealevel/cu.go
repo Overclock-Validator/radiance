@@ -35,4 +35,8 @@ const (
 	CUCurve25519RistrettoAddCost              = 521
 	CUCurve25519RistrettoSubCost              = 519
 	CUCurve25519RistrettoMulCost              = 2208
+	CUBn128G1Compress                         = 30
+	CUBn128G1Decompress                       = 398
+	CUBn128G2Compress                         = 86
+	CUBn128G2Decompress                       = 13610
 )
