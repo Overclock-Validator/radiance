@@ -25,6 +25,7 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 
 	if f.IsActive(features.Curve25519SyscallEnabled) {
 		reg.Register("sol_curve_validate_point", SyscallValidatePoint)
+		reg.Register("sol_curve_multiscalar_mul", SyscallCurveMultiscalarMultiplication)
 	}
 
 	reg.Register("sol_memcpy_", SyscallMemcpy)

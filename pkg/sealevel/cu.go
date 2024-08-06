@@ -25,4 +25,8 @@ const (
 	CUComputeBudgetProgramDefaultComputeUnits = 150
 	CUCurve25519EdwardsValidatePointCost      = 159
 	CUCurve25519RistrettoValidatePointCost    = 169
+	CUCurve25519EdwardsMsmBaseCost            = 2273
+	CUCurve25519EdwardsMsmIncrementalCost     = 758
+	CUCurve25519RistrettoMsmBaseCost          = 2303
+	CUCurve25519RistrettoMsmIncrementalCost   = 788
 )
