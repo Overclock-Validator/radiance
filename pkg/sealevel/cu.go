@@ -29,4 +29,10 @@ const (
 	CUCurve25519EdwardsMsmIncrementalCost     = 758
 	CUCurve25519RistrettoMsmBaseCost          = 2303
 	CUCurve25519RistrettoMsmIncrementalCost   = 788
+	CUCurve25519EdwardsAddCost                = 473
+	CUCurve25519EdwardsSubCost                = 475
+	CUCurve25519EdwardsMulCost                = 2177
+	CUCurve25519RistrettoAddCost              = 521
+	CUCurve25519RistrettoSubCost              = 519
+	CUCurve25519RistrettoMulCost              = 2208
 )
