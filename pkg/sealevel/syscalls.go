@@ -6,7 +6,7 @@ import (
 )
 
 // Syscalls creates a registry of all Sealevel syscalls.
-func Syscalls(f *features.Features) sbpf.SyscallRegistry {
+func Syscalls(f *features.Features, isDeploy bool) sbpf.SyscallRegistry {
 	reg := sbpf.NewSyscallRegistry()
 	reg.Register("abort", SyscallAbort)
 	reg.Register("sol_panic_", SyscallPanic)
@@ -41,6 +41,10 @@ func Syscalls(f *features.Features) sbpf.SyscallRegistry {
 	reg.Register("sol_memcmp_", SyscallMemcmp)
 	reg.Register("sol_memset_", SyscallMemset)
 	reg.Register("sol_memmove_", SyscallMemmove)
+
+	if !isDeploy {
+		reg.Register("sol_alloc_free_", SyscallAllocFree)
+	}
 
 	reg.Register("sol_create_program_address", SyscallCreateProgramAddress)
 	reg.Register("sol_try_find_program_address", SyscallTryFindProgramAddress)

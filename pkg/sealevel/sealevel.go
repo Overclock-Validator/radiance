@@ -26,8 +26,8 @@ func (t *TransactionCtx) newVMOpts(params *Params) *sbpf.VMOpts {
 	var buf bytes.Buffer
 	params.Serialize(&buf)
 	return &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
-		Syscalls: Syscalls(&params.Features),
+		HeapMax:  32 * 1024,
+		Syscalls: Syscalls(&params.Features, false),
 		Context:  execution,
 		MaxCU:    1_400_000,
 		Input:    buf.Bytes(),

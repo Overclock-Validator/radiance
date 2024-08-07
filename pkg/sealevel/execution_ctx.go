@@ -270,6 +270,25 @@ func (execCtx *ExecutionCtx) NativeInvoke(instruction Instruction, signers []sol
 	return err
 }
 
+func (execCtx *ExecutionCtx) CheckAligned() bool {
+	txCtx := execCtx.TransactionContext
+	instrCtx, err := txCtx.CurrentInstructionCtx()
+	if err != nil {
+		return true
+	}
+
+	programAcct, err := instrCtx.BorrowLastProgramAccount(txCtx)
+	if err != nil {
+		return true
+	}
+
+	if programAcct.Owner() == BpfLoaderDeprecatedAddr {
+		return false
+	} else {
+		return true
+	}
+}
+
 func (slotCtx *SlotCtx) GetAccount(pubkey solana.PublicKey) (*accounts.Account, error) {
 	pk := [32]byte(pubkey)
 	acct, err := slotCtx.Accounts.GetAccount(&pk)

@@ -45,7 +45,7 @@ func TestExecute_Memo(t *testing.T) {
 	syscalls.Register("log_64", SyscallLog64)
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -79,7 +79,7 @@ func TestInterpreter_Noop(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -119,7 +119,7 @@ func TestInterpreter_Memcpy_Strings_Match(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		Syscalls: syscalls,
 		Context:  &ExecutionCtx{Log: &log, ComputeMeter: cu.NewComputeMeterDefault()},
@@ -157,7 +157,7 @@ func TestInterpreter_Memcpy_Do_Not_Match(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -195,7 +195,7 @@ func TestInterpreter_Memmove_Strings_Match(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -234,7 +234,7 @@ func TestInterpreter_Memmove_Do_Not_Match(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -271,7 +271,7 @@ func TestInterpreter_Memcpy_Overlapping(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -309,7 +309,7 @@ func TestInterpreter_Memcmp_Matches(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -350,7 +350,7 @@ func TestInterpreter_Memcmp_Does_Not_Match(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -391,7 +391,7 @@ func TestInterpreter_Memset_Check_Correct(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -431,7 +431,7 @@ func TestInterpreter_Sha256(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -472,7 +472,7 @@ func TestInterpreter_Blake3(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -513,7 +513,7 @@ func TestInterpreter_Keccak256(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -555,7 +555,7 @@ func TestInterpreter_CreateProgramAddress(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -600,7 +600,7 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,
@@ -638,7 +638,7 @@ func TestInterpreter_TestPanic(t *testing.T) {
 	var log LogRecorder
 
 	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapSize: 32 * 1024,
+		HeapMax:  32 * 1024,
 		Input:    nil,
 		MaxCU:    10000,
 		Syscalls: syscalls,

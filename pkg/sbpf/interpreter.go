@@ -19,8 +19,9 @@ type Interpreter struct {
 	heap   []byte
 	input  []byte
 
-	entry uint64
-	cuMax int
+	entry    uint64
+	cuMax    int
+	heapSize uint64
 
 	syscalls  map[uint32]Syscall
 	funcs     map[uint32]int64
@@ -43,7 +44,7 @@ func NewInterpreter(globalCtx *global.GlobalCtx, p *Program, opts *VMOpts) *Inte
 		text:      p.Text,
 		ro:        p.RO,
 		stack:     NewStack(),
-		heap:      make([]byte, opts.HeapSize),
+		heap:      make([]byte, opts.HeapMax),
 		input:     opts.Input,
 		entry:     p.Entrypoint,
 		cuMax:     opts.MaxCU,
@@ -450,6 +451,18 @@ func (ip *Interpreter) VMContext() any {
 
 func (ip *Interpreter) GlobalCtx() *global.GlobalCtx {
 	return ip.globalCtx
+}
+
+func (ip *Interpreter) HeapMax() uint64 {
+	return uint64(len(ip.heap))
+}
+
+func (ip *Interpreter) HeapSize() uint64 {
+	return ip.heapSize
+}
+
+func (ip *Interpreter) UpdateHeapSize(size uint64) {
+	ip.heapSize = size
 }
 
 func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (unsafe.Pointer, error) {

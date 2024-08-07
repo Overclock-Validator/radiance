@@ -1,6 +1,7 @@
 package sealevel
 
 import (
+	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
@@ -130,3 +131,40 @@ func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64) (uint64, error) {
 }
 
 var SyscallMemset = sbpf.SyscallFunc3(SyscallMemsetImpl)
+
+func alignUp(unaligned uint64, align uint64) uint64 {
+	mask := align - 1
+	alignedVal := unaligned + (-unaligned & mask)
+	return alignedVal
+}
+
+// SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
+func SyscallAllocFreeImpl(vm sbpf.VM, size, freeAddr uint64) (uint64, error) {
+	execCtx := executionCtx(vm)
+
+	// this is a free() call, but this is a bump allocator, so do nothing
+	if freeAddr != 0 {
+		return syscallSuccess(0)
+	}
+
+	var align uint64
+	if execCtx.CheckAligned() {
+		align = 8
+	} else {
+		align = 1
+	}
+
+	heapSize := alignUp(vm.HeapSize(), align)
+	heapAddr := safemath.SaturatingAddU64(heapSize, sbpf.VaddrHeap)
+	heapSize = safemath.SaturatingAddU64(heapSize, size)
+
+	if heapSize > vm.HeapMax() {
+		return syscallSuccess(0)
+	}
+
+	vm.UpdateHeapSize(heapSize)
+
+	return syscallSuccess(heapAddr)
+}
+
+var SyscallAllocFree = sbpf.SyscallFunc2(SyscallAllocFreeImpl)

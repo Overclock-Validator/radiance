@@ -12,6 +12,10 @@ type VM interface {
 	VMContext() any
 	GlobalCtx() *global.GlobalCtx
 
+	HeapMax() uint64
+	HeapSize() uint64
+	UpdateHeapSize(size uint64)
+
 	Translate(addr uint64, size uint64, write bool) ([]byte, error)
 
 	Read(addr uint64, p []byte) error
@@ -30,7 +34,7 @@ type VM interface {
 // VMOpts specifies virtual machine parameters.
 type VMOpts struct {
 	// Machine parameters
-	HeapSize int
+	HeapMax  int
 	Syscalls SyscallRegistry
 	Tracer   TraceSink
 

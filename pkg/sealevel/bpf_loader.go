@@ -380,7 +380,7 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 }
 
 func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
-	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
+	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features, true)
 
 	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, true)
 	if err != nil {
@@ -704,7 +704,7 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	klog.Infof("bpf loader - executeProgram")
 
-	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features)
+	syscallRegistry := Syscalls(&execCtx.GlobalCtx.Features, false)
 
 	loader, err := loader.NewLoaderWithSyscalls(programData, &syscallRegistry, false)
 	if err != nil {
@@ -741,7 +741,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	parameterBytes, preLens, err := serializeParameters(execCtx)
 
 	opts := &sbpf.VMOpts{
-		HeapSize: int(execCtx.TransactionContext.HeapSize),
+		HeapMax:  int(execCtx.TransactionContext.HeapSize),
 		Input:    parameterBytes,
 		Syscalls: syscallRegistry,
 		Context:  execCtx,
