@@ -33,12 +33,12 @@ const (
 	CurveOpMul = 2
 )
 
-// bn128 compression operations
+// alt bn128 compression operations
 const (
-	Bn128G1Compress   = 0
-	Bn128G1Decompress = 1
-	Bn128G2Compress   = 2
-	Bn128G2Decompress = 3
+	AltBn128G1Compress   = 0
+	AltBn128G1Decompress = 1
+	AltBn128G2Compress   = 2
+	AltBn128G2Decompress = 3
 )
 
 const (
@@ -46,6 +46,26 @@ const (
 	Bn128G2Len           = 128
 	Bn128G1CompressedLen = 32
 	Bn128G2CompressedLen = 64
+)
+
+// alt bn128 operations
+const (
+	AltBn128Add     = 0
+	AltBn128Sub     = 1
+	AltBn128Mul     = 2
+	AltBn128Pairing = 3
+)
+
+// alt bn128 input/output lengths
+const (
+	AltBn128AdditionInputLen        = 128
+	AltBn128MultiplicationInputLen  = 128
+	AltBn128PairingElementLen       = 192
+	AltBn128AdditionOutputLen       = 64
+	AltBn128MultiplicationOutputLen = 64
+	AltBn128PairingOutputLen        = 32
+	AltBn128FieldSize               = 32
+	AltBn128PointSize               = 64
 )
 
 func SyscallCurveValidatePointImpl(vm sbpf.VM, curveId, pointAddr uint64) (uint64, error) {
@@ -619,25 +639,25 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 	var outputLen uint64
 
 	switch op {
-	case Bn128G1Compress:
+	case AltBn128G1Compress:
 		{
 			cost = CUSyscallBaseCost + CUBn128G1Compress
 			outputLen = Bn128G1CompressedLen
 		}
 
-	case Bn128G1Decompress:
+	case AltBn128G1Decompress:
 		{
 			cost = CUSyscallBaseCost + CUBn128G1Decompress
 			outputLen = Bn128G1Len
 		}
 
-	case Bn128G2Compress:
+	case AltBn128G2Compress:
 		{
 			cost = CUSyscallBaseCost + CUBn128G2Compress
 			outputLen = Bn128G2CompressedLen
 		}
 
-	case Bn128G2Decompress:
+	case AltBn128G2Decompress:
 		{
 			cost = CUSyscallBaseCost + CUBn128G2Decompress
 			outputLen = Bn128G2Len
@@ -666,7 +686,7 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 	}
 
 	switch op {
-	case Bn128G1Compress:
+	case AltBn128G1Compress:
 		{
 			if inputLen != Bn128G1Len {
 				return syscallSuccess(1)
@@ -686,7 +706,7 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 			return syscallSuccess(0)
 		}
 
-	case Bn128G1Decompress:
+	case AltBn128G1Decompress:
 		{
 			if inputLen != Bn128G1CompressedLen {
 				return syscallSuccess(1)
@@ -703,7 +723,7 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 			return syscallSuccess(0)
 		}
 
-	case Bn128G2Compress:
+	case AltBn128G2Compress:
 		{
 			if inputLen != Bn128G2Len {
 				return syscallSuccess(1)
@@ -728,7 +748,7 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 			return syscallSuccess(0)
 		}
 
-	case Bn128G2Decompress:
+	case AltBn128G2Decompress:
 		{
 			if inputLen != Bn128G2CompressedLen {
 				return syscallSuccess(1)
@@ -753,3 +773,159 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 }
 
 var SyscallAltBn128Compression = sbpf.SyscallFunc4(SyscallAltBn128CompressionImpl)
+
+func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr uint64) (uint64, error) {
+	var cost uint64
+	var outputLen uint64
+
+	switch groupOp {
+	case AltBn128Add:
+		{
+			cost = CUBn128AdditionCost
+			outputLen = AltBn128AdditionOutputLen
+		}
+
+	case AltBn128Mul:
+		{
+			cost = CUBn128MultiplicationCost
+			outputLen = AltBn128MultiplicationOutputLen
+		}
+
+	case AltBn128Pairing:
+		{
+			elementLen := inputLen / AltBn128PairingElementLen
+			cost = safemath.SaturatingAddU64(inputLen, CUBn128PairingOnePairCostFirst+(CUBn128PairingOnePairCostOther*(safemath.SaturatingSubU64(elementLen, 1)))+CUSha256BaseCost+AltBn128PairingOutputLen)
+			outputLen = AltBn128PairingOutputLen
+		}
+
+	default:
+		{
+			return syscallErrCustom("SyscallError::InvalidAttribute")
+		}
+	}
+
+	execCtx := executionCtx(vm)
+	err := execCtx.ComputeMeter.Consume(cost)
+	if err != nil {
+		return syscallCuErr()
+	}
+
+	inputSlice, err := vm.Translate(inputAddr, inputLen, false)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	callResult, err := vm.Translate(resultAddr, outputLen, true)
+	if err != nil {
+		return syscallErr(err)
+	}
+
+	switch groupOp {
+	case AltBn128Add:
+		{
+			if inputLen > AltBn128AdditionInputLen {
+				return syscallSuccess(1)
+			}
+
+			x1 := new(big.Int).SetBytes(inputSlice[:32])
+			y1 := new(big.Int).SetBytes(inputSlice[32:64])
+
+			point1, err := altbn128.G1FromInts(x1, y1)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			x2 := new(big.Int).SetBytes(inputSlice[64:96])
+			y2 := new(big.Int).SetBytes(inputSlice[96:128])
+
+			point2, err := altbn128.G1FromInts(x2, y2)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			resultPoint := new(bn256.G1).Add(point1, point2)
+
+			resultBytes := resultPoint.Marshal()
+			copy(callResult, resultBytes)
+
+			return syscallSuccess(0)
+		}
+
+	case AltBn128Mul:
+		{
+			if inputLen > AltBn128MultiplicationInputLen {
+				return syscallSuccess(1)
+			}
+
+			x1 := new(big.Int).SetBytes(inputSlice[:32])
+			y1 := new(big.Int).SetBytes(inputSlice[32:64])
+
+			point, err := altbn128.G1FromInts(x1, y1)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			scalar := new(big.Int).SetBytes(inputSlice[64:])
+
+			resultPoint := new(bn256.G1).ScalarMult(point, scalar)
+
+			resultBytes := resultPoint.Marshal()
+			copy(callResult, resultBytes)
+
+			return syscallSuccess(0)
+		}
+
+	case AltBn128Pairing:
+		{
+			if (inputLen % AltBn128PairingElementLen) != 0 {
+				return syscallSuccess(1)
+			}
+
+			g1Vals := make([]*bn256.G1, 0)
+			g2Vals := make([]*bn256.G2, 0)
+
+			for count := uint64(0); count < (inputLen / AltBn128PairingElementLen); count++ {
+				g1x := new(big.Int).SetBytes(inputSlice[:(count * 32)])
+				g1y := new(big.Int).SetBytes(inputSlice[count*32 : count*64])
+				g1, err := altbn128.G1FromInts(g1x, g1y)
+				if err != nil {
+					return syscallSuccess(1)
+				}
+				g1Vals = append(g1Vals, g1)
+
+				x1 := new(big.Int).SetBytes(inputSlice[count*64 : count*96])
+				y1 := new(big.Int).SetBytes(inputSlice[count*96 : count*128])
+				x2 := new(big.Int).SetBytes(inputSlice[count*128 : count*160])
+				y2 := new(big.Int).SetBytes(inputSlice[count*160 : count*192])
+
+				xVal := gfP2{x: x1, y: y1}
+				yVal := gfP2{x: x2, y: y2}
+
+				g2, err := G2FromInts(&xVal, &yVal)
+				if err != nil {
+					return syscallSuccess(1)
+				}
+				g2Vals = append(g2Vals, g2)
+			}
+
+			if bn256.PairingCheck(g1Vals, g2Vals) {
+				out := make([]byte, 32)
+				out[31] = 1
+				copy(callResult, out)
+			} else {
+				out := make([]byte, 32)
+				copy(callResult, out)
+			}
+
+			return syscallSuccess(0)
+		}
+
+	default:
+		{
+			return syscallErrCustom("SyscallError::InvalidAttribute")
+		}
+	}
+
+}
+
+var SyscallAltBn128 = sbpf.SyscallFunc4(SyscallAltBn128CompressionImpl)
