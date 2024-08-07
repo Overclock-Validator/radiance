@@ -730,37 +730,39 @@ func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, pr
 }
 
 // SyscallInvokeSignedCImpl is an implementation of the sol_invoke_signed_c syscall
-func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (r0 uint64, err error) {
+func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUInvokeUnits)
+	err := execCtx.ComputeMeter.Consume(CUInvokeUnits)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	// translate instruction
 	ix, err := translateInstructionC(vm, instructionAddr)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	txCtx := transactionCtx(vm)
 	instructionCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	callerProgramId, err := instructionCtx.LastProgramKey(txCtx)
 
 	// translate signers
 	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsAddr)
+	if err != nil {
+		return syscallErr(err)
+	}
 
 	fmt.Printf("got C ABI CPI call from programId: %s -----> %s, %d signers\n", callerProgramId, ix.ProgramId, len(signers))
 
 	var isLoaderDeprecated bool
 	lastProgramAcct, err := instructionCtx.BorrowLastProgramAccount(txCtx)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 	if lastProgramAcct.Owner() == BpfLoaderDeprecatedAddr {
 		isLoaderDeprecated = true
@@ -769,78 +771,75 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 
 	instructionAccts, programIndices, err := execCtx.PrepareInstruction(ix, signers)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	err = checkAuthorizedProgram(execCtx, ix.ProgramId, ix.Data)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	accounts, err := translateAccountsC(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	err = execCtx.ProcessInstruction(ix.Data, instructionAccts, programIndices)
 	if err != nil {
-		r0 = uint64(TranslateErrToErrCode(err))
-		return
+		return syscallErr(err)
 	}
 
 	for _, acct := range accounts {
 		var calleeAcct *BorrowedAccount
 		calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 	}
 
-	r0 = 0
-	return
+	return syscallSuccess(0)
 }
 
 //var SyscallInvokeSignedC = sbpf.SyscallFunc5(SyscallInvokeSignedCImpl)
 
 // SyscallInvokeSignedRustImpl is an implementation of the sol_invoke_signed_rust syscall
-func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (r0 uint64, err error) {
+func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, accountInfosLen, signerSeedsAddr, signerSeedsLen uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUInvokeUnits)
+	err := execCtx.ComputeMeter.Consume(CUInvokeUnits)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	// translate instruction
 	ix, err := translateInstructionRust(vm, instructionAddr)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	txCtx := transactionCtx(vm)
 	instructionCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	callerProgramId, err := instructionCtx.LastProgramKey(txCtx)
 
 	// translate signers
 	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsAddr)
+	if err != nil {
+		return syscallErr(err)
+	}
 
 	fmt.Printf("got Rust ABI CPI call from programId: %s -----> %s, %d signers\n", callerProgramId, ix.ProgramId, len(signers))
 
 	var isLoaderDeprecated bool
 	lastProgramAcct, err := instructionCtx.BorrowLastProgramAccount(txCtx)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 	if lastProgramAcct.Owner() == BpfLoaderDeprecatedAddr {
 		isLoaderDeprecated = true
@@ -849,42 +848,37 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 
 	instructionAccts, programIndices, err := execCtx.PrepareInstruction(ix, signers)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	err = checkAuthorizedProgram(execCtx, ix.ProgramId, ix.Data)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	accounts, err := translateAccountsRust(vm, instructionAccts, programIndices, accountInfosAddr, accountInfosLen, isLoaderDeprecated)
 	if err != nil {
-		r0 = 1
-		return
+		return syscallErr(err)
 	}
 
 	err = execCtx.ProcessInstruction(ix.Data, instructionAccts, programIndices)
 	if err != nil {
-		r0 = uint64(TranslateErrToErrCode(err))
-		return
+		return syscallErr(err)
 	}
 
 	for _, acct := range accounts {
 		var calleeAcct *BorrowedAccount
 		calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 	}
 
-	r0 = 0
-	return
+	return syscallSuccess(0)
 }
 
 //var SyscallInvokeSignedRust = sbpf.SyscallFunc5(SyscallInvokeSignedRustImpl)

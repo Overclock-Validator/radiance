@@ -46,54 +46,54 @@ func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte
 	return seedsRet, nil
 }
 
-func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr uint64) (r0 uint64, err error) {
+func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
+	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	seeds, err := translateAndValidateSeeds(vm, seedsAddr, seedsLen)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	programId, err := vm.Translate(programIdAddr, 32, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	newAddress, err := solana.CreateProgramAddressBytes(seeds, programId)
 	if err != nil {
-		return 1, nil
+		return syscallSuccess(1)
 	}
 
 	address, err := vm.Translate(addressAddr, 32, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	copy(address, newAddress)
-	return 0, nil
+	return syscallSuccess(1)
 }
 
 var SyscallCreateProgramAddress = sbpf.SyscallFunc4(SyscallCreateProgramAddressImpl)
 
-func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr, bumpSeedAddr uint64) (r0 uint64, err error) {
+func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr, bumpSeedAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
+	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	seeds, err := translateAndValidateSeeds(vm, seedsAddr, seedsLen)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	programId, err := vm.Translate(programIdAddr, 32, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	for bumpSeed := uint8(math.MaxUint8); bumpSeed > 0; bumpSeed-- {
@@ -110,28 +110,31 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 			var bumpSeedOut []byte
 			bumpSeedOut, err = vm.Translate(bumpSeedAddr, 1, true)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 			var addressOut []byte
 			addressOut, err = vm.Translate(addressAddr, 32, true)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 			if !isNonOverlapping(bumpSeedAddr, 1, addressAddr, 32) {
 				err = SyscallErrCopyOverlapping
-				return
+				return syscallErr(err)
 			}
 			bumpSeedOut[0] = bumpSeed
 			copy(addressOut, newAddress)
-			return 0, nil
+
+			// address found
+			return syscallSuccess(0)
 		}
 		err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 		if err != nil {
-			return
+			return syscallCuErr()
 		}
 	}
 
-	return 1, nil
+	// address not found
+	return syscallSuccess(1)
 }
 
 var SyscallTryFindProgramAddress = sbpf.SyscallFunc5(SyscallTryFindProgramAddressImpl)

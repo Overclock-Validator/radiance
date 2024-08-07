@@ -10,25 +10,24 @@ import (
 )
 
 // SyscallGetStackHeightImpl is an implementation of the sol_get_stack_height syscall
-func SyscallGetStackHeightImpl(vm sbpf.VM) (r0 uint64, err error) {
+func SyscallGetStackHeightImpl(vm sbpf.VM) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
-	r0 = transactionCtx(vm).InstructionCtxStackHeight()
-	return
+	return syscallSuccess(transactionCtx(vm).InstructionCtxStackHeight())
 }
 
 var SyscallGetStackHeight = sbpf.SyscallFunc0(SyscallGetStackHeightImpl)
 
 // SyscallGetReturnDataImpl is an implementation of the sol_get_return_data syscall
-func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr uint64) (r0 uint64, err error) {
+func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	programId, returnData := transactionCtx(vm).ReturnData()
@@ -41,18 +40,17 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 		result := safemath.SaturatingAddU64(length, solana.PublicKeyLength) / CUCpiBytesPerUnit
 		err = execCtx.ComputeMeter.Consume(result)
 		if err != nil {
-			return
+			return syscallCuErr()
 		}
 
 		var returnDataResult []byte
 		returnDataResult, err = vm.Translate(returnDataAddr, length, true)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 
 		if len(returnData) != len(returnDataResult) {
-			err = SyscallErrInvalidLength
-			return
+			syscallErr(SyscallErrInvalidLength)
 		}
 
 		copy(returnDataResult, returnData)
@@ -60,19 +58,17 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 		var programIdResult []byte
 		programIdResult, err = vm.Translate(programIdAddr, solana.PublicKeyLength, true)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 
 		if !isNonOverlapping(returnDataAddr, length, programIdAddr, solana.PublicKeyLength) {
-			err = SyscallErrCopyOverlapping
-			return
+			return syscallErr(SyscallErrCopyOverlapping)
 		}
 
 		copy(programIdResult, programId[:])
 	}
 
-	r0 = uint64(len(returnData))
-	return
+	return syscallSuccess(uint64(len(returnData)))
 }
 
 var SyscallGetReturnData = sbpf.SyscallFunc3(SyscallGetReturnDataImpl)
@@ -80,17 +76,16 @@ var SyscallGetReturnData = sbpf.SyscallFunc3(SyscallGetReturnDataImpl)
 const MaxReturnData = 1024
 
 // SyscallSetReturnDataImpl is an implementation of the sol_set_return_data syscall
-func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (r0 uint64, err error) {
+func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
 	cost := safemath.SaturatingAddU64(length/CUCpiBytesPerUnit, CUSyscallBaseCost)
-	err = execCtx.ComputeMeter.Consume(cost)
+	err := execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	if length > MaxReturnData {
-		err = SyscallErrReturnDataTooLarge
-		return
+		return syscallErr(SyscallErrReturnDataTooLarge)
 	}
 
 	var returnData []byte
@@ -99,21 +94,20 @@ func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (r0 uint64, err e
 	} else {
 		returnData, err = vm.Translate(addr, length, false)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 	}
 
 	txCtx := transactionCtx(vm)
 	ixCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 	programId := ixCtx.ProgramId()
 
 	txCtx.SetReturnData(programId, returnData)
 
-	r0 = 0
-	return
+	return syscallSuccess(0)
 }
 
 var SyscallSetReturnData = sbpf.SyscallFunc2(SyscallSetReturnDataImpl)
@@ -123,13 +117,13 @@ func castToPtr(obj any) uint64 {
 }
 
 // SyscallGetProcessedSiblingInstructionImpl is an implementation of the sol_get_processed_sibling_instruction syscall
-func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, programIdAddr, dataAddr, accountsAddr uint64) (r0 uint64, err error) {
+func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, programIdAddr, dataAddr, accountsAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
 	txCtx := transactionCtx(vm)
 
-	err = execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	stackHeight := execCtx.StackHeight()
@@ -141,7 +135,7 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 	for indexInTrace := instrTraceLen; indexInTrace > 0; indexInTrace-- {
 		instrCtx, err := txCtx.InstructionCtxAtIndexInTrace(indexInTrace)
 		if err != nil {
-			return r0, err
+			return syscallErr(err)
 		}
 		if instrCtx.StackHeight() < stackHeight {
 			break
@@ -158,7 +152,7 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 	if instrCtxFound != nil {
 		resultsHeaderBytes, err := vm.Translate(metaAddr, ProcessedSiblingInstructionSize, false)
 		if err != nil {
-			return r0, err
+			return syscallErr(err)
 		}
 
 		reader := bytes.NewReader(resultsHeaderBytes)
@@ -166,7 +160,7 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 		var resultHeader ProcessedSiblingInstruction
 		err = resultHeader.Unmarshal(reader)
 		if err != nil {
-			return r0, err
+			return syscallErr(err)
 		}
 
 		if resultHeader.DataLen == uint64(len(instrCtxFound.Data)) &&
@@ -174,19 +168,19 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 
 			programIdBytes, err := vm.Translate(programIdAddr, solana.PublicKeyLength, true)
 			if err != nil {
-				return r0, err
+				return syscallErr(err)
 			}
 			programId := solana.PublicKeyFromBytes(programIdBytes)
 
 			data, err := vm.Translate(dataAddr, resultHeader.DataLen, true)
 			if err != nil {
-				return r0, err
+				return syscallErr(err)
 			}
 
 			accountMetaDataSize := safemath.SaturatingMulU64(resultHeader.AccountsLen, AccountMetaSize)
 			accountMetaSliceBytes, err := vm.Translate(accountsAddr, accountMetaDataSize, true)
 			if err != nil {
-				return r0, err
+				return syscallErr(err)
 			}
 
 			reader.Reset(accountMetaSliceBytes)
@@ -196,7 +190,7 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 				var account AccountMeta
 				err = account.Unmarshal(reader)
 				if err != nil {
-					return r0, err
+					return syscallErr(err)
 				}
 				accounts = append(accounts, account)
 			}
@@ -207,12 +201,12 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 				!isNonOverlapping(castToPtr(programId), solana.PublicKeyLength, castToPtr(data), resultHeader.DataLen) ||
 				!isNonOverlapping(castToPtr(programId), solana.PublicKeyLength, castToPtr(accounts), accountMetaDataSize) ||
 				!isNonOverlapping(castToPtr(data), resultHeader.DataLen, castToPtr(accounts), accountMetaDataSize) {
-				return r0, SyscallErrCopyOverlapping
+				return syscallErr(SyscallErrCopyOverlapping)
 			}
 
 			pk, err := instrCtxFound.LastProgramKey(transactionCtx(vm))
 			if err != nil {
-				return r0, err
+				return syscallErr(err)
 			}
 
 			// copy out programID pubkey
@@ -227,21 +221,21 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 			for instrAcctIdx := uint64(0); instrAcctIdx < instrCtxFound.NumberOfInstructionAccounts(); instrAcctIdx++ {
 				idx, err := instrCtxFound.IndexOfInstructionAccountInTransaction(instrAcctIdx)
 				if err != nil {
-					return r0, err
+					return syscallErr(err)
 				}
 				key, err := txCtx.KeyOfAccountAtIndex(idx)
 				if err != nil {
-					return r0, err
+					return syscallErr(err)
 				}
 
 				isSigner, err := instrCtxFound.IsInstructionAccountSigner(instrAcctIdx)
 				if err != nil {
-					return r0, err
+					return syscallErr(err)
 				}
 
 				isWritable, err := instrCtxFound.IsInstructionAccountWritable(instrAcctIdx)
 				if err != nil {
-					return r0, err
+					return syscallErr(err)
 				}
 
 				acctMeta := AccountMeta{Pubkey: key, IsSigner: isSigner, IsWritable: isWritable}
@@ -258,12 +252,10 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 
 		copy(resultsHeaderBytes, resultHeaderOutBytes)
 
-		r0 = 1
-		return r0, nil
+		return syscallSuccess(1) // true
 	}
 
-	r0 = 0
-	return
+	return syscallSuccess(0) // false
 }
 
 var SyscallGetProcessedSiblingInstruction = sbpf.SyscallFunc5(SyscallGetProcessedSiblingInstructionImpl)

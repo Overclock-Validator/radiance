@@ -27,55 +27,67 @@ func memmoveImplInternal(vm sbpf.VM, dst, src, n uint64) (err error) {
 
 // SyscallMemcpyImpl is the implementation of the memcpy (sol_memcpy_) syscall.
 // Overlapping src and dst for a given n bytes to be copied results in an error being returned.
-func SyscallMemcpyImpl(vm sbpf.VM, dst, src, n uint64) (r0 uint64, err error) {
+func SyscallMemcpyImpl(vm sbpf.VM, dst, src, n uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = MemOpConsume(execCtx, n)
+	err := MemOpConsume(execCtx, n)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	// memcpy when src and dst are overlapping results in undefined behaviour,
 	// hence check if there is an overlap and return early with an error if so.
 	if !isNonOverlapping(src, n, dst, n) {
-		return r0, SyscallErrCopyOverlapping
+		return syscallErr(SyscallErrCopyOverlapping)
+	}
+
+	if n == 0 {
+		return syscallSuccess(0)
 	}
 
 	err = memmoveImplInternal(vm, dst, src, n)
-	return
+	if err != nil {
+		return syscallErr(err)
+	} else {
+		return syscallSuccess(0)
+	}
 }
 
 var SyscallMemcpy = sbpf.SyscallFunc3(SyscallMemcpyImpl)
 
 // SyscallMemmoveImpl is the implementation for the memmove (sol_memmove_) syscall.
-func SyscallMemmoveImpl(vm sbpf.VM, dst, src, n uint64) (r0 uint64, err error) {
+func SyscallMemmoveImpl(vm sbpf.VM, dst, src, n uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = MemOpConsume(execCtx, n)
+	err := MemOpConsume(execCtx, n)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	err = memmoveImplInternal(vm, dst, src, n)
-	return
+	if err != nil {
+		return syscallErr(err)
+	} else {
+		return syscallSuccess(0)
+	}
 }
 
 var SyscallMemmove = sbpf.SyscallFunc3(SyscallMemmoveImpl)
 
 // SyscallMemcmpImpl is the implementation for the memcmp (sol_memcmp_) syscall.
-func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64) (r0 uint64, err error) {
+func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = MemOpConsume(execCtx, n)
+	err := MemOpConsume(execCtx, n)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	slice1, err := vm.Translate(addr1, n, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	slice2, err := vm.Translate(addr2, n, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	cmpResult := int32(0)
@@ -88,29 +100,33 @@ func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64) (r0 uint6
 		}
 	}
 	err = vm.Write32(resultAddr, uint32(cmpResult))
-	return
+	if err != nil {
+		return syscallErr(err)
+	} else {
+		return syscallSuccess(0)
+	}
 }
 
 var SyscallMemcmp = sbpf.SyscallFunc4(SyscallMemcmpImpl)
 
 // SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
-func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64) (r0 uint64, err error) {
+func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = MemOpConsume(execCtx, n)
+	err := MemOpConsume(execCtx, n)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	mem, err := vm.Translate(dst, n, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	for i := uint64(0); i < n; i++ {
 		mem[i] = byte(c)
 	}
 
-	return
+	return syscallSuccess(0)
 }
 
 var SyscallMemset = sbpf.SyscallFunc3(SyscallMemsetImpl)

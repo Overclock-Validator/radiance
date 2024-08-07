@@ -16,21 +16,20 @@ import (
 )
 
 // SyscallSha256Impl is the implementation for the sol_sha256 syscall
-func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
+func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
 	if valsLen > CUSha256MaxSlices {
-		err = SyscallErrTooManySlices
-		return
+		return syscallErr(SyscallErrTooManySlices)
 	}
 
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSha256BaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	hashResult, err := vm.Translate(resultsAddr, 32, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	hasher := sha256.New()
@@ -43,7 +42,7 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 		// Safety: valsLen*16 cannot overflow because of the check versus CUSha256MaxSlices above
 		vals, err = vm.Translate(valsAddr, valsLen*16, false)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 
 		var data []byte
@@ -54,12 +53,12 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 			var vec VectorDescrC
 			err = vec.Unmarshal(reader)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			data, err = vm.Translate(vec.Addr, vec.Len, false)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
@@ -68,33 +67,32 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 			}
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
-				return
+				return syscallCuErr()
 			}
 			hasher.Write(data)
 		}
 	}
 	copy(hashResult[:], hasher.Sum(nil))
-	return
+	return syscallSuccess(0)
 }
 
 var SyscallSha256 = sbpf.SyscallFunc3(SyscallSha256Impl)
 
 // SyscallKeccak256Impl is the implementation for the sol_keccak256 syscall
-func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
+func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
 	if valsLen > CUSha256MaxSlices {
-		err = SyscallErrTooManySlices
-		return
+		return syscallErr(SyscallErrTooManySlices)
 	}
 
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSha256BaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	hashResult, err := vm.Translate(resultsAddr, 32, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	hasher := sha3.NewLegacyKeccak256()
@@ -107,7 +105,7 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0
 		// Safety: valsLen*16 cannot overflow because of the check versus CUSha256MaxSlices above
 		vals, err = vm.Translate(valsAddr, valsLen*16, false)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 
 		var data []byte
@@ -117,12 +115,12 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0
 			var vec VectorDescrC
 			err = vec.Unmarshal(reader)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			data, err = vm.Translate(vec.Addr, vec.Len, false)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
@@ -132,34 +130,33 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0
 
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
-				return
+				return syscallCuErr()
 			}
 
 			hasher.Write(data)
 		}
 	}
 	copy(hashResult[:], hasher.Sum(nil))
-	return
+	return syscallSuccess(0)
 }
 
 var SyscallKeccak256 = sbpf.SyscallFunc3(SyscallKeccak256Impl)
 
 // SyscallBlake3Impl is the implementation for the sol_blake3 syscall
-func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 uint64, err error) {
+func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
 	if valsLen > CUSha256MaxSlices {
-		err = SyscallErrTooManySlices
-		return
+		return syscallErr(SyscallErrTooManySlices)
 	}
 
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSha256BaseCost)
+	err := execCtx.ComputeMeter.Consume(CUSha256BaseCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	hashResult, err := vm.Translate(resultsAddr, 32, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	hasher := blake3.New()
@@ -172,7 +169,7 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 		// Safety: valsLen*16 cannot overflow because of the check versus CUSha256MaxSlices above
 		vals, err = vm.Translate(valsAddr, valsLen*16, false)
 		if err != nil {
-			return
+			return syscallErr(err)
 		}
 
 		var data []byte
@@ -182,12 +179,12 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 			var vec VectorDescrC
 			err = vec.Unmarshal(reader)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			data, err = vm.Translate(vec.Addr, vec.Len, false)
 			if err != nil {
-				return
+				return syscallErr(err)
 			}
 
 			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
@@ -197,39 +194,39 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (r0 ui
 
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
-				return
+				return syscallCuErr()
 			}
 
 			hasher.Write(data)
 		}
 	}
 	copy(hashResult[:], hasher.Sum(nil))
-	return
+	return syscallSuccess(0)
 }
 
 var SyscallBlake3 = sbpf.SyscallFunc3(SyscallBlake3Impl)
 
 // SyscallSecp256k1Recover is an implementation of the sol_secp256k1_recover syscall
-func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64) (r0 uint64, err error) {
+func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
-	err = execCtx.ComputeMeter.Consume(CUSecP256k1RecoverCost)
+	err := execCtx.ComputeMeter.Consume(CUSecP256k1RecoverCost)
 	if err != nil {
-		return
+		return syscallCuErr()
 	}
 
 	hash, err := vm.Translate(hashAddr, 32, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	signature, err := vm.Translate(signatureAddr, 64, false)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	recoverResult, err := vm.Translate(resultAddr, 64, true)
 	if err != nil {
-		return
+		return syscallErr(err)
 	}
 
 	// the Labs validator calls `libsecp256k1::Message::parse_slice` and returns the error
@@ -239,14 +236,12 @@ func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureA
 
 	// check for invalid recovery ID
 	if recoveryIdVal >= 4 {
-		r0 = 2 // Secp256k1RecoverError::InvalidHash
-		return
+		return syscallSuccess(2) // Secp256k1RecoverError::InvalidRecoveryId
 	}
 
 	err = parseAndValidateSignature(signature)
 	if err != nil {
-		r0 = 3 // Secp256k1RecoverError::InvalidSignature
-		return
+		return syscallSuccess(3) // Secp256k1RecoverError::InvalidSignature
 	}
 
 	sigAndRecoveryId := make([]byte, 65)
@@ -255,13 +250,11 @@ func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureA
 
 	recoveredPubKey, err := secp256k1.RecoverPubkey(hash, sigAndRecoveryId)
 	if err != nil {
-		r0 = 3 // Secp256k1RecoverError::InvalidSignature
-		return
+		return syscallSuccess(3) // Secp256k1RecoverError::InvalidSignature
 	}
 
-	copy(recoverResult, recoveredPubKey)
-	r0 = 0
-	return
+	copy(recoverResult, recoveredPubKey[1:])
+	return syscallSuccess(0)
 }
 
 var SyscallSecp256k1Recover = sbpf.SyscallFunc4(SyscallSecp256k1RecoverImpl)
