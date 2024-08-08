@@ -937,7 +937,6 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 			defer acct.Drop()
 
-			klog.Infof("**** authNonceAcct.Pubkey = %s", authNonceAcct.Pubkey)
 			err = SystemProgramAuthorizeNonceAccount(execCtx, acct, authNonceAcct.Pubkey, signers)
 		}
 
@@ -1139,8 +1138,7 @@ func SystemProgramAllocate(execCtx *ExecutionCtx, acct *BorrowedAccount, address
 }
 
 func SystemProgramAssign(execCtx *ExecutionCtx, acct *BorrowedAccount, address solana.PublicKey, owner solana.PublicKey, signers []solana.PublicKey) error {
-	klog.Infof("SystemProgramAssign")
-
+	klog.Infof("SystemProgramAssign %s to %s", acct.Key(), owner)
 	if acct.Owner() == owner {
 		return nil
 	}

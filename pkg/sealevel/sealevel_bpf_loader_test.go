@@ -2769,6 +2769,7 @@ func TestExecute_Tx_BpfLoader_Upgrade_Buffer_Wrong_Authority_Failure(t *testing.
 	var clock SysvarClock
 	clock.Slot = 1234
 	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
 	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
 	WriteClockSysvar(&execCtx.Accounts, clock)
 
@@ -2776,7 +2777,6 @@ func TestExecute_Tx_BpfLoader_Upgrade_Buffer_Wrong_Authority_Failure(t *testing.
 	rent.LamportsPerUint8Year = 1
 	rent.ExemptionThreshold = 1
 	rent.BurnPercent = 0
-
 	rentAcct := accounts.Account{}
 	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
 	WriteRentSysvar(&execCtx.Accounts, rent)

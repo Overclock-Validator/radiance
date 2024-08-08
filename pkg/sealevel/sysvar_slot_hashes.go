@@ -7,6 +7,7 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
+	"k8s.io/klog/v2"
 )
 
 const SysvarSlotHashesAddrStr = "SysvarS1otHashes111111111111111111111111111"
@@ -80,10 +81,12 @@ func (sh *SysvarSlotHashes) Position(slot uint64) (uint64, error) {
 func ReadSlotHashesSysvar(accts *accounts.Accounts) (SysvarSlotHashes, error) {
 	slotHashesSysvarAcct, err := (*accts).GetAccount(&SysvarSlotHashesAddr)
 	if err != nil {
+		klog.Infof("failed for slothashes here [1]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
 	if slotHashesSysvarAcct.Lamports == 0 {
+		klog.Infof("failed for slothashes here [2]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
@@ -92,6 +95,7 @@ func ReadSlotHashesSysvar(accts *accounts.Accounts) (SysvarSlotHashes, error) {
 	var slotHashes SysvarSlotHashes
 	err = slotHashes.UnmarshalWithDecoder(dec)
 	if err != nil {
+		klog.Infof("failed for slothashes here [3]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
@@ -133,6 +137,7 @@ func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes
 		err = fmt.Errorf("failed to write newly serialized SlotHashes sysvar to sysvar account: %w", err)
 		panic(err)
 	}
+	klog.Infof("wrote SlotHashes sysvar")
 }
 
 func (slotHashes *SysvarSlotHashes) FromInstrAcct(execCtx *ExecutionCtx, instrAcctIdx uint64) error {

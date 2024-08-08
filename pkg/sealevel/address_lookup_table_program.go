@@ -76,6 +76,23 @@ func (createLookupTable *AddrLookupTableInstrCreateLookupTable) UnmarshalWithDec
 	return err
 }
 
+func (createLookupTable *AddrLookupTableInstrCreateLookupTable) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(AddrLookupTableInstrTypeCreateLookupTable, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(createLookupTable.RecentSlot, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteByte(createLookupTable.BumpSeed)
+	return err
+}
+
 func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	size, err := decoder.ReadUint64(bin.LE)
 	if err != nil {
@@ -89,6 +106,30 @@ func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDec
 		}
 		pk := solana.PublicKeyFromBytes(pkBytes)
 		extendLookupTable.NewAddresses = append(extendLookupTable.NewAddresses, pk)
+	}
+
+	return nil
+}
+
+func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(AddrLookupTableInstrTypeExtendLookupTable, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	addressesLen := uint64(len(extendLookupTable.NewAddresses))
+	err = encoder.WriteUint64(addressesLen, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	for _, addr := range extendLookupTable.NewAddresses {
+		err = encoder.WriteBytes(addr[:], false)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -213,7 +254,7 @@ func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
 	rawAddrData := data[AddressLookupTableMetaSize:]
 	rawAddrDataLen := len(rawAddrData)
 
-	if rawAddrDataLen == 0 || (rawAddrDataLen%solana.PublicKeyLength) != 0 {
+	if (rawAddrDataLen % solana.PublicKeyLength) != 0 {
 		return nil, InstrErrInvalidAccountData
 	}
 
@@ -348,6 +389,8 @@ func setAddrTableLookupAccountStateWithExtension(acct *BorrowedAccount, state *A
 }
 
 func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentSlot uint64, bumpSeed byte) error {
+	klog.Infof("AddressLookupTableCreateLookupTable")
+
 	txCtx := execCtx.TransactionContext
 
 	instrCtx, err := txCtx.CurrentInstructionCtx()
@@ -441,12 +484,13 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	}
 
 	minBalance := rent.MinimumBalance(tableAcctDataLen)
-	if minBalance > 1 {
+	if minBalance < 1 {
 		minBalance = 1
 	}
 	requiredLamports := safemath.SaturatingSubU64(minBalance, lookupTableLamports)
 
 	if requiredLamports > 0 {
+		klog.Infof("calling transfer via native invoke")
 		txInstr := newTransferInstruction(payerKey, tableKey, requiredLamports)
 		err = execCtx.NativeInvoke(*txInstr, []solana.PublicKey{payerKey})
 		if err != nil {
@@ -454,12 +498,14 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		}
 	}
 
+	klog.Infof("calling allocate via native invoke")
 	allocInstr := newAllocateInstruction(tableKey, tableAcctDataLen)
 	err = execCtx.NativeInvoke(*allocInstr, []solana.PublicKey{tableKey})
 	if err != nil {
 		return err
 	}
 
+	klog.Infof("calling assign via native invoke")
 	assignInstr := newAssignInstruction(tableKey, AddressLookupTableAddr)
 	err = execCtx.NativeInvoke(*assignInstr, []solana.PublicKey{tableKey})
 	if err != nil {
@@ -471,7 +517,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 		return err
 	}
 
-	newState := &AddressLookupTable{State: AddressLookupTableProgramStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey}}
+	newState := &AddressLookupTable{State: AddressLookupTableProgramStateLookupTable, Meta: LookupTableMeta{Authority: &authorityKey, DeactivationSlot: math.MaxUint64}}
 	err = setAddrTableLookupAccountState(lookupTableAcct, newState, execCtx.GlobalCtx.Features)
 	lookupTableAcct.Drop()
 
@@ -655,7 +701,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	}
 
 	minBalance := rent.MinimumBalance(newTableDataLen)
-	if minBalance > 1 {
+	if minBalance < 1 {
 		minBalance = 1
 	}
 	requiredLamports := safemath.SaturatingSubU64(minBalance, lookupTableLamports)

@@ -74,7 +74,7 @@ func (txCtx *TransactionCtx) CurrentInstructionCtx() (*InstructionCtx, error) {
 	if err != nil {
 		return nil, InstrErrCallDepth
 	}
-	return &txCtx.InstructionTrace[level], nil
+	return txCtx.InstructionCtxAtNestingLevel(level)
 }
 
 func (txCtx *TransactionCtx) ReturnData() (solana.PublicKey, []byte) {
@@ -127,11 +127,7 @@ func (txCtx *TransactionCtx) InstructionCtxAtNestingLevel(nestingLevel uint64) (
 		return nil, InstrErrCallDepth
 	}
 	idxInTrace := txCtx.InstructionStack[nestingLevel]
-	ixCtx, err := txCtx.InstructionCtxAtIndexInTrace(idxInTrace)
-	if err != nil {
-		return nil, err
-	}
-	return ixCtx, nil
+	return txCtx.InstructionCtxAtIndexInTrace(idxInTrace)
 }
 
 func (txCtx *TransactionCtx) AccountAtIndex(idxInTx uint64) (*accounts.Account, error) {
