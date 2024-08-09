@@ -103,7 +103,11 @@ func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (uint64, error) {
 	if err != nil {
 		return syscallErr(err)
 	}
-	programId := ixCtx.ProgramId()
+
+	programId, err := ixCtx.LastProgramKey(txCtx)
+	if err != nil {
+		return syscallErr(err)
+	}
 
 	txCtx.SetReturnData(programId, returnData)
 

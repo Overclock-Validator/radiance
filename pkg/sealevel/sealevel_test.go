@@ -756,6 +756,90 @@ func TestInterpreter_Get_Stack_Height_Syscall(t *testing.T) {
 	assert.Equal(t, nil, err)
 }
 
+func TestInterpreter_ReturnData_Syscalls(t *testing.T) {
+	// program data account
+	programDataPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programDataPubkey := programDataPrivKey.PublicKey()
+	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{Slot: 0, UpgradeAuthorityAddress: nil}}
+	validProgramBytes := fixtures.Load(t, "sbpf", "return_data.so")
+	programDataStateWriter := new(bytes.Buffer)
+	programDataStateEncoder := bin.NewBinEncoder(programDataStateWriter)
+	err = programDataAcctState.MarshalWithEncoder(programDataStateEncoder)
+	assert.NoError(t, err)
+	programDataStateWriter.Write(validProgramBytes)
+	programDataStateBytes := make([]byte, len(validProgramBytes)+upgradeableLoaderSizeOfProgramDataMetaData)
+	copy(programDataStateBytes, programDataStateWriter.Bytes())
+	copy(programDataStateBytes[upgradeableLoaderSizeOfProgramDataMetaData:], validProgramBytes)
+
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 0, Data: programDataStateBytes, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram, Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataAcct.Key}}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programData := make([]byte, 5000)
+	copy(programData, programBytes)
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	instrData := make([]byte, 0)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: programAcct.Key, IsSigner: false, IsWritable: false}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	pk := [32]byte(programDataAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programDataAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	pubkey, returnData := execCtx.TransactionContext.ReturnData()
+
+	// the bpf testcase program itself tests that the return data string is as expected, but test here
+	// again just for completeness.
+	expectedString := "the quick brown fox jumps over the lazy dog"
+	expectedBytes := make([]byte, len(expectedString)+1) // +1 for the NULL terminator
+	copy(expectedBytes, expectedString)
+	assert.Equal(t, expectedBytes, returnData)
+
+	// and test also the programID
+	assert.Equal(t, programPubkey[:], pubkey[:])
+}
+
 type executeCase struct {
 	Name    string
 	Program string
