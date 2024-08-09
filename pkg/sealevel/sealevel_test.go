@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.firedancer.io/radiance/fixtures"
 	"go.firedancer.io/radiance/pkg/cu"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/sbpf/loader"
 )
@@ -649,6 +650,34 @@ func TestInterpreter_TestPanic(t *testing.T) {
 	err = interpreter.Run()
 	require.Error(t, err)
 	assert.Equal(t, err.Error(), "exception at 16: SBF program Panicked in some_file_1234.c at 1337:10")
+}
+
+func TestInterpreter_Secp256k1(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "secp256k1_recover.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+
+	syscalls := Syscalls(new(features.Features), false)
+
+	var log LogRecorder
+
+	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
+		HeapMax:  32 * 1024,
+		Input:    nil,
+		MaxCU:    10000,
+		Syscalls: syscalls,
+		Context:  &ExecutionCtx{Log: &log, ComputeMeter: cu.NewComputeMeterDefault()},
+	})
+	require.NotNil(t, interpreter)
+
+	err = interpreter.Run()
+	require.NoError(t, err)
 }
 
 type executeCase struct {
