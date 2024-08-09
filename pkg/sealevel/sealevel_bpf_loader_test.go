@@ -2908,7 +2908,7 @@ func TestExecute_Tx_BpfLoader_Invoke_Bpf_Program_Success(t *testing.T) {
 	assert.NoError(t, err)
 	programDataPubkey := programDataPrivKey.PublicKey()
 	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{Slot: 0, UpgradeAuthorityAddress: nil}}
-	validProgramBytes := fixtures.Load(t, "sbpf", "noop_aligned.so")
+	validProgramBytes := fixtures.Load(t, "sbpf", "get_stack_height.so")
 	programDataStateWriter := new(bytes.Buffer)
 	programDataStateEncoder := bin.NewBinEncoder(programDataStateWriter)
 	err = programDataAcctState.MarshalWithEncoder(programDataStateEncoder)
