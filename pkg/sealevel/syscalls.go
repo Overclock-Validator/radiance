@@ -63,7 +63,7 @@ func Syscalls(f *features.Features, isDeploy bool) sbpf.SyscallRegistry {
 	}
 
 	if f.IsActive(features.LastRestartSlotSysvar) {
-		reg.Register("sol_get_last_restart_slot_sysvar", SyscallGetLastRestartSlotSysvar)
+		reg.Register("sol_get_last_restart_slot", SyscallGetLastRestartSlotSysvar)
 	}
 
 	var SyscallInvokeSignedC = sbpf.SyscallFunc5(SyscallInvokeSignedCImpl)

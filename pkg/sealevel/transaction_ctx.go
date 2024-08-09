@@ -53,6 +53,7 @@ func NewTestTransactionCtx(txAccts TransactionAccounts, instrStackCapacity uint6
 	txCtx.InstructionTraceCapacity = instrTraceCapacity
 	txCtx.InstructionStack = make([]uint64, 0, instrStackCapacity)
 	txCtx.InstructionTrace = append(txCtx.InstructionTrace, InstructionCtx{})
+	txCtx.HeapSize = 32 * 1024
 
 	for _, acct := range txAccts.Accounts {
 		txCtx.AccountKeys = append(txCtx.AccountKeys, acct.Key)

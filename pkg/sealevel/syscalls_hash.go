@@ -304,6 +304,7 @@ func PoseidonHash(input [][]byte, isBigEndian bool) ([]byte, error) {
 
 func SyscallPoseidonImpl(vm sbpf.VM, parameters, endianness, valsAddr, valsLen, resultAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
+
 	if parameters != 0 {
 		return syscallErrCustom("PoseidonSyscallError::InvalidParameters")
 	}
