@@ -3,6 +3,7 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"go.firedancer.io/radiance/pkg/sbpf"
 )
@@ -61,7 +62,8 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 	}
 
 	binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
-	binary.LittleEndian.PutUint64(rentDst[8:16], uint64(rent.ExemptionThreshold))
+	exemptionThreshold := math.Float64bits(rent.ExemptionThreshold)
+	binary.LittleEndian.PutUint64(rentDst[8:16], exemptionThreshold)
 	rentDst[16] = rent.BurnPercent
 
 	return syscallSuccess(0)
@@ -79,7 +81,7 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) 
 		return syscallCuErr()
 	}
 
-	epochScheduleDst, err := vm.Translate(addr, SysvarEpochScheduleStructLen, true)
+	epochScheduleDst, err := vm.Translate(addr, 33, true)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -89,17 +91,15 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) 
 		return syscallErr(err)
 	}
 
-	binary.LittleEndian.PutUint64(epochScheduleDst[:8], epochSchedule.SlotsPerEpoch)
-	binary.LittleEndian.PutUint64(epochScheduleDst[8:16], uint64(epochSchedule.LeaderScheduleSlotOffset))
+	buf := new(bytes.Buffer)
 
-	if epochSchedule.Warmup {
-		epochScheduleDst[16] = 1
-	} else {
-		epochScheduleDst[16] = 0
-	}
+	binary.Write(buf, binary.LittleEndian, epochSchedule.SlotsPerEpoch)
+	binary.Write(buf, binary.LittleEndian, epochSchedule.LeaderScheduleSlotOffset)
+	binary.Write(buf, binary.LittleEndian, epochSchedule.Warmup)
+	binary.Write(buf, binary.LittleEndian, epochSchedule.FirstNormalEpoch)
+	binary.Write(buf, binary.LittleEndian, epochSchedule.FirstNormalSlot)
 
-	binary.LittleEndian.PutUint64(epochScheduleDst[17:25], epochSchedule.FirstNormalEpoch)
-	binary.LittleEndian.PutUint64(epochScheduleDst[25:33], epochSchedule.FirstNormalSlot)
+	copy(epochScheduleDst, buf.Bytes())
 
 	return syscallSuccess(0)
 }
@@ -130,7 +130,7 @@ func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 	binary.Write(buf, binary.LittleEndian, epochRewards.DistributionStartingBlockHeight)
 	binary.Write(buf, binary.LittleEndian, epochRewards.NumPartitions)
 	binary.Write(buf, binary.LittleEndian, epochRewards.ParentBlockhash)
-	binary.Write(buf, binary.LittleEndian, epochRewards.TotalPoints)
+	binary.Write(buf, binary.LittleEndian, epochRewards.TotalPoints.Bytes())
 	binary.Write(buf, binary.LittleEndian, epochRewards.TotalRewards)
 	binary.Write(buf, binary.LittleEndian, epochRewards.DistributedRewards)
 	binary.Write(buf, binary.LittleEndian, epochRewards.Active)

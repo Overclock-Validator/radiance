@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -911,6 +912,125 @@ func TestInterpreter_Poseidon_Syscall(t *testing.T) {
 
 	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
 	assert.Equal(t, nil, err)
+}
+
+func TestInterpreter_Get_Sysvar_Syscalls(t *testing.T) {
+	// program data account
+	programDataPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programDataPubkey := programDataPrivKey.PublicKey()
+	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{Slot: 0, UpgradeAuthorityAddress: nil}}
+	validProgramBytes := fixtures.Load(t, "sbpf", "sysvars.so")
+	programDataStateWriter := new(bytes.Buffer)
+	programDataStateEncoder := bin.NewBinEncoder(programDataStateWriter)
+	err = programDataAcctState.MarshalWithEncoder(programDataStateEncoder)
+	assert.NoError(t, err)
+	programDataStateWriter.Write(validProgramBytes)
+	programDataStateBytes := make([]byte, len(validProgramBytes)+upgradeableLoaderSizeOfProgramDataMetaData)
+	copy(programDataStateBytes, programDataStateWriter.Bytes())
+	copy(programDataStateBytes[upgradeableLoaderSizeOfProgramDataMetaData:], validProgramBytes)
+
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 0, Data: programDataStateBytes, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram, Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataAcct.Key}}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programData := make([]byte, 5000)
+	copy(programData, programBytes)
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	instrData := make([]byte, 0)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: programAcct.Key, IsSigner: false, IsWritable: false}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	var log LogRecorder
+	execCtx := ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+	var clock SysvarClock
+	clock.Slot = 1234
+	clock.Epoch = 1111
+	clock.EpochStartTimestamp = 2222
+	clock.UnixTimestamp = 3
+	clock.LeaderScheduleEpoch = 100000
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 12
+	rent.ExemptionThreshold = 34
+	rent.BurnPercent = 56
+
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var epochSchedule SysvarEpochSchedule
+	epochSchedule.SlotsPerEpoch = 1111
+	epochSchedule.LeaderScheduleSlotOffset = 2222
+	epochSchedule.Warmup = true
+	epochSchedule.FirstNormalEpoch = 4444
+	epochSchedule.FirstNormalSlot = 5555
+
+	epochScheduleAcct := accounts.Account{}
+	epochScheduleAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarEpochScheduleAddr, &epochScheduleAcct)
+	WriteEpochScheduleSysvar(&execCtx.Accounts, epochSchedule)
+
+	var lastRestartSlot SysvarLastRestartSlot
+	lastRestartSlot.LastRestartSlot = 989898
+	lastRestartSlotAcct := accounts.Account{}
+	lastRestartSlotAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarLastRestartSlotAddr, &lastRestartSlotAcct)
+	WriteLastRestartSlotSysvar(&execCtx.Accounts, lastRestartSlot)
+
+	var epochRewards SysvarEpochRewards
+	epochRewards.DistributionStartingBlockHeight = 1234
+	epochRewards.NumPartitions = 4321
+	copy(epochRewards.ParentBlockhash[:], "abaaaaaaaaaaaaaaaaaaaaaaaaaaaada")
+	epochRewards.TotalPoints.Lo = 0xffffffffffffffff
+	epochRewards.TotalPoints.Hi = 0xeeeeeeeeeeeeeeee
+	epochRewards.TotalRewards = 5656
+	epochRewards.DistributedRewards = 6767
+	epochRewards.Active = false
+	epochRewardsAcct := accounts.Account{}
+	epochRewardsAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarEpochRewardsAddr, &epochRewardsAcct)
+	WriteEpochRewardsSysvar(&execCtx.Accounts, epochRewards)
+
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.LastRestartSlotSysvar, 0)
+	f.EnableFeature(features.EnablePartitionedEpochReward, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	pk := [32]byte(programDataAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programDataAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	for _, l := range log.Logs {
+		fmt.Printf("log: %s\n", l)
+	}
 }
 
 type executeCase struct {

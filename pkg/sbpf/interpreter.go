@@ -100,7 +100,9 @@ mainLoop:
 			r[ins.Dst()] = uint64(v)
 		case OpLdxdw:
 			vma := uint64(int64(r[ins.Src()]) + int64(ins.Off()))
-			r[ins.Dst()], err = ip.Read64(vma)
+			var v uint64
+			v, err = ip.Read64(vma)
+			r[ins.Dst()] = v
 		case OpStb:
 			vma := uint64(int64(r[ins.Dst()]) + int64(ins.Off()))
 			err = ip.Write8(vma, uint8(ins.Uimm()))

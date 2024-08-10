@@ -16,7 +16,7 @@ func transactionCtx(vm sbpf.VM) *TransactionCtx {
 }
 
 func getAccounts(vm sbpf.VM) *accounts.Accounts {
-	return vm.VMContext().(*ExecutionCtx).GlobalCtx.Accounts
+	return &vm.VMContext().(*ExecutionCtx).Accounts
 }
 
 func (t *TransactionCtx) newVMOpts(params *Params) *sbpf.VMOpts {
