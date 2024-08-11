@@ -477,23 +477,23 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (
 		if write {
 			return nil, NewExcBadAccess(addr, size, write, "write to program")
 		}
-		if lo+uint64(size) >= uint64(len(ip.ro)) {
+		if lo+size > uint64(len(ip.ro)) {
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds program read")
 		}
 		return unsafe.Pointer(&ip.ro[lo]), nil
 	case VaddrStack >> 32:
 		mem := ip.stack.GetFrame(uint32(addr))
-		if uint64(len(mem)) < size {
+		if size > uint64(len(mem)) {
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds stack access")
 		}
 		return unsafe.Pointer(&mem[0]), nil
 	case VaddrHeap >> 32:
-		if lo+uint64(size) >= uint64(len(ip.heap)) {
+		if lo+size > uint64(len(ip.heap)) {
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds heap access")
 		}
 		return unsafe.Pointer(&ip.heap[lo]), nil
 	case VaddrInput >> 32:
-		if lo+uint64(size) >= uint64(len(ip.input)) {
+		if lo+size > uint64(len(ip.input)) {
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds input access")
 		}
 		return unsafe.Pointer(&ip.input[lo]), nil

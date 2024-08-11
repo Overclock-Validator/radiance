@@ -827,16 +827,19 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 				return syscallSuccess(1)
 			}
 
-			x1 := new(big.Int).SetBytes(inputSlice[:32])
-			y1 := new(big.Int).SetBytes(inputSlice[32:64])
+			input := make([]byte, AltBn128AdditionInputLen)
+			copy(input, inputSlice)
+
+			x1 := new(big.Int).SetBytes(input[:32])
+			y1 := new(big.Int).SetBytes(input[32:64])
 
 			point1, err := altbn128.G1FromInts(x1, y1)
 			if err != nil {
 				return syscallSuccess(1)
 			}
 
-			x2 := new(big.Int).SetBytes(inputSlice[64:96])
-			y2 := new(big.Int).SetBytes(inputSlice[96:128])
+			x2 := new(big.Int).SetBytes(input[64:96])
+			y2 := new(big.Int).SetBytes(input[96:128])
 
 			point2, err := altbn128.G1FromInts(x2, y2)
 			if err != nil {
@@ -857,18 +860,20 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 				return syscallSuccess(1)
 			}
 
-			x1 := new(big.Int).SetBytes(inputSlice[:32])
-			y1 := new(big.Int).SetBytes(inputSlice[32:64])
+			input := make([]byte, 96)
+			copy(input, inputSlice)
+
+			x1 := new(big.Int).SetBytes(input[:32])
+			y1 := new(big.Int).SetBytes(input[32:64])
 
 			point, err := altbn128.G1FromInts(x1, y1)
 			if err != nil {
 				return syscallSuccess(1)
 			}
 
-			scalar := new(big.Int).SetBytes(inputSlice[64:])
+			scalar := new(big.Int).SetBytes(input[64:])
 
 			resultPoint := new(bn256.G1).ScalarMult(point, scalar)
-
 			resultBytes := resultPoint.Marshal()
 			copy(callResult, resultBytes)
 
@@ -885,18 +890,20 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 			g2Vals := make([]*bn256.G2, 0)
 
 			for count := uint64(0); count < (inputLen / AltBn128PairingElementLen); count++ {
-				g1x := new(big.Int).SetBytes(inputSlice[:(count * 32)])
-				g1y := new(big.Int).SetBytes(inputSlice[count*32 : count*64])
+				input := make([]byte, 192)
+				copy(input, inputSlice[count*192:(count*192)+192])
+				g1x := new(big.Int).SetBytes(input[:32])
+				g1y := new(big.Int).SetBytes(input[32:64])
 				g1, err := altbn128.G1FromInts(g1x, g1y)
 				if err != nil {
 					return syscallSuccess(1)
 				}
 				g1Vals = append(g1Vals, g1)
 
-				x1 := new(big.Int).SetBytes(inputSlice[count*64 : count*96])
-				y1 := new(big.Int).SetBytes(inputSlice[count*96 : count*128])
-				x2 := new(big.Int).SetBytes(inputSlice[count*128 : count*160])
-				y2 := new(big.Int).SetBytes(inputSlice[count*160 : count*192])
+				y1 := new(big.Int).SetBytes(input[64:96])
+				x1 := new(big.Int).SetBytes(input[96:128])
+				y2 := new(big.Int).SetBytes(input[128:160])
+				x2 := new(big.Int).SetBytes(input[160:192])
 
 				xVal := gfP2{x: x1, y: y1}
 				yVal := gfP2{x: x2, y: y2}
@@ -925,7 +932,6 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 			return syscallErrCustom("SyscallError::InvalidAttribute")
 		}
 	}
-
 }
 
-var SyscallAltBn128 = sbpf.SyscallFunc4(SyscallAltBn128CompressionImpl)
+var SyscallAltBn128 = sbpf.SyscallFunc4(SyscallAltBn128Impl)
