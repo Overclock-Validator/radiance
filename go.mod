@@ -23,19 +23,26 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/vbauerster/mpb/v8 v8.4.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.10.0
+	golang.org/x/sys v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/klog/v2 v2.100.1
 )
 
 require (
+	github.com/FiloSottile/powersoftau v0.0.0-20180220134833-e2af11381747 // indirect
+	github.com/bits-and-blooms/bitset v1.7.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
+	github.com/consensys/bavard v0.1.13 // indirect
+	github.com/dchest/blake2b v1.0.0 // indirect
 	github.com/decred/base58 v1.0.5 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
+	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/philsippl/bls12 v0.0.0-20210305152037-695a40105eda // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
+	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
 require (
@@ -46,11 +53,15 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
 	github.com/bwesterb/go-ristretto v1.2.3
+	github.com/clearmatics/bn256 v0.0.0-20190516154049-c6c2a2b131e6
+	github.com/consensys/gnark-crypto v0.13.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dusk-network/bn256 v0.5.1-lattices
 	github.com/dustinxie/ecc v0.0.0-20210511000915-959544187564
 	github.com/edwingeng/deque/v2 v2.1.1
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/fatih/color v1.14.1 // indirect
+	github.com/filosottile/powersoftau v0.0.0-20180220134833-e2af11381747
 	github.com/gagliardetto/treeout v0.1.4 // indirect
 	github.com/gammazero/deque v0.2.1
 	github.com/go-logr/logr v1.2.4 // indirect
@@ -81,6 +92,7 @@ require (
 	github.com/mostynb/zstdpool-freelist v0.0.0-20201229113212-927304c0c3b1 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
+	github.com/philsippl/bgls v0.5.3
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
@@ -105,11 +117,11 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/ratelimit v0.2.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.7.0 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/exp v0.0.0-20230304125523-9ff063c70017 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/term v0.8.0 // indirect
+	golang.org/x/term v0.15.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect

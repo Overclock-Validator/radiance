@@ -1214,6 +1214,70 @@ func TestInterpreter_Alloc_Free_Syscall(t *testing.T) {
 	}
 }
 
+func TestInterpreter_Alt_Bn128_Compression_Syscall(t *testing.T) {
+	// program data account
+	programDataPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programDataPubkey := programDataPrivKey.PublicKey()
+	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{Slot: 0, UpgradeAuthorityAddress: nil}}
+	validProgramBytes := fixtures.Load(t, "sbpf", "alt_bn128_compression.so")
+	programDataStateWriter := new(bytes.Buffer)
+	programDataStateEncoder := bin.NewBinEncoder(programDataStateWriter)
+	err = programDataAcctState.MarshalWithEncoder(programDataStateEncoder)
+	assert.NoError(t, err)
+	programDataStateWriter.Write(validProgramBytes)
+	programDataStateBytes := make([]byte, len(validProgramBytes)+upgradeableLoaderSizeOfProgramDataMetaData)
+	copy(programDataStateBytes, programDataStateWriter.Bytes())
+	copy(programDataStateBytes[upgradeableLoaderSizeOfProgramDataMetaData:], validProgramBytes)
+
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 0, Data: programDataStateBytes, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram, Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataAcct.Key}}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programData := make([]byte, 5000)
+	copy(programData, programBytes)
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	instrData := make([]byte, 0)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: programAcct.Key, IsSigner: false, IsWritable: false}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	var log LogRecorder
+	execCtx := ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.EnableAltbn128CompressionSyscall, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	pk := [32]byte(programDataAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programDataAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	for _, l := range log.Logs {
+		fmt.Printf("log: %s\n", l)
+	}
+}
+
 type executeCase struct {
 	Name    string
 	Program string

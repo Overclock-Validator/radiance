@@ -7,7 +7,8 @@ import (
 	"math/big"
 
 	"filippo.io/edwards25519"
-	bn256 "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+	bn254 "github.com/consensys/gnark-crypto/ecc/bn254"
+	bn256lib "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/keep-network/keep-core/pkg/altbn128"
 	r255 "github.com/taurusgroup/frost-ed25519/pkg/ristretto"
 	"go.firedancer.io/radiance/pkg/features"
@@ -610,7 +611,7 @@ func LeftPadTo32Bytes(bytes []byte) ([]byte, error) {
 	return result, nil
 }
 
-func G2FromInts(x *gfP2, y *gfP2) (*bn256.G2, error) {
+func G2FromInts(x *gfP2, y *gfP2) (*bn256lib.G2, error) {
 
 	if len(x.x.Bytes()) > 32 || len(x.y.Bytes()) > 32 || len(y.x.Bytes()) > 32 || len(y.y.Bytes()) > 32 {
 		return nil, errors.New("points on G2 are limited to two 256-bit coordinates")
@@ -626,7 +627,7 @@ func G2FromInts(x *gfP2, y *gfP2) (*bn256.G2, error) {
 
 	m := append(paddedX, paddedY...)
 
-	g2 := new(bn256.G2)
+	g2 := new(bn256lib.G2)
 
 	_, err := g2.Unmarshal(m)
 
@@ -729,21 +730,14 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 				return syscallSuccess(1)
 			}
 
-			x1 := new(big.Int).SetBytes(inputSlice[:32])
-			y1 := new(big.Int).SetBytes(inputSlice[32:64])
-			x2 := new(big.Int).SetBytes(inputSlice[64:96])
-			y2 := new(big.Int).SetBytes(inputSlice[96:128])
-
-			xVal := gfP2{x: x1, y: y1}
-			yVal := gfP2{x: x2, y: y2}
-
-			pointUncompressed, err := G2FromInts(&xVal, &yVal)
+			var point bn254.G2Affine
+			err = point.Unmarshal(inputSlice)
 			if err != nil {
 				return syscallSuccess(1)
 			}
 
-			pointCompressed := altbn128.G2Point{G2: pointUncompressed}.Compress()
-			copy(callResult, pointCompressed)
+			pointCompressed := point.Bytes()
+			copy(callResult, pointCompressed[:])
 
 			return syscallSuccess(0)
 		}
@@ -754,7 +748,8 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 				return syscallSuccess(1)
 			}
 
-			point, err := altbn128.DecompressToG2(inputSlice)
+			var point bn254.G2Affine
+			err = point.Unmarshal(inputSlice)
 			if err != nil {
 				return syscallSuccess(1)
 			}
@@ -846,7 +841,7 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 				return syscallSuccess(1)
 			}
 
-			resultPoint := new(bn256.G1).Add(point1, point2)
+			resultPoint := new(bn256lib.G1).Add(point1, point2)
 
 			resultBytes := resultPoint.Marshal()
 			copy(callResult, resultBytes)
@@ -873,7 +868,7 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 
 			scalar := new(big.Int).SetBytes(input[64:])
 
-			resultPoint := new(bn256.G1).ScalarMult(point, scalar)
+			resultPoint := new(bn256lib.G1).ScalarMult(point, scalar)
 			resultBytes := resultPoint.Marshal()
 			copy(callResult, resultBytes)
 
@@ -886,8 +881,8 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 				return syscallSuccess(1)
 			}
 
-			g1Vals := make([]*bn256.G1, 0)
-			g2Vals := make([]*bn256.G2, 0)
+			g1Vals := make([]*bn256lib.G1, 0)
+			g2Vals := make([]*bn256lib.G2, 0)
 
 			for count := uint64(0); count < (inputLen / AltBn128PairingElementLen); count++ {
 				input := make([]byte, 192)
@@ -915,7 +910,7 @@ func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr ui
 				g2Vals = append(g2Vals, g2)
 			}
 
-			if bn256.PairingCheck(g1Vals, g2Vals) {
+			if bn256lib.PairingCheck(g1Vals, g2Vals) {
 				out := make([]byte, 32)
 				out[31] = 1
 				copy(callResult, out)
