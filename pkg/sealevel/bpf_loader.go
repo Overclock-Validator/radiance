@@ -694,7 +694,6 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 					return err
 				}
 			}
-			borrowedAcct.Drop()
 		}
 	}
 
@@ -739,6 +738,9 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	parameterBytes, preLens, err := serializeParameters(execCtx)
+	if err != nil {
+		return err
+	}
 
 	opts := &sbpf.VMOpts{
 		HeapMax:  int(execCtx.TransactionContext.HeapSize),
@@ -753,8 +755,10 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
 	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
 
-	if err != nil {
-		klog.Infof("program execution result: %s", err)
+	if runErr != nil {
+		klog.Infof("program execution result: %s", runErr)
+	} else {
+		klog.Infof("program execution was successful")
 	}
 
 	returnedDataProgId, returnData := execCtx.TransactionContext.ReturnData()

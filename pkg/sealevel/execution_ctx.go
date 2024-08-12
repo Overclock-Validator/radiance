@@ -281,6 +281,7 @@ func (execCtx *ExecutionCtx) CheckAligned() bool {
 	if err != nil {
 		return true
 	}
+	defer programAcct.Drop()
 
 	if programAcct.Owner() == BpfLoaderDeprecatedAddr {
 		return false

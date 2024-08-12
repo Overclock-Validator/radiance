@@ -79,6 +79,7 @@ func (instrCtx *InstructionCtx) BorrowAccount(txCtx *TransactionCtx, idxInTx uin
 	if err != nil {
 		return nil, err
 	}
+
 	borrowedAcct := BorrowedAccount{Account: account, TxCtx: txCtx, InstrCtx: instrCtx, IndexInTransaction: idxInTx, IndexInInstruction: idxInInstr}
 	return &borrowedAcct, nil
 }
