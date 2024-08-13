@@ -99,8 +99,12 @@ func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64) (uint64, error) {
 		return syscallErr(err)
 	}
 
+	err = execCtx.ComputeMeter.Consume(safemath.SaturatingMulU64(len, CUSyscallBaseCost))
+	if err != nil {
+		return syscallCuErr()
+	}
+
 	msg := ""
-	totalSize := uint64(0)
 
 	var data []byte
 	reader := bytes.NewReader(mem)
@@ -112,23 +116,18 @@ func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64) (uint64, error) {
 			return syscallErr(err)
 		}
 
-		totalSize = safemath.SaturatingAddU64(totalSize, vec.Len)
+		err = execCtx.ComputeMeter.Consume(vec.Len)
+		if err != nil {
+			return syscallCuErr()
+		}
 
 		data, err = vm.Translate(vec.Addr, vec.Len, false)
 		if err != nil {
 			return syscallErr(err)
 		}
 		encodedStr := base64.StdEncoding.EncodeToString(data)
-		if count != len-1 {
-			msg += fmt.Sprintf(" ")
-		}
 
-		msg += fmt.Sprintf("%s", encodedStr)
-	}
-
-	err = execCtx.ComputeMeter.Consume(totalSize)
-	if err != nil {
-		return syscallCuErr()
+		msg += fmt.Sprintf("%s ", encodedStr)
 	}
 
 	execCtx.Log.Log("Program log: " + msg)
