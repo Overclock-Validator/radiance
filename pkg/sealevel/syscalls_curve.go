@@ -11,7 +11,6 @@ import (
 	bn256lib "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/gtank/ristretto255"
 	"github.com/keep-network/keep-core/pkg/altbn128"
-	r255 "github.com/taurusgroup/frost-ed25519/pkg/ristretto"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
@@ -107,7 +106,7 @@ func SyscallCurveValidatePointImpl(vm sbpf.VM, curveId, pointAddr uint64) (uint6
 				return syscallErr(err)
 			}
 
-			_, err = new(r255.Element).SetCanonicalBytes(pointBytes)
+			err = ristretto255.NewElement().Decode(pointBytes)
 			if err != nil {
 				return syscallSuccess(1)
 			} else {
@@ -348,12 +347,12 @@ func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAd
 
 			leftPoint, err := new(edwards25519.Point).SetBytes(leftPointBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
 			rightPoint, err := new(edwards25519.Point).SetBytes(rightPointBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
 			resultPoint := new(edwards25519.Point).Add(leftPoint, rightPoint)
@@ -378,18 +377,20 @@ func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAd
 			if err != nil {
 				return syscallErr(err)
 			}
-			leftPoint, err := new(edwards25519.Point).SetBytes(leftPointBytes)
-			if err != nil {
-				return syscallErr(err)
-			}
 
 			rightPointBytes, err := vm.Translate(rightInputAddr, CurvePointBytesLen, false)
 			if err != nil {
 				return syscallErr(err)
 			}
+
+			leftPoint, err := new(edwards25519.Point).SetBytes(leftPointBytes)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
 			rightPoint, err := new(edwards25519.Point).SetBytes(rightPointBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
 			resultPoint := new(edwards25519.Point).Subtract(leftPoint, rightPoint)
@@ -422,12 +423,12 @@ func handleEdwardsCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInputAd
 
 			scalar, err := new(edwards25519.Scalar).SetCanonicalBytes(scalarBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
 			inputPoint, err := new(edwards25519.Point).SetBytes(inputPointBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
 			resultPoint := new(edwards25519.Point).ScalarMult(scalar, inputPoint)
@@ -467,22 +468,32 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 			if err != nil {
 				return syscallErr(err)
 			}
-			leftPoint, err := new(r255.Element).SetCanonicalBytes(leftPointBytes)
 
 			rightPointBytes, err := vm.Translate(rightInputAddr, CurvePointBytesLen, false)
 			if err != nil {
 				return syscallErr(err)
 			}
-			rightPoint, err := new(r255.Element).SetCanonicalBytes(rightPointBytes)
 
-			resultPoint := new(r255.Element).Add(leftPoint, rightPoint)
+			leftPoint := ristretto255.NewElement()
+			err = leftPoint.Decode(leftPointBytes)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			rightPoint := ristretto255.NewElement()
+			err = rightPoint.Decode(rightPointBytes)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			resultPoint := new(ristretto255.Element).Add(leftPoint, rightPoint)
 
 			resultPointSlice, err := vm.Translate(resultPointAddr, CurvePointBytesLen, true)
 			if err != nil {
 				return syscallErr(err)
 			}
 
-			copy(resultPointSlice, resultPoint.Bytes())
+			copy(resultPointSlice, resultPoint.Encode([]byte{}))
 			return syscallSuccess(0)
 		}
 
@@ -497,22 +508,32 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 			if err != nil {
 				return syscallErr(err)
 			}
-			leftPoint, err := new(r255.Element).SetCanonicalBytes(leftPointBytes)
 
 			rightPointBytes, err := vm.Translate(rightInputAddr, CurvePointBytesLen, false)
 			if err != nil {
 				return syscallErr(err)
 			}
-			rightPoint, err := new(r255.Element).SetCanonicalBytes(rightPointBytes)
 
-			resultPoint := new(r255.Element).Subtract(leftPoint, rightPoint)
+			var leftPoint ristretto255.Element
+			err = leftPoint.Decode(leftPointBytes)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			var rightPoint ristretto255.Element
+			err = rightPoint.Decode(rightPointBytes)
+			if err != nil {
+				return syscallSuccess(1)
+			}
+
+			resultPoint := new(ristretto255.Element).Subtract(&leftPoint, &rightPoint)
 
 			resultPointSlice, err := vm.Translate(resultPointAddr, CurvePointBytesLen, true)
 			if err != nil {
 				return syscallErr(err)
 			}
 
-			copy(resultPointSlice, resultPoint.Bytes())
+			copy(resultPointSlice, resultPoint.Encode([]byte{}))
 			return syscallSuccess(0)
 		}
 
@@ -533,25 +554,26 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 				return syscallErr(err)
 			}
 
-			scalar, err := new(r255.Scalar).SetCanonicalBytes(scalarBytes)
+			scalar := ristretto255.NewScalar()
+			err = scalar.Decode(scalarBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
-			element, err := new(r255.Element).SetCanonicalBytes(inputPointBytes)
+			element := ristretto255.NewElement()
+			err = element.Decode(inputPointBytes)
 			if err != nil {
-				return syscallErr(err)
+				return syscallSuccess(1)
 			}
 
-			var resultPoint r255.Element
-			resultPoint.ScalarMult(scalar, element)
+			result := ristretto255.NewElement().ScalarMult(scalar, element)
 
 			resultPointSlice, err := vm.Translate(resultPointAddr, CurvePointBytesLen, true)
 			if err != nil {
 				return syscallErr(err)
 			}
+			copy(resultPointSlice, result.Encode([]byte{}))
 
-			copy(resultPointSlice, resultPoint.Bytes())
 			return syscallSuccess(0)
 		}
 
