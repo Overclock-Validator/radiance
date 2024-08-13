@@ -9,6 +9,7 @@ import (
 	"filippo.io/edwards25519"
 	bn254 "github.com/consensys/gnark-crypto/ecc/bn254"
 	bn256lib "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+	"github.com/gtank/ristretto255"
 	"github.com/keep-network/keep-core/pkg/altbn128"
 	r255 "github.com/taurusgroup/frost-ed25519/pkg/ristretto"
 	"go.firedancer.io/radiance/pkg/features"
@@ -142,7 +143,7 @@ func unmarshalEdwardsScalars(scalarsBytes []byte) ([]*edwards25519.Scalar, error
 		var scalar edwards25519.Scalar
 		_, err = scalar.SetCanonicalBytes(scalarBuf)
 		if err != nil {
-			return nil, fmt.Errorf("not enough bytes deserializing scalars")
+			return nil, fmt.Errorf("error deserializing scalars")
 		}
 
 		scalars = append(scalars, &scalar)
@@ -166,7 +167,7 @@ func unmarshalEdwardsPoints(pointsBytes []byte) ([]*edwards25519.Point, error) {
 		var point edwards25519.Point
 		_, err = point.SetBytes(pointBuf)
 		if err != nil {
-			return nil, fmt.Errorf("not enough bytes deserializing points")
+			return nil, fmt.Errorf("error deserializing points")
 		}
 
 		points = append(points, &point)
@@ -175,8 +176,8 @@ func unmarshalEdwardsPoints(pointsBytes []byte) ([]*edwards25519.Point, error) {
 	return points, nil
 }
 
-func unmarshalRistrettoScalars(scalarsBytes []byte) ([]*r255.Scalar, error) {
-	scalars := make([]*r255.Scalar, 0)
+func unmarshalRistrettoScalars(scalarsBytes []byte) ([]*ristretto255.Scalar, error) {
+	scalars := make([]*ristretto255.Scalar, 0)
 	reader := bytes.NewReader(scalarsBytes)
 
 	for count := 0; count < len(scalarsBytes)/CurveScalarBytesLen; count++ {
@@ -187,20 +188,20 @@ func unmarshalRistrettoScalars(scalarsBytes []byte) ([]*r255.Scalar, error) {
 			return nil, fmt.Errorf("not enough bytes deserializing scalars")
 		}
 
-		var scalar r255.Scalar
-		_, err = scalar.SetCanonicalBytes(scalarBuf)
+		scalar := ristretto255.NewScalar()
+		err = scalar.Decode(scalarBuf)
 		if err != nil {
-			return nil, fmt.Errorf("not enough bytes deserializing scalars")
+			return nil, fmt.Errorf("error deserializing scalars")
 		}
 
-		scalars = append(scalars, &scalar)
+		scalars = append(scalars, scalar)
 	}
 
 	return scalars, nil
 }
 
-func unmarshalRistrettoElements(elementsBytes []byte) ([]*r255.Element, error) {
-	elements := make([]*r255.Element, 0)
+func unmarshalRistrettoElements(elementsBytes []byte) ([]*ristretto255.Element, error) {
+	elements := make([]*ristretto255.Element, 0)
 	reader := bytes.NewReader(elementsBytes)
 
 	for count := 0; count < len(elementsBytes)/CurvePointBytesLen; count++ {
@@ -211,13 +212,13 @@ func unmarshalRistrettoElements(elementsBytes []byte) ([]*r255.Element, error) {
 			return nil, fmt.Errorf("not enough bytes deserializing element")
 		}
 
-		var element r255.Element
-		_, err = element.SetCanonicalBytes(elementBuf)
+		element := ristretto255.NewElement()
+		err = element.Decode(elementBuf)
 		if err != nil {
-			return nil, fmt.Errorf("error deserializing ristretto element")
+			return nil, fmt.Errorf("error deserializing ristretto element. %s", err)
 		}
 
-		elements = append(elements, &element)
+		elements = append(elements, element)
 	}
 
 	return elements, nil
@@ -249,7 +250,7 @@ func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr,
 				return syscallErr(err)
 			}
 
-			pointsBytes, err := vm.Translate(scalarsAddr, pointsLen*CurvePointBytesLen, false)
+			pointsBytes, err := vm.Translate(pointsAddr, pointsLen*CurvePointBytesLen, false)
 			if err != nil {
 				return syscallErr(err)
 			}
@@ -259,13 +260,16 @@ func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr,
 				return syscallErr(err)
 			}
 
-			resultPoint := new(edwards25519.Point).MultiScalarMult(scalars, points)
+			resultPoint := edwards25519.NewIdentityPoint()
+			resultPoint.MultiScalarMult(scalars, points)
 
 			resultSlice, err := vm.Translate(resultPointAddr, CurvePointBytesLen, true)
 			if err != nil {
 				return syscallErr(err)
 			}
+
 			copy(resultSlice, resultPoint.Bytes())
+
 			return syscallSuccess(0)
 		}
 
@@ -287,7 +291,7 @@ func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr,
 				return syscallErr(err)
 			}
 
-			pointsBytes, err := vm.Translate(scalarsAddr, pointsLen*CurvePointBytesLen, false)
+			pointsBytes, err := vm.Translate(pointsAddr, pointsLen*CurvePointBytesLen, false)
 			if err != nil {
 				return syscallErr(err)
 			}
@@ -297,13 +301,14 @@ func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr,
 				return syscallErr(err)
 			}
 
-			resultPoint := new(r255.Element).MultiScalarMult(scalars, points)
+			resultPoint := ristretto255.NewElement().MultiScalarMult(scalars, points)
 
 			resultSlice, err := vm.Translate(resultPointAddr, CurvePointBytesLen, true)
 			if err != nil {
 				return syscallErr(err)
 			}
-			copy(resultSlice, resultPoint.Bytes())
+
+			copy(resultSlice, resultPoint.Encode([]byte{}))
 			return syscallSuccess(0)
 		}
 
