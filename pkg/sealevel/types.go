@@ -38,16 +38,16 @@ const AccountMetaSize = 34
 
 type AccountMeta struct {
 	Pubkey     solana.PublicKey
-	IsSigner   bool
 	IsWritable bool
+	IsSigner   bool
 }
 
-const SolAccountMetaCSize = 10
+const SolAccountMetaCSize = 16
 
 type SolAccountMetaC struct {
 	PubkeyAddr uint64
-	IsSigner   byte
 	IsWritable byte
+	IsSigner   byte
 }
 
 const SolAccountMetaRustSize = 34
@@ -79,7 +79,7 @@ type InstructionAccount struct {
 	IsWritable         bool
 }
 
-const SolAccountInfoCSize = 51
+const SolAccountInfoCSize = 56
 
 type SolAccountInfoC struct {
 	KeyAddr      uint64
@@ -131,14 +131,12 @@ type TranslatedAccount struct {
 }
 
 type CallerAccount struct {
-	Lamports          uint64
-	Owner             solana.PublicKey
-	SerializedData    *[]byte
-	SerializedDataLen uint64
-	VmDataAddr        uint64
-	RefToLenInVm      uint64
-	Executable        bool
-	RentEpoch         uint64
+	Lamports        []byte
+	Owner           []byte
+	OriginalDataLen uint64
+	SerializedData  []byte
+	VmDataAddr      uint64
+	RefToLenInVm    []byte
 }
 
 const ProcessedSiblingInstructionSize = 16
@@ -193,16 +191,20 @@ func (accountMeta *SolAccountMetaC) Unmarshal(buf io.Reader) error {
 		return err
 	}
 
+	err = binary.Read(buf, binary.LittleEndian, &accountMeta.IsWritable)
+	if err != nil {
+		return err
+	}
+
 	err = binary.Read(buf, binary.LittleEndian, &accountMeta.IsSigner)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Read(buf, binary.LittleEndian, &accountMeta.IsWritable)
-	if err != nil {
-		return err
-	}
-	return nil
+	var padding [6]byte
+	err = binary.Read(buf, binary.LittleEndian, &padding)
+
+	return err
 }
 
 func (accountMeta *SolAccountMetaC) Marshal() ([]byte, error) {
@@ -460,7 +462,10 @@ func (accountInfo *SolAccountInfoC) Unmarshal(buf io.Reader) error {
 		return err
 	}
 
-	return nil
+	var padding [5]byte
+	err = binary.Read(buf, binary.LittleEndian, &padding)
+
+	return err
 }
 
 func (accountInfo *SolAccountInfoRust) Unmarshal(buf io.Reader) error {

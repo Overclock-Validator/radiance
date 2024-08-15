@@ -74,7 +74,7 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 	}
 
 	copy(address, newAddress)
-	return syscallSuccess(1)
+	return syscallSuccess(0)
 }
 
 var SyscallCreateProgramAddress = sbpf.SyscallFunc4(SyscallCreateProgramAddressImpl)

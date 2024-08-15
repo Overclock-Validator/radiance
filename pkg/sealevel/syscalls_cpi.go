@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"unsafe"
 
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/base58"
@@ -67,12 +68,12 @@ func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 		return Instruction{}, err
 	}
 
-	byteReader.Reset(accountMetasData)
+	accountMetaReader := bytes.NewReader(accountMetasData)
 
 	var accountMetas []SolAccountMetaC
 	for count := uint64(0); count < ix.AccountsLen; count++ {
 		var am SolAccountMetaC
-		err = am.Unmarshal(byteReader)
+		err = am.Unmarshal(accountMetaReader)
 		if err != nil {
 			return Instruction{}, err
 		}
@@ -86,9 +87,8 @@ func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 		return Instruction{}, err
 	}
 
-	accounts := make([]AccountMeta, ix.AccountsLen)
-	for count := uint64(0); count < ix.AccountsLen; count++ {
-		accountMeta := accountMetas[count]
+	var accounts []AccountMeta
+	for _, accountMeta := range accountMetas {
 		if accountMeta.IsSigner > 1 || accountMeta.IsWritable > 1 {
 			return Instruction{}, SyscallErrInvalidArgument
 		}
@@ -373,37 +373,41 @@ type callerAccountsAndIndex struct {
 	account CallerAccount
 }
 
-func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, accountInfo SolAccountInfoC) (CallerAccount, error) {
+func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, callerAcctIdx uint64, accountInfo SolAccountInfoC, accountInfosAddr uint64) (CallerAccount, error) {
 
-	var callerAcct CallerAccount
-
-	lamports, err := vm.Read64(accountInfo.LamportsAddr)
+	lamports, err := vm.Translate(accountInfo.LamportsAddr, 8, true)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
-	callerAcct.Lamports = lamports
 
-	accOwner, err := vm.Translate(accountInfo.OwnerAddr, solana.PublicKeyLength, false)
+	owner, err := vm.Translate(accountInfo.OwnerAddr, solana.PublicKeyLength, true)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
-	callerAcct.Owner = solana.PublicKeyFromBytes(accOwner)
 
 	cost := accountInfo.DataLen / CUCpiBytesPerUnit
 	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
-	acctData, err := vm.Translate(accountInfo.DataAddr, accountInfo.DataLen, false)
+	serializedData, err := vm.Translate(accountInfo.DataAddr, accountInfo.DataLen, true)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
-	callerAcct.SerializedData = &acctData
-	callerAcct.SerializedDataLen = accountInfo.DataLen
-	callerAcct.Executable = accountInfo.Executable
-	callerAcct.RentEpoch = accountInfo.RentEpoch
+	/*        let data_len_vm_addr = vm_addr
+	          .saturating_add(&account_info.data_len as *const u64 as u64)
+	          .saturating_sub(account_info as *const _ as *const u64 as u64);*/
+	dataLenVmAddr := (accountInfosAddr + (callerAcctIdx * 56)) + uint64(uintptr(unsafe.Pointer(&accountInfo.DataLen))) - uint64(uintptr(unsafe.Pointer(&accountInfo)))
+
+	refToLenInVm, err := vm.Translate(dataLenVmAddr, 8, true)
+	if err != nil {
+		return CallerAccount{}, err
+	}
+
+	callerAcct := CallerAccount{Lamports: lamports, Owner: owner, OriginalDataLen: accountInfo.DataLen,
+		SerializedData: serializedData, VmDataAddr: accountInfo.DataAddr, RefToLenInVm: refToLenInVm}
 
 	return callerAcct, nil
 }
@@ -412,7 +416,7 @@ func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, account
 
 	var callerAcct CallerAccount
 
-	lamportsBoxData, err := vm.Translate(accountInfo.LamportsBoxAddr, RefCellRustSize, false)
+	/*lamportsBoxData, err := vm.Translate(accountInfo.LamportsBoxAddr, RefCellRustSize, false)
 	if err != nil {
 		return callerAcct, err
 	}
@@ -464,17 +468,17 @@ func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, account
 	callerAcct.SerializedData = &data
 	callerAcct.SerializedDataLen = dataBox.Len
 	callerAcct.Executable = accountInfo.Executable == 1
-	callerAcct.RentEpoch = accountInfo.RentEpoch
+	callerAcct.RentEpoch = accountInfo.RentEpoch*/
 
 	return callerAcct, nil
 }
 
 func updateCalleeAccount(execCtx *ExecutionCtx, callerAccount CallerAccount, calleeAccount *BorrowedAccount) error {
-	if calleeAccount.Account.Lamports != callerAccount.Lamports {
-		calleeAccount.Account.Lamports = callerAccount.Lamports
+	if calleeAccount.Account.Lamports != binary.LittleEndian.Uint64(callerAccount.Lamports) {
+		calleeAccount.Account.Lamports = binary.LittleEndian.Uint64(callerAccount.Lamports)
 	}
 
-	err1 := calleeAccount.CanDataBeResized(callerAccount.SerializedDataLen)
+	err1 := calleeAccount.CanDataBeResized(uint64(len(callerAccount.SerializedData)))
 	err2 := calleeAccount.DataCanBeChanged(execCtx.GlobalCtx.Features)
 
 	var err error
@@ -487,32 +491,29 @@ func updateCalleeAccount(execCtx *ExecutionCtx, callerAccount CallerAccount, cal
 
 	// can't change data
 	if err != nil {
-		if !bytes.Equal(*callerAccount.SerializedData, calleeAccount.Data()) {
+		if !bytes.Equal(callerAccount.SerializedData, calleeAccount.Data()) {
 			return err
 		}
-
-		// can't change data, but data didn't actually change anyway
-		return nil
+		err = nil
+	} else {
+		err = calleeAccount.SetData(execCtx.GlobalCtx.Features, callerAccount.SerializedData)
+		if err != nil {
+			return err
+		}
 	}
 
-	err = calleeAccount.SetData(execCtx.GlobalCtx.Features, *callerAccount.SerializedData)
-	if err != nil {
-		return err
-	}
-
-	if calleeAccount.Owner() != callerAccount.Owner {
-		err = calleeAccount.SetOwner(execCtx.GlobalCtx.Features, callerAccount.Owner)
+	if calleeAccount.Owner() != solana.PublicKeyFromBytes(callerAccount.Owner) {
+		err = calleeAccount.SetOwner(execCtx.GlobalCtx.Features, solana.PublicKeyFromBytes(callerAccount.Owner))
 	}
 
 	return err
 }
 
 func updateCallerAccount(vm sbpf.VM, callerAcct *CallerAccount, calleeAcct *BorrowedAccount) error {
+	binary.LittleEndian.PutUint64(callerAcct.Lamports, calleeAcct.Lamports())
+	copy(callerAcct.Owner, calleeAcct.Account.Owner[:])
 
-	callerAcct.Lamports = calleeAcct.Lamports()
-	callerAcct.Owner = calleeAcct.Owner()
-
-	prevLen := callerAcct.RefToLenInVm
+	prevLen := binary.LittleEndian.Uint64(callerAcct.RefToLenInVm)
 	postLen := uint64(len(calleeAcct.Data()))
 
 	if prevLen != postLen {
@@ -520,36 +521,37 @@ func updateCallerAccount(vm sbpf.VM, callerAcct *CallerAccount, calleeAcct *Borr
 		maxPermittedIncrease := uint64(10240)
 
 		// account data size increased by too much
-		if postLen > safemath.SaturatingAddU64(callerAcct.SerializedDataLen, maxPermittedIncrease) {
+		if postLen > safemath.SaturatingAddU64(callerAcct.OriginalDataLen, maxPermittedIncrease) {
 			return InstrErrInvalidRealloc
 		}
 
 		if postLen < prevLen {
-			serializedData := *callerAcct.SerializedData
-			if uint64(len(serializedData)) < postLen {
+			if uint64(len(callerAcct.SerializedData)) < postLen {
 				return InstrErrAccountDataTooSmall
 			}
-			for i := range serializedData[postLen:] {
-				serializedData[i] = 0
+			for i := range callerAcct.SerializedData[postLen:] {
+				callerAcct.SerializedData[i] = 0
 			}
 		}
 
-		sd, err := vm.Translate(callerAcct.VmDataAddr, postLen, false)
+		sd, err := vm.Translate(callerAcct.VmDataAddr, postLen, true)
 		if err != nil {
 			return err
 		}
-		callerAcct.SerializedData = &sd
-		callerAcct.RefToLenInVm = postLen
+
+		callerAcct.SerializedData = sd
+		binary.LittleEndian.PutUint64(callerAcct.RefToLenInVm, postLen)
 
 		ptrAddr := safemath.SaturatingSubU64(callerAcct.VmDataAddr, 8)
 		serializedLenSlice, err := vm.Translate(ptrAddr, 8, false)
 		if err != nil {
 			return err
 		}
+
 		binary.LittleEndian.PutUint64(serializedLenSlice, postLen)
 	}
 
-	toSlice := *callerAcct.SerializedData
+	toSlice := callerAcct.SerializedData
 	fromSlice := calleeAcct.Data()
 
 	if uint64(len(fromSlice)) < postLen {
@@ -593,6 +595,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 		if err != nil {
 			return nil, err
 		}
+		defer calleeAcct.Drop()
 
 		accountKey, err := txCtx.KeyOfAccountAtIndex(instructionAcct.IndexInTransaction)
 		if err != nil {
@@ -605,12 +608,13 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 			if err != nil {
 				return nil, InstrErrComputationalBudgetExceeded
 			}
+			accounts = append(accounts, TranslatedAccount{IndexOfAccount: instructionAcct.IndexInCaller, CallerAccount: nil})
 		} else {
 			var found bool
 			for index, accountInfoKey := range accountInfoKeys {
 				if accountKey == accountInfoKey {
 					accountInfo := accountInfos[index]
-					callerAcct, err := callerAccountFromAccountInfoC(vm, execCtx, accountInfo)
+					callerAcct, err := callerAccountFromAccountInfoC(vm, execCtx, uint64(index), accountInfo, accountInfosAddr)
 					if err != nil {
 						return nil, err
 					}
@@ -664,6 +668,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 		if err != nil {
 			return nil, err
 		}
+		defer calleeAcct.Drop()
 
 		accountKey, err := txCtx.KeyOfAccountAtIndex(instructionAcct.IndexInTransaction)
 		if err != nil {
@@ -710,7 +715,6 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 }
 
 func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
-
 	accountInfos, accountInfoKeys, err := translateAccountInfosC(vm, accountInfosAddr, accountInfosLen)
 	if err != nil {
 		return nil, err
@@ -752,12 +756,10 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 	callerProgramId, err := instructionCtx.LastProgramKey(txCtx)
 
 	// translate signers
-	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsAddr)
+	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsLen)
 	if err != nil {
 		return syscallErr(err)
 	}
-
-	fmt.Printf("got C ABI CPI call from programId: %s -----> %s, %d signers\n", callerProgramId, ix.ProgramId, len(signers))
 
 	var isLoaderDeprecated bool
 	lastProgramAcct, err := instructionCtx.BorrowLastProgramAccount(txCtx)
@@ -795,10 +797,14 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 		if err != nil {
 			return syscallErr(err)
 		}
-		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
-		if err != nil {
-			return syscallErr(err)
+		defer calleeAcct.Drop()
+		if acct.CallerAccount != nil {
+			err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
+			if err != nil {
+				return syscallErr(err)
+			}
 		}
+		calleeAcct.Drop()
 	}
 
 	return syscallSuccess(0)
@@ -829,7 +835,7 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 	callerProgramId, err := instructionCtx.LastProgramKey(txCtx)
 
 	// translate signers
-	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsAddr)
+	signers, err := translateSigners(vm, callerProgramId, signerSeedsAddr, signerSeedsLen)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -872,10 +878,12 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 		if err != nil {
 			return syscallErr(err)
 		}
+		defer calleeAcct.Drop()
 		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 		if err != nil {
 			return syscallErr(err)
 		}
+		calleeAcct.Drop()
 	}
 
 	return syscallSuccess(0)

@@ -561,12 +561,15 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 			// data in account
 			serializedData = append(serializedData, borrowedAcct.Data()...)
 
-			alignmentMask := uint64(7) // (alignment - 1)
-			numFillBytes := (-dataLen & alignmentMask) + MaxPermittedDataIncrease
-			zeroFillBytes := make([]byte, numFillBytes, numFillBytes)
-			serializedData = append(serializedData, zeroFillBytes...)
+			padding := ReallocSpace
+			if offset := len(serializedData) % ReallocAlign; offset != 0 {
+				padding += ReallocAlign - offset
+			}
+			for count := 0; count < padding; count++ {
+				serializedData = append(serializedData, 0)
+			}
 
-			// acct data len
+			// rent epoch
 			serializedData = binary.LittleEndian.AppendUint64(serializedData, borrowedAcct.RentEpoch())
 		}
 	}
@@ -750,7 +753,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
-	runErr := interpreter.Run()
+	ret, runErr := interpreter.Run()
 
 	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
 	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
@@ -758,7 +761,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	if runErr != nil {
 		klog.Infof("program execution result: %s", runErr)
 	} else {
-		klog.Infof("program execution was successful")
+		klog.Infof("program execution was successful and returned %d", ret)
 	}
 
 	returnedDataProgId, returnData := execCtx.TransactionContext.ReturnData()

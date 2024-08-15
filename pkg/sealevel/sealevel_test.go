@@ -59,7 +59,7 @@ func TestExecute_Memo(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 	assert.Equal(t, log.Logs, []string{
 		`Program log: Memo (len 3): "Bla"`,
@@ -93,7 +93,7 @@ func TestInterpreter_Noop(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -132,7 +132,7 @@ func TestInterpreter_Memcpy_Strings_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings matched after copy.",
 	})
@@ -171,7 +171,7 @@ func TestInterpreter_Memcpy_Do_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings did not match after copy.",
 	})
@@ -209,7 +209,7 @@ func TestInterpreter_Memmove_Strings_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings matched after copy.",
 	})
@@ -248,7 +248,7 @@ func TestInterpreter_Memmove_Do_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings did not match after copy.",
 	})
@@ -285,7 +285,7 @@ func TestInterpreter_Memcpy_Overlapping(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 
 	// expecting an error here because the src and dst are overlapping in the
 	// program being run.
@@ -323,7 +323,7 @@ func TestInterpreter_Memcmp_Matches(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -364,7 +364,7 @@ func TestInterpreter_Memcmp_Does_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -405,7 +405,7 @@ func TestInterpreter_Memset_Check_Correct(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -445,7 +445,7 @@ func TestInterpreter_Sha256(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -486,7 +486,7 @@ func TestInterpreter_Blake3(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -527,7 +527,7 @@ func TestInterpreter_Keccak256(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -569,7 +569,7 @@ func TestInterpreter_CreateProgramAddress(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -614,7 +614,7 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -652,7 +652,7 @@ func TestInterpreter_TestPanic(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.Error(t, err)
 	assert.Equal(t, err.Error(), "exception at 16: SBF program Panicked in some_file_1234.c at 1337:10")
 }
@@ -681,7 +681,7 @@ func TestInterpreter_Secp256k1_Syscall(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	require.NoError(t, err)
 }
 
@@ -1534,6 +1534,86 @@ func TestInterpreter_Log_Data_Syscall(t *testing.T) {
 	}
 }
 
+func TestInterpreter_Cpi_C_Syscall(t *testing.T) {
+	// program data account
+	programDataPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programDataPubkey := programDataPrivKey.PublicKey()
+	programDataAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgramData, ProgramData: UpgradeableLoaderStateProgramData{Slot: 0, UpgradeAuthorityAddress: nil}}
+	validProgramBytes := fixtures.Load(t, "sbpf", "cpi_c.so")
+	programDataStateWriter := new(bytes.Buffer)
+	programDataStateEncoder := bin.NewBinEncoder(programDataStateWriter)
+	err = programDataAcctState.MarshalWithEncoder(programDataStateEncoder)
+	assert.NoError(t, err)
+	programDataStateWriter.Write(validProgramBytes)
+	programDataStateBytes := make([]byte, len(validProgramBytes)+upgradeableLoaderSizeOfProgramDataMetaData)
+	copy(programDataStateBytes, programDataStateWriter.Bytes())
+	copy(programDataStateBytes[upgradeableLoaderSizeOfProgramDataMetaData:], validProgramBytes)
+
+	programDataAcct := accounts.Account{Key: programDataPubkey, Lamports: 0, Data: programDataStateBytes, Owner: BpfLoaderUpgradeableAddr, Executable: false, RentEpoch: 100}
+
+	// program account
+	programAcctState := UpgradeableLoaderState{Type: UpgradeableLoaderStateTypeProgram, Program: UpgradeableLoaderStateProgram{ProgramDataAddress: programDataAcct.Key}}
+	programWriter := new(bytes.Buffer)
+	programEncoder := bin.NewBinEncoder(programWriter)
+	err = programAcctState.MarshalWithEncoder(programEncoder)
+	assert.NoError(t, err)
+	programBytes := programWriter.Bytes()
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programData := make([]byte, 5000)
+	copy(programData, programBytes)
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderUpgradeableAddr, Executable: true, RentEpoch: 100}
+
+	systemAcct := accounts.Account{Key: SystemProgramAddr, Lamports: 10000, Data: programData, Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	seed := []byte{'Y', 'o', 'u', ' ', 'p', 'a', 's', 's',
+		' ', 'b', 'u', 't', 't', 'e', 'r'}
+
+	acctToAllocPubKey, bumpSeed, err := solana.FindProgramAddress([][]byte{seed}, programPubkey)
+	assert.NoError(t, err)
+	acctToAlloc := accounts.Account{Key: acctToAllocPubKey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	instrData := make([]byte, 1)
+	instrData[0] = bumpSeed
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct, systemAcct, acctToAlloc})
+
+	acctMetas := []AccountMeta{{Pubkey: SystemProgramAddr, IsSigner: false, IsWritable: false},
+		{Pubkey: acctToAlloc.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	var log LogRecorder
+	execCtx := ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.Curve25519SyscallEnabled, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	pk := [32]byte(programDataAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programDataAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.NoError(t, err)
+
+	// check that the SystemProgram::Allocate instruction worked to resize account data to 1337 bytes
+	postAllocAcct, err := execCtx.TransactionContext.Accounts.GetAccount(2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1337, len(postAllocAcct.Data))
+
+	for _, l := range log.Logs {
+		fmt.Printf("log: %s\n", l)
+	}
+}
+
 type executeCase struct {
 	Name    string
 	Program string
@@ -1560,7 +1640,7 @@ func (e *executeCase) run(t *testing.T) {
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
 	require.NotNil(t, interpreter)
 
-	err = interpreter.Run()
+	_, err = interpreter.Run()
 	assert.NoError(t, err)
 
 	logs := opts.Context.(*ExecutionCtx).Log.(*LogRecorder).Logs

@@ -59,7 +59,7 @@ func NewInterpreter(globalCtx *global.GlobalCtx, p *Program, opts *VMOpts) *Inte
 // Run executes the program.
 //
 // This function may panic given code that doesn't pass the static verifier.
-func (ip *Interpreter) Run() (err error) {
+func (ip *Interpreter) Run() (ret uint64, err error) {
 	var r [11]uint64
 	r[1] = VaddrInput
 	r[10] = ip.stack.GetFramePtr()
@@ -157,7 +157,7 @@ mainLoop:
 			if src := uint32(r[ins.Src()]); src != 0 {
 				r[ins.Dst()] = uint64(uint32(r[ins.Dst()]) / src)
 			} else {
-				return ExcDivideByZero
+				err = ExcDivideByZero
 			}
 		case OpDiv64Imm:
 			r[ins.Dst()] /= uint64(ins.Imm())
@@ -415,6 +415,7 @@ mainLoop:
 			var ok bool
 			r[10], pc, ok = ip.stack.Pop((*[4]uint64)(r[6:10]))
 			if !ok {
+				ret = r[0]
 				break mainLoop
 			}
 			pc--
@@ -435,12 +436,12 @@ mainLoop:
 			if IsLongIns(ins.Op()) {
 				exc.PC-- // fix reported PC
 			}
-			return exc
+			return 0, exc
 		}
 		pc++
 	}
 
-	return nil
+	return // ret, nil
 }
 
 func (ip *Interpreter) getSlot(pc int64) Slot {
