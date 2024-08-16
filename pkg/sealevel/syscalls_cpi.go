@@ -3,7 +3,6 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"unsafe"
 
 	"github.com/gagliardetto/solana-go"
@@ -122,8 +121,8 @@ func translateInstructionRust(vm sbpf.VM, addr uint64) (Instruction, error) {
 	}
 
 	byteReader := bytes.NewReader(ixData)
-	var ix SolInstructionRust
 
+	var ix SolInstructionRust
 	err = ix.Unmarshal(byteReader)
 	if err != nil {
 		return Instruction{}, err
@@ -227,7 +226,6 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 			return nil, err
 		}
 		pdas = append(pdas, pubkey)
-
 	}
 
 	return pdas, nil
@@ -396,10 +394,7 @@ func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct
 		return CallerAccount{}, err
 	}
 
-	/*        let data_len_vm_addr = vm_addr
-	          .saturating_add(&account_info.data_len as *const u64 as u64)
-	          .saturating_sub(account_info as *const _ as *const u64 as u64);*/
-	dataLenVmAddr := (accountInfosAddr + (callerAcctIdx * 56)) + uint64(uintptr(unsafe.Pointer(&accountInfo.DataLen))) - uint64(uintptr(unsafe.Pointer(&accountInfo)))
+	dataLenVmAddr := (accountInfosAddr + (callerAcctIdx * SolAccountInfoCSize)) + uint64(uintptr(unsafe.Pointer(&accountInfo.DataLen))) - uint64(uintptr(unsafe.Pointer(&accountInfo)))
 
 	refToLenInVm, err := vm.Translate(dataLenVmAddr, 8, true)
 	if err != nil {
@@ -414,11 +409,9 @@ func callerAccountFromAccountInfoC(vm sbpf.VM, execCtx *ExecutionCtx, callerAcct
 
 func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, accountInfo SolAccountInfoRust) (CallerAccount, error) {
 
-	var callerAcct CallerAccount
-
-	/*lamportsBoxData, err := vm.Translate(accountInfo.LamportsBoxAddr, RefCellRustSize, false)
+	lamportsBoxData, err := vm.Translate(accountInfo.LamportsBoxAddr, RefCellRustSize, false)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
 	reader := bytes.NewReader(lamportsBoxData)
@@ -426,24 +419,22 @@ func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, account
 	var lamportsBox RefCellRust
 	err = lamportsBox.Unmarshal(reader)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
-	lamports, err := vm.Read64(lamportsBox.Addr)
+	lamports, err := vm.Translate(lamportsBox.Addr, 8, true)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
-	callerAcct.Lamports = lamports
 
-	ownerAddrBytes, err := vm.Translate(accountInfo.OwnerAddr, solana.PublicKeyLength, false)
+	owner, err := vm.Translate(accountInfo.OwnerAddr, solana.PublicKeyLength, false)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
-	callerAcct.Owner = solana.PublicKeyFromBytes(ownerAddrBytes)
 
 	dataBoxBytes, err := vm.Translate(accountInfo.DataBoxAddr, RefCellRustSize, false)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
 	reader.Reset(dataBoxBytes)
@@ -451,24 +442,27 @@ func callerAccountFromAccountInfoRust(vm sbpf.VM, execCtx *ExecutionCtx, account
 	var dataBox RefCellVecRust
 	err = dataBox.Unmarshal(reader)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
 	cost := dataBox.Len / CUCpiBytesPerUnit
 	err = execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
-	data, err := vm.Translate(dataBox.Addr, dataBox.Len, false)
+	serializedData, err := vm.Translate(dataBox.Addr, dataBox.Len, false)
 	if err != nil {
-		return callerAcct, err
+		return CallerAccount{}, err
 	}
 
-	callerAcct.SerializedData = &data
-	callerAcct.SerializedDataLen = dataBox.Len
-	callerAcct.Executable = accountInfo.Executable == 1
-	callerAcct.RentEpoch = accountInfo.RentEpoch*/
+	refToLenInVm, err := vm.Translate(safemath.SaturatingAddU64(accountInfo.DataBoxAddr, 32), 8, true)
+	if err != nil {
+		return CallerAccount{}, err
+	}
+
+	callerAcct := CallerAccount{Lamports: lamports, Owner: owner, OriginalDataLen: dataBox.Len,
+		SerializedData: serializedData, VmDataAddr: dataBox.Addr, RefToLenInVm: refToLenInVm}
 
 	return callerAcct, nil
 }
@@ -724,7 +718,6 @@ func translateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccount, progr
 }
 
 func translateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAccount, programIndices []uint64, accountInfosAddr uint64, accountInfosLen uint64, isLoaderDeprecated bool) (TranslatedAccounts, error) {
-
 	accountInfos, accountInfoKeys, err := translateAccountInfosRust(vm, accountInfosAddr, accountInfosLen)
 	if err != nil {
 		return nil, err
@@ -840,8 +833,6 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 		return syscallErr(err)
 	}
 
-	fmt.Printf("got Rust ABI CPI call from programId: %s -----> %s, %d signers\n", callerProgramId, ix.ProgramId, len(signers))
-
 	var isLoaderDeprecated bool
 	lastProgramAcct, err := instructionCtx.BorrowLastProgramAccount(txCtx)
 	if err != nil {
@@ -879,9 +870,11 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 			return syscallErr(err)
 		}
 		defer calleeAcct.Drop()
-		err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
-		if err != nil {
-			return syscallErr(err)
+		if acct.CallerAccount != nil {
+			err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
+			if err != nil {
+				return syscallErr(err)
+			}
 		}
 		calleeAcct.Drop()
 	}

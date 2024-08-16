@@ -93,7 +93,7 @@ type SolAccountInfoC struct {
 	Executable   bool
 }
 
-const SolAccountInfoRustSize = 43
+const SolAccountInfoRustSize = 48
 
 type SolAccountInfoRust struct {
 	PubkeyAddr      uint64 // points to uchar[32]
@@ -106,7 +106,7 @@ type SolAccountInfoRust struct {
 	Executable      byte
 }
 
-const RefCellRustSize = 32
+const RefCellRustSize = 40
 
 type RefCellRust struct {
 	Strong uint64
@@ -509,7 +509,10 @@ func (accountInfo *SolAccountInfoRust) Unmarshal(buf io.Reader) error {
 		return err
 	}
 
-	return nil
+	var padding [5]byte
+	err = binary.Read(buf, binary.LittleEndian, &padding)
+
+	return err
 }
 
 func (refCell *RefCellRust) Unmarshal(buf io.Reader) error {
