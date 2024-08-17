@@ -771,7 +771,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	// deserialize data
-	if runErr != nil {
+	if runErr == nil {
 		err = deserializeParameters(execCtx, parameterBytes, preLens)
 		if err != nil {
 			klog.Infof("failed to deserialize, %s", err)
