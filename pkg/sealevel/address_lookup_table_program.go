@@ -552,8 +552,8 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 
 	authorityKey := authorityAcct.Key()
 
-	if !execCtx.GlobalCtx.Features.IsActive(features.RelaxAuthoritySignerCheckForLookupTableCreation) &&
-		!authorityAcct.IsSigner() {
+	if !authorityAcct.IsSigner() {
+		klog.Infof("authority didn't sign")
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -576,6 +576,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	if *lookupTable.Meta.Authority != authorityKey {
+		klog.Infof("wrong authority")
 		return InstrErrIncorrectAuthority
 	}
 
