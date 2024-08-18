@@ -92,7 +92,7 @@ func (acct *BorrowedAccount) DataMutable(f features.Features) ([]byte, error) {
 	return acct.Account.Data, nil
 }
 
-func (acct *BorrowedAccount) SetStateWithExtension(f features.Features, data []byte) error {
+func (acct *BorrowedAccount) ExtendFromSlice(f features.Features, data []byte) error {
 	newLen := safemath.SaturatingAddU64(uint64(len(acct.Account.Data)), uint64(len(data)))
 	err := acct.CanDataBeResized(newLen)
 	if err != nil {
@@ -115,7 +115,8 @@ func (acct *BorrowedAccount) SetStateWithExtension(f features.Features, data []b
 
 	acct.UpdateAccountsResizeDelta(newLen)
 
-	acct.Account.SetData(data)
+	acct.Account.Data = append(acct.Account.Data, data...)
+
 	return nil
 }
 

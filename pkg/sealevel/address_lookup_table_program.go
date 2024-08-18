@@ -3,6 +3,7 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	bin "github.com/gagliardetto/binary"
@@ -232,17 +233,17 @@ func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
 		return nil, InstrErrInvalidAccountData
 	}
 
-	if state != AddressLookupTableProgramStateLookupTable && state != AddressLookupTableProgramStateUninitialized {
+	if state == AddressLookupTableProgramStateUninitialized {
+		return nil, InstrErrUninitializedAccount
+	}
+
+	if state != AddressLookupTableProgramStateLookupTable {
 		return nil, InstrErrInvalidAccountData
 	}
 
 	err = addrLookupTable.Meta.UnmarshalWithDecoder(decoder)
 	if err != nil {
 		return nil, InstrErrInvalidAccountData
-	}
-
-	if state == AddressLookupTableProgramStateUninitialized {
-		return nil, InstrErrUninitializedAccount
 	}
 
 	addrLookupTable.State = AddressLookupTableProgramStateLookupTable
@@ -384,8 +385,34 @@ func setAddrTableLookupAccountStateWithExtension(acct *BorrowedAccount, state *A
 		return err
 	}
 
-	err = acct.SetStateWithExtension(f, acctStateBytes)
+	err = acct.ExtendFromSlice(f, acctStateBytes)
 	return err
+}
+
+func overwriteAddrLookupTableMetadata(acct *BorrowedAccount, lookupTableMeta *LookupTableMeta, f features.Features) error {
+	meta, err := acct.DataMutable(f)
+	if err != nil {
+		return err
+	}
+
+	if len(meta) < AddressLookupTableMetaSize {
+		return InstrErrInvalidAccountData
+	}
+
+	for count := 0; count < AddressLookupTableMetaSize; count++ {
+		meta[count] = 0
+	}
+
+	writer := new(bytes.Buffer)
+	encoder := bin.NewBinEncoder(writer)
+	err = lookupTableMeta.MarshalWithEncoder(encoder)
+	if err != nil {
+		return InstrErrGenericError
+	}
+
+	binary.LittleEndian.PutUint32(meta, AddressLookupTableProgramStateLookupTable)
+	copy(meta[4:], writer.Bytes())
+	return nil
 }
 
 func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentSlot uint64, bumpSeed byte) error {
@@ -591,7 +618,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	lookupTable.Meta.Authority = nil
-	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	err = overwriteAddrLookupTableMetadata(lookupTableAcct, &lookupTable.Meta, execCtx.GlobalCtx.Features)
 	lookupTableAcct.Drop()
 
 	return err
@@ -628,6 +655,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	authorityKey := authorityAcct.Key()
 
 	if !authorityAcct.IsSigner() {
+		klog.Infof("authority didn't sign")
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -642,6 +670,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	lookupTableLamports := lookupTableAcct.Lamports()
 	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
+		fmt.Printf("failed to unmarshal lookup table\n")
 		return InstrErrInvalidAccountData
 	}
 
@@ -650,6 +679,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	}
 
 	if *lookupTable.Meta.Authority != authorityKey {
+		klog.Infof("incorrect authority")
 		return InstrErrIncorrectAuthority
 	}
 
@@ -659,7 +689,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	}
 
 	if len(lookupTable.Addresses) >= LookupTableMaxAddresses {
-		klog.Infof("Empty lookup tables cannot be frozen")
+		klog.Infof("Lookup table is full and cannot contain more addresses")
 		return InstrErrInvalidArgument
 	}
 
@@ -686,14 +716,18 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 
 	newTableDataLen := AddressLookupTableMetaSize + (newTableAddressesLen * solana.PublicKeyLength)
 
-	for _, newAddr := range newAddresses {
-		lookupTable.Addresses = append(lookupTable.Addresses, newAddr)
-	}
-
-	err = setAddrTableLookupAccountStateWithExtension(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	err = overwriteAddrLookupTableMetadata(lookupTableAcct, &lookupTable.Meta, execCtx.GlobalCtx.Features)
 	if err != nil {
 		return err
 	}
+
+	for _, newAddr := range newAddresses {
+		err = lookupTableAcct.ExtendFromSlice(execCtx.GlobalCtx.Features, newAddr[:])
+		if err != nil {
+			return err
+		}
+	}
+
 	lookupTableAcct.Drop()
 
 	rent, err := ReadRentSysvar(&execCtx.Accounts)
@@ -796,7 +830,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	lookupTable.Meta.DeactivationSlot = clock.Slot
-	err = setAddrTableLookupAccountState(lookupTableAcct, lookupTable, execCtx.GlobalCtx.Features)
+	err = overwriteAddrLookupTableMetadata(lookupTableAcct, &lookupTable.Meta, execCtx.GlobalCtx.Features)
 	lookupTableAcct.Drop()
 
 	return err
