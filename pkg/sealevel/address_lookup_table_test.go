@@ -585,3 +585,571 @@ func TestExecute_AddrLookupTable_Program_Test_Create_Lookup_Table_PDA_Mismatch(t
 	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
 	assert.Equal(t, InstrErrInvalidArgument, err)
 }
+
+func TestExecute_AddrLookupTable_Program_Test_CloseLookupTable_Success(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.NoError(t, err)
+
+	// check that the lookup table acct has been closed
+	tableAcctPost, err := txCtx.Accounts.GetAccount(1)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(0), uint64(len(tableAcctPost.Data)))
+	assert.Equal(t, uint64(0), tableAcctPost.Lamports)
+
+	// ensure that the receiver account got the lamports from the now closed lookup table acct
+	receiverAcctPost, err := txCtx.Accounts.GetAccount(3)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(1338), receiverAcctPost.Lamports)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_CloseLookupTable_Table_Not_Deactivated_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.Meta.DeactivationSlot = math.MaxUint64 // table is activated
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrInvalidArgument, err)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_Table_CloseLookupTable_Deactivated_In_Current_Slot_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.Meta.DeactivationSlot = 10 // same as the value we'll set sysvar Clock.slot to below
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrInvalidArgument, err)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_Table_CloseLookupTable_Recently_Deactivated_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.Meta.DeactivationSlot = 0
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	slotHashEntry := SlotHash{Slot: 0}
+	slotHashes = append(slotHashes, slotHashEntry)
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrInvalidArgument, err)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_Table_CloseLookupTable_Immutable_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	// note lack of an authority being setup for the table; this makes it immutable.
+	lookupTable.Meta.DeactivationSlot = 0
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	lookupTable.Addresses = append(lookupTable.Addresses, SystemProgramAddr)
+	lookupTable.Addresses = append(lookupTable.Addresses, VoteProgramAddr)
+	lookupTable.Addresses = append(lookupTable.Addresses, StakeProgramAddr)
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	slotHashEntry := SlotHash{Slot: 0}
+	slotHashes = append(slotHashes, slotHashEntry)
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrImmutable, err)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_Table_CloseLookupTable_Wrong_Authority_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+
+	// authority for addr lookup table acct
+	wrongAuthorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	wrongAuthorityPubkey := wrongAuthorityPrivateKey.PublicKey()
+	wrongAuthorityAcct := accounts.Account{Key: wrongAuthorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.Meta.DeactivationSlot = 0
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4) // CloseLookupTable instruction
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, wrongAuthorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: wrongAuthorityAcct.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	slotHashEntry := SlotHash{Slot: 0}
+	slotHashes = append(slotHashes, slotHashEntry)
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrIncorrectAuthority, err)
+}
+
+func TestExecute_AddrLookupTable_Program_Test_CloseLookupTable_Authority_Didnt_Sign_Failure(t *testing.T) {
+
+	// system program acct
+	lookupTableProgramAcct := accounts.Account{Key: AddressLookupTableAddr, Lamports: 100000000, Data: make([]byte, 0), Owner: NativeLoaderAddr, Executable: true, RentEpoch: 100}
+
+	// authority for addr lookup table acct
+	authorityPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	authorityPubkey := authorityPrivateKey.PublicKey()
+	authorityAcct := accounts.Account{Key: authorityPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	recentSlot := uint64(123)
+	var recentSlotBytes [8]byte
+	binary.LittleEndian.PutUint64(recentSlotBytes[:], recentSlot)
+
+	receiverPrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	receiverPubkey := receiverPrivateKey.PublicKey()
+	receiverAcct := accounts.Account{Key: receiverPubkey, Lamports: 1, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: false, RentEpoch: 100}
+
+	activatedTablePrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	activatedTablePubkey := activatedTablePrivateKey.PublicKey()
+	activatedTableAcct := accounts.Account{Key: activatedTablePubkey, Lamports: 1337, Data: make([]byte, 0), Owner: AddressLookupTableAddr, Executable: false, RentEpoch: 100}
+
+	var lookupTable AddressLookupTable
+	lookupTable.Meta.Authority = &authorityPubkey
+	lookupTable.State = AddressLookupTableProgramStateLookupTable
+	addrLookupTableBytes, err := marshalAddressLookupTable(&lookupTable)
+	assert.NoError(t, err)
+	activatedTableAcct.Data = addrLookupTableBytes
+
+	instrBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(instrBytes, 4)
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{lookupTableProgramAcct, activatedTableAcct, authorityAcct, receiverAcct})
+
+	acctMetas := []AccountMeta{{Pubkey: activatedTableAcct.Key, IsSigner: false, IsWritable: true},
+		{Pubkey: authorityAcct.Key, IsSigner: false, IsWritable: false}, // authority didn't sign, so should trigger MissingRequiredSignature
+		{Pubkey: receiverAcct.Key, IsSigner: true, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	execCtx := ExecutionCtx{TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.RelaxAuthoritySignerCheckForLookupTableCreation, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	var slotHashes SysvarSlotHashes
+	slotHashesAcct := accounts.Account{}
+	slotHashesAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarSlotHashesAddr, &slotHashesAcct)
+	WriteSlotHashesSysvar(&execCtx.Accounts, slotHashes)
+
+	var rent SysvarRent
+	rent.LamportsPerUint8Year = 1
+	rent.ExemptionThreshold = 1
+	rent.BurnPercent = 0
+	rentAcct := accounts.Account{}
+	rentAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarRentAddr, &rentAcct)
+	WriteRentSysvar(&execCtx.Accounts, rent)
+
+	var clock SysvarClock
+	clock.Slot = 10
+	clockAcct := accounts.Account{}
+	clockAcct.Lamports = 1
+	execCtx.Accounts.SetAccount(&SysvarClockAddr, &clockAcct)
+	WriteClockSysvar(&execCtx.Accounts, clock)
+
+	err = execCtx.ProcessInstruction(instrBytes, instructionAccts, []uint64{0})
+	assert.Equal(t, InstrErrMissingRequiredSignature, err)
+}

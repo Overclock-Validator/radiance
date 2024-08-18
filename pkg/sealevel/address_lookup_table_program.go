@@ -830,6 +830,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	authorityKey := authorityAcct.Key()
 
 	if !authorityAcct.IsSigner() {
+		klog.Infof("authority did not sign")
 		return InstrErrMissingRequiredSignature
 	}
 
@@ -887,6 +888,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	status := lookupTable.Meta.Status(clock.Slot, slotHashes)
+
 	switch status.Status {
 	case AddressLookupTableStatusTypeActivated:
 		{

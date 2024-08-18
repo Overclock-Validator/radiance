@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -670,11 +671,11 @@ func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens
 			if resizeErr != nil || changedErr != nil {
 				acctBytes := borrowedAcct.Data()
 				if len(acctBytes) != len(data) {
-					return resizeErr
+					return fmt.Errorf("data cannot be changed, but did anyway")
 				}
 				for count := range acctBytes {
 					if acctBytes[count] != data[count] {
-						return resizeErr
+						return fmt.Errorf("data cannot be changed, but did anyway")
 					}
 				}
 			} else {
