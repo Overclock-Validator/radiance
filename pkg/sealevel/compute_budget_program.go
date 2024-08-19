@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"fmt"
+
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"k8s.io/klog/v2"
@@ -51,9 +53,33 @@ func (requestHeapFrame *ComputeBudgetInstrRequestHeapFrame) UnmarshalWithDecoder
 	return err
 }
 
+func (requestHeapFrame *ComputeBudgetInstrRequestHeapFrame) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(ComputeBudgetInstrTypeRequestHeapFrame, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(requestHeapFrame.Bytes, bin.LE)
+	return err
+}
+
 func (setComputeUnitLimit *ComputeBudgetInstrSetComputeUnitLimit) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	setComputeUnitLimit.ComputeUnitLimit, err = decoder.ReadUint32(bin.LE)
+	return err
+}
+
+func (setComputeUnitLimit *ComputeBudgetInstrSetComputeUnitLimit) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetComputeUnitLimit, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(setComputeUnitLimit.ComputeUnitLimit, bin.LE)
 	return err
 }
 
@@ -63,9 +89,33 @@ func (setComputeUnitPrice *ComputeBudgetInstrSetComputeUnitPrice) UnmarshalWithD
 	return err
 }
 
+func (setComputeUnitPrice *ComputeBudgetInstrSetComputeUnitPrice) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetComputeUnitPrice, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint64(setComputeUnitPrice.MicroLamports, bin.LE)
+	return err
+}
+
 func (setLoadedAccountsDataSizeLimit *ComputeBudgetInstrSetLoadedAccountsDataSizeLimit) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var err error
 	setLoadedAccountsDataSizeLimit.Bytes, err = decoder.ReadUint32(bin.LE)
+	return err
+}
+
+func (setLoadedAccountsDataSizeLimit *ComputeBudgetInstrSetLoadedAccountsDataSizeLimit) MarshalWithEncoder(encoder *bin.Encoder) error {
+	var err error
+
+	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetLoadedAccountsDataSizeLimit, bin.LE)
+	if err != nil {
+		return err
+	}
+
+	err = encoder.WriteUint32(setLoadedAccountsDataSizeLimit.Bytes, bin.LE)
 	return err
 }
 
@@ -73,7 +123,15 @@ func sanitizeRequestedHeapSize(len uint32) bool {
 	return len >= MinHeapFrameBytes && len <= MaxHeapFrameBytes && (len%HeapFrameBytesMultiple == 0)
 }
 
-func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Instruction) (*ComputeBudgetLimits, error) {
+func invalidInstructionDataErr(idx int) error {
+	return fmt.Errorf("Error processing Instruction %d: %w", idx, InstrErrInvalidInstructionData)
+}
+
+func duplicateInstructionErr(idx int) error {
+	return fmt.Errorf("Transaction contains a duplicate instruction (%d) that is not allowed", idx)
+}
+
+func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudgetLimits, error) {
 
 	var hasRequestedHeapSize bool
 	var hasComputeUnitLimit bool
@@ -86,7 +144,7 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 	var updatedLoadedAccountsDataSizeLimit uint32
 	var updatedComputeUnitPrice uint64
 
-	for _, instr := range instructions {
+	for idx, instr := range instructions {
 		if instr.ProgramId != ComputeBudgetProgramAddr {
 			numNonComputeBudgetInstrs++
 			continue
@@ -97,7 +155,7 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 
 		instrType, err := decoder.ReadUint32(bin.LE)
 		if err != nil {
-			return nil, InstrErrInvalidInstructionData
+			return nil, invalidInstructionDataErr(idx)
 		}
 
 		switch instrType {
@@ -106,21 +164,20 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 				var requestHeapFrame ComputeBudgetInstrRequestHeapFrame
 				err = requestHeapFrame.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return nil, InstrErrInvalidInstructionData
+					return nil, invalidInstructionDataErr(idx)
 				}
 
 				if hasRequestedHeapSize {
-					// TODO: seems to be the wrong error to return
-					return nil, InstrErrInvalidInstructionData
+					return nil, duplicateInstructionErr(idx)
 				}
 
 				requestedSize := requestHeapFrame.Bytes
 
 				if sanitizeRequestedHeapSize(requestedSize) {
-					hasRequestedHeapSize = true
 					requestedHeapSize = requestedSize
+					hasRequestedHeapSize = true
 				} else {
-					return nil, InstrErrInvalidInstructionData
+					return nil, invalidInstructionDataErr(idx)
 				}
 			}
 
@@ -129,15 +186,15 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 				var setComputeUnitLimit ComputeBudgetInstrSetComputeUnitLimit
 				err = setComputeUnitLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return nil, InstrErrInvalidInstructionData
+					return nil, invalidInstructionDataErr(idx)
 				}
 
 				if hasComputeUnitLimit {
-					// TODO: seems to be the wrong error to return
-					return nil, InstrErrInvalidInstructionData
+					return nil, duplicateInstructionErr(idx)
 				}
 
 				updatedComputeUnitLimit = setComputeUnitLimit.ComputeUnitLimit
+				hasComputeUnitLimit = true
 			}
 
 		case ComputeBudgetInstrTypeSetComputeUnitPrice:
@@ -145,15 +202,15 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 				var setComputeUnitPrice ComputeBudgetInstrSetComputeUnitPrice
 				err = setComputeUnitPrice.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return nil, InstrErrInvalidInstructionData
+					return nil, invalidInstructionDataErr(idx)
 				}
 
 				if hasComputeUnitPrice {
-					// TODO: seems to be the wrong error to return
-					return nil, InstrErrInvalidInstructionData
+					return nil, duplicateInstructionErr(idx)
 				}
 
 				updatedComputeUnitPrice = setComputeUnitPrice.MicroLamports
+				hasComputeUnitPrice = true
 			}
 
 		case ComputeBudgetInstrTypeSetLoadedAccountsDataSizeLimit:
@@ -161,20 +218,20 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 				var setLoadedAccountsDataSizeLimit ComputeBudgetInstrSetLoadedAccountsDataSizeLimit
 				err = setLoadedAccountsDataSizeLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					return nil, InstrErrInvalidInstructionData
+					return nil, invalidInstructionDataErr(idx)
 				}
 
 				if hasUpdatedLoadedAccountsDataSizeLimit {
-					// TODO: seems to be the wrong error to return
-					return nil, InstrErrInvalidInstructionData
+					return nil, duplicateInstructionErr(idx)
 				}
 
 				updatedLoadedAccountsDataSizeLimit = setLoadedAccountsDataSizeLimit.Bytes
+				hasUpdatedLoadedAccountsDataSizeLimit = true
 			}
 
 		default:
 			{
-				return nil, InstrErrInvalidInstructionData
+				return nil, invalidInstructionDataErr(idx)
 			}
 		}
 	}
@@ -184,6 +241,9 @@ func ComputeBudgetExecuteInstructions(execCtx *ExecutionCtx, instructions []Inst
 		updatedHeapBytes = requestedHeapSize
 	} else {
 		updatedHeapBytes = MinHeapFrameBytes
+	}
+	if updatedHeapBytes > MaxHeapFrameBytes {
+		updatedHeapBytes = MaxHeapFrameBytes
 	}
 
 	var computeUnitLimit uint32
