@@ -25,6 +25,23 @@ func TestExecute_Tx_Sysvar_Instructions_Serialization_Test(t *testing.T) {
 	fmt.Printf("size of data: %d\n", len(serializedData))
 }
 
+func reformatHexBytes(hexBytes []byte) string {
+	var str string
+
+	str += "["
+	for idx, b := range hexBytes {
+		shouldHaveComma := idx != len(hexBytes)-1
+		if shouldHaveComma {
+			str += fmt.Sprintf("%x, ", b)
+		} else {
+			str += fmt.Sprintf("%x", b)
+		}
+	}
+
+	str += "]"
+	return str
+}
+
 func TestExecute_Tx_Sysvar_Instructions_Bpf_Test(t *testing.T) {
 	// program data account
 	programDataPrivKey, err := solana.NewRandomPrivateKey()
@@ -98,32 +115,48 @@ func TestExecute_Tx_Sysvar_Instructions_Bpf_Test(t *testing.T) {
 	assert.NoError(t, err)
 
 	// instruction 1 program id & instr data
-	assert.Equal(t, "Program log: instruction1 program_id: ComputeBudget111111111111111111111111111111", log.Logs[0])
-	assert.Equal(t, "Program log: instruction1 data: [2, 0, 0, 0, 38, 13, 0, 0]", log.Logs[1])
+	expected := fmt.Sprintf("Program log: instruction1 program_id: %s", instr1.ProgramId)
+	assert.Equal(t, expected, log.Logs[0])
+	expected = fmt.Sprintf("Program log: instruction1 data: %s", reformatHexBytes(instr1.Data))
+	assert.Equal(t, expected, log.Logs[1])
 
 	// instruction 1, account 1
-	assert.Equal(t, "Program log: instruction1 account 1: pubkey: Vote111111111111111111111111111111111111111", log.Logs[2])
-	assert.Equal(t, "Program log: instruction1 account 1: is_writable: true", log.Logs[3])
-	assert.Equal(t, "Program log: instruction1 account 1: is_signer: false", log.Logs[4])
+	expected = fmt.Sprintf("Program log: instruction1 account 1: pubkey: %s", instr1.Accounts[0].Pubkey)
+	assert.Equal(t, expected, log.Logs[2])
+	expected = fmt.Sprintf("Program log: instruction1 account 1: is_writable: %t", instr1.Accounts[0].IsWritable)
+	assert.Equal(t, expected, log.Logs[3])
+	expected = fmt.Sprintf("Program log: instruction1 account 1: is_signer: %t", instr1.Accounts[0].IsSigner)
+	assert.Equal(t, expected, log.Logs[4])
 
 	// instruction 1, account 2
-	assert.Equal(t, "Program log: instruction1 account 2: pubkey: Stake11111111111111111111111111111111111111", log.Logs[5])
-	assert.Equal(t, "Program log: instruction1 account 2: is_writable: false", log.Logs[6])
-	assert.Equal(t, "Program log: instruction1 account 2: is_signer: true", log.Logs[7])
+	expected = fmt.Sprintf("Program log: instruction1 account 2: pubkey: %s", instr1.Accounts[1].Pubkey)
+	assert.Equal(t, expected, log.Logs[5])
+	expected = fmt.Sprintf("Program log: instruction1 account 2: is_writable: %t", instr1.Accounts[1].IsWritable)
+	assert.Equal(t, expected, log.Logs[6])
+	expected = fmt.Sprintf("Program log: instruction1 account 2: is_signer: %t", instr1.Accounts[1].IsSigner)
+	assert.Equal(t, expected, log.Logs[7])
 
 	// instruction 2 program id & instr data
-	assert.Equal(t, "Program log: instruction2 program_id: ComputeBudget111111111111111111111111111111", log.Logs[8])
-	assert.Equal(t, "Program log: instruction2 data: [2, 0, 0, 0, 37, 13, 0, 0]", log.Logs[9])
+	expected = fmt.Sprintf("Program log: instruction2 program_id: %s", instr2.ProgramId)
+	assert.Equal(t, expected, log.Logs[8])
+	expected = fmt.Sprintf("Program log: instruction2 data: %s", reformatHexBytes(instr2.Data))
+	assert.Equal(t, expected, log.Logs[9])
 
 	// instruction 2, account 1
-	assert.Equal(t, "Program log: instruction2 account 1: pubkey: AddressLookupTab1e1111111111111111111111111", log.Logs[10])
-	assert.Equal(t, "Program log: instruction2 account 1: is_writable: true", log.Logs[11])
-	assert.Equal(t, "Program log: instruction2 account 1: is_signer: true", log.Logs[12])
+	expected = fmt.Sprintf("Program log: instruction2 account 1: pubkey: %s", instr2.Accounts[0].Pubkey)
+	assert.Equal(t, expected, log.Logs[10])
+	expected = fmt.Sprintf("Program log: instruction2 account 1: is_writable: %t", instr2.Accounts[0].IsWritable)
+	assert.Equal(t, expected, log.Logs[11])
+	expected = fmt.Sprintf("Program log: instruction2 account 1: is_signer: %t", instr2.Accounts[0].IsSigner)
+	assert.Equal(t, expected, log.Logs[12])
 
-	// instruction 1, account 2
-	assert.Equal(t, "Program log: instruction2 account 2: pubkey: KeccakSecp256k11111111111111111111111111111", log.Logs[13])
-	assert.Equal(t, "Program log: instruction2 account 2: is_writable: false", log.Logs[14])
-	assert.Equal(t, "Program log: instruction2 account 2: is_signer: false", log.Logs[15])
+	// instruction 2, account 2
+	expected = fmt.Sprintf("Program log: instruction2 account 2: pubkey: %s", instr2.Accounts[1].Pubkey)
+	assert.Equal(t, expected, log.Logs[13])
+	expected = fmt.Sprintf("Program log: instruction2 account 2: is_writable: %t", instr2.Accounts[1].IsWritable)
+	assert.Equal(t, expected, log.Logs[14])
+	expected = fmt.Sprintf("Program log: instruction2 account 2: is_signer: %t", instr2.Accounts[1].IsSigner)
+	assert.Equal(t, expected, log.Logs[15])
 
 	for _, l := range log.Logs {
 		fmt.Printf("log: %s\n", l)
