@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"runtime"
 	"unsafe"
 
 	"go.firedancer.io/radiance/pkg/cu"
@@ -507,11 +506,6 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (
 func (ip *Interpreter) Translate(addr uint64, size uint64, write bool) ([]byte, error) {
 	ptr, err := ip.translateInternal(addr, size, write)
 	if err != nil {
-		pc, _, _, ok := runtime.Caller(1)
-		details := runtime.FuncForPC(pc)
-		if ok && details != nil {
-			fmt.Printf("translateInternal failed. Translate was called from %s\n", details.Name())
-		}
 		return nil, err
 	}
 

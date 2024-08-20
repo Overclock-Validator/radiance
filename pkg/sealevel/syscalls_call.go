@@ -133,17 +133,23 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 	stackHeight := execCtx.StackHeight()
 	instrTraceLen := txCtx.InstructionTraceLength()
 
+	if instrTraceLen == 0 {
+		return syscallSuccess(0)
+	}
+
 	var reverseIndexAtStackHeight uint64
 	var instrCtxFound *InstructionCtx
 
-	for indexInTrace := instrTraceLen; indexInTrace > 0; indexInTrace-- {
+	for indexInTrace := instrTraceLen; indexInTrace >= 0; indexInTrace-- {
 		instrCtx, err := txCtx.InstructionCtxAtIndexInTrace(indexInTrace)
 		if err != nil {
 			return syscallErr(err)
 		}
+
 		if instrCtx.StackHeight() < stackHeight {
 			break
 		}
+
 		if instrCtx.StackHeight() == stackHeight {
 			if safemath.SaturatingAddU64(index, 1) == reverseIndexAtStackHeight {
 				instrCtxFound = instrCtx
@@ -174,7 +180,6 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 			if err != nil {
 				return syscallErr(err)
 			}
-			programId := solana.PublicKeyFromBytes(programIdBytes)
 
 			data, err := vm.Translate(dataAddr, resultHeader.DataLen, true)
 			if err != nil {
@@ -199,12 +204,12 @@ func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, prog
 				accounts = append(accounts, account)
 			}
 
-			if !isNonOverlapping(castToPtr(resultHeader), ProcessedSiblingInstructionSize, castToPtr(programId), solana.PublicKeyLength) ||
-				!isNonOverlapping(castToPtr(resultHeader), ProcessedSiblingInstructionSize, castToPtr(accounts), accountMetaDataSize) ||
-				!isNonOverlapping(castToPtr(resultHeader), ProcessedSiblingInstructionSize, castToPtr(data), resultHeader.DataLen) ||
-				!isNonOverlapping(castToPtr(programId), solana.PublicKeyLength, castToPtr(data), resultHeader.DataLen) ||
-				!isNonOverlapping(castToPtr(programId), solana.PublicKeyLength, castToPtr(accounts), accountMetaDataSize) ||
-				!isNonOverlapping(castToPtr(data), resultHeader.DataLen, castToPtr(accounts), accountMetaDataSize) {
+			if !isNonOverlapping(metaAddr, ProcessedSiblingInstructionSize, programIdAddr, solana.PublicKeyLength) ||
+				!isNonOverlapping(metaAddr, ProcessedSiblingInstructionSize, accountsAddr, accountMetaDataSize) ||
+				!isNonOverlapping(metaAddr, ProcessedSiblingInstructionSize, dataAddr, resultHeader.DataLen) ||
+				!isNonOverlapping(programIdAddr, solana.PublicKeyLength, dataAddr, resultHeader.DataLen) ||
+				!isNonOverlapping(programIdAddr, solana.PublicKeyLength, accountsAddr, accountMetaDataSize) ||
+				!isNonOverlapping(dataAddr, resultHeader.DataLen, accountsAddr, accountMetaDataSize) {
 				return syscallErr(SyscallErrCopyOverlapping)
 			}
 
