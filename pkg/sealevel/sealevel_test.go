@@ -1948,6 +1948,69 @@ func TestInterpreter_Get_Processed_Sibling_Instruction_Test(t *testing.T) {
 	}
 }
 
+func TestInterpreter_Test_Memo_Program(t *testing.T) {
+	// as on mainnet, we set the memo program up such that it is a program owned by the older
+	// and non-upgradeable BPFLoader2
+	programData := fixtures.Load(t, "sealevel", "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr.so")
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoader2Addr, Executable: true, RentEpoch: 100}
+
+	signerPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	signerPubkey := signerPrivKey.PublicKey()
+	signerAcct := accounts.Account{Key: signerPubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: true, RentEpoch: 100}
+
+	instrData := []byte("hello world")
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct, signerAcct})
+	acctMetas := []AccountMeta{{Pubkey: signerAcct.Key, IsSigner: true, IsWritable: false}}
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	var log LogRecorder
+	execCtx := ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.Curve25519SyscallEnabled, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	pk := [32]byte(programAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	expected := fmt.Sprintf("Program log: Signed by %s", signerPubkey)
+	containsExpected := strings.HasPrefix(log.Logs[0], expected)
+	assert.Equal(t, true, containsExpected)
+	expected = fmt.Sprintf("Program log: Memo (len 11): \"hello world\"")
+	assert.Equal(t, expected, log.Logs[1])
+
+	instrData = make([]byte, 2)
+	instrData[0] = 0xee
+	instrData[1] = 0xff
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
+
+	expected = fmt.Sprintf("Program log: Signed by %s", signerPubkey)
+	containsExpected = strings.HasPrefix(log.Logs[2], expected)
+	assert.Equal(t, true, containsExpected)
+	expected = fmt.Sprintf("Program log: Invalid UTF-8, from byte 0")
+	assert.Equal(t, expected, log.Logs[3])
+
+	for _, l := range log.Logs {
+		fmt.Printf("log: %s\n", l)
+	}
+}
+
 type executeCase struct {
 	Name    string
 	Program string

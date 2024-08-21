@@ -430,7 +430,7 @@ type serializedAcctMetadata struct {
 	vmOwnerAddr     uint64
 }
 
-func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
+func serializeParametersAligned(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -593,7 +593,7 @@ func serializeParameters(execCtx *ExecutionCtx) ([]byte, []uint64, error) {
 	return serializedData, preLens, nil
 }
 
-func deserializeParameters(execCtx *ExecutionCtx, parameterBytes []byte, preLens []uint64) error {
+func deserializeParametersAligned(execCtx *ExecutionCtx, parameterBytes []byte, preLens []uint64) error {
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -741,7 +741,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 		return err
 	}
 
-	parameterBytes, preLens, err := serializeParameters(execCtx)
+	parameterBytes, preLens, err := serializeParametersAligned(execCtx)
 	if err != nil {
 		return err
 	}
@@ -773,7 +773,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 
 	// deserialize data
 	if runErr == nil {
-		err = deserializeParameters(execCtx, parameterBytes, preLens)
+		err = deserializeParametersAligned(execCtx, parameterBytes, preLens)
 		if err != nil {
 			klog.Infof("failed to deserialize, %s", err)
 			return InstrErrInvalidArgument
@@ -835,33 +835,41 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 		return InstrErrUnsupportedProgramId
 	}
 
-	programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
-	if err != nil {
-		return err
+	var programBytes []byte
+
+	programOwner := programAcct.Owner()
+
+	if programOwner == BpfLoader2Addr || programOwner == BpfLoaderDeprecatedAddr {
+		programBytes = programAcct.Data()
+		programAcct.Drop()
+	} else if programOwner == BpfLoaderUpgradeableAddr {
+		programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
+		if err != nil {
+			return err
+		}
+
+		programAcct.Drop()
+
+		programDataPubkey := [32]byte(programAcctState.Program.ProgramDataAddress)
+		programDataAcct, err := execCtx.Accounts.GetAccount(&programDataPubkey)
+		programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data)
+		if err != nil {
+			return err
+		}
+
+		if programDataAcctState.Type == UpgradeableLoaderStateTypeUninitialized {
+			return InstrErrInvalidAccountData
+		}
+
+		programDataSlot := programDataAcctState.ProgramData.Slot
+		if programDataSlot >= execCtx.SlotCtx.Slot {
+			return InstrErrInvalidAccountData
+		}
+
+		programBytes = programDataAcct.Data[upgradeableLoaderSizeOfProgramDataMetaData:]
+	} else {
+		return InstrErrUnsupportedProgramId
 	}
-
-	programAcct.Drop()
-
-	programDataPubkey := [32]byte(programAcctState.Program.ProgramDataAddress)
-
-	// TODO: use SlotCtx
-	programDataAcct, err := execCtx.Accounts.GetAccount(&programDataPubkey)
-
-	programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data)
-	if err != nil {
-		return err
-	}
-
-	if programDataAcctState.Type == UpgradeableLoaderStateTypeUninitialized {
-		return InstrErrInvalidAccountData
-	}
-
-	programDataSlot := programDataAcctState.ProgramData.Slot
-	if programDataSlot >= execCtx.SlotCtx.Slot {
-		return InstrErrInvalidAccountData
-	}
-
-	programBytes := programDataAcct.Data[upgradeableLoaderSizeOfProgramDataMetaData:]
 
 	err = executeProgram(execCtx, programBytes)
 
@@ -991,22 +999,22 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
-	if err != nil {
-		return err
-	}
-
 	err = checkAcctForRentSysvar(txCtx, instrCtx, 4)
 	if err != nil {
 		return err
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
 	if err != nil {
 		return err
 	}
 
 	err = checkAcctForClockSysvar(txCtx, instrCtx, 5)
+	if err != nil {
+		return err
+	}
+
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
 	if err != nil {
 		return err
 	}
@@ -1267,22 +1275,22 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return err
 	}
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
-	if err != nil {
-		return err
-	}
-
 	err = checkAcctForRentSysvar(txCtx, instrCtx, 4)
 	if err != nil {
 		return err
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(&execCtx.Accounts)
 	if err != nil {
 		return err
 	}
 
 	err = checkAcctForClockSysvar(txCtx, instrCtx, 5)
+	if err != nil {
+		return err
+	}
+
+	clock, err := ReadClockSysvar(&execCtx.Accounts)
 	if err != nil {
 		return err
 	}
