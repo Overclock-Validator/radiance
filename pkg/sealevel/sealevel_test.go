@@ -23,49 +23,6 @@ import (
 	"go.firedancer.io/radiance/pkg/sbpf/loader"
 )
 
-func TestExecute_Memo(t *testing.T) {
-	tx := TransactionCtx{}
-	tx.PushInstructionCtx(InstructionCtx{})
-	opts := tx.newVMOpts(&Params{
-		Accounts:  nil,
-		Data:      []byte("Bla"),
-		ProgramID: [32]byte{},
-	})
-
-	opts.MaxCU = 100000
-
-	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sealevel", "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr.so"))
-	require.NoError(t, err)
-	require.NotNil(t, loader)
-
-	program, err := loader.Load()
-	require.NoError(t, err)
-	require.NotNil(t, program)
-
-	require.NoError(t, program.Verify())
-
-	var log LogRecorder
-
-	syscalls := sbpf.NewSyscallRegistry()
-	syscalls.Register("log", SyscallLog)
-	syscalls.Register("log_64", SyscallLog64)
-
-	interpreter := sbpf.NewInterpreter(nil, program, &sbpf.VMOpts{
-		HeapMax:  32 * 1024,
-		Input:    nil,
-		MaxCU:    10000,
-		Syscalls: syscalls,
-		Context:  &ExecutionCtx{Log: &log, ComputeMeter: cu.NewComputeMeterDefault()},
-	})
-	require.NotNil(t, interpreter)
-
-	_, err = interpreter.Run()
-	require.NoError(t, err)
-	assert.Equal(t, log.Logs, []string{
-		`Program log: Memo (len 3): "Bla"`,
-	})
-}
-
 func TestInterpreter_Noop(t *testing.T) {
 	// TODO simplify API?
 	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "noop.so"))
@@ -1948,7 +1905,7 @@ func TestInterpreter_Get_Processed_Sibling_Instruction_Test(t *testing.T) {
 	}
 }
 
-func TestInterpreter_Test_Memo_Program(t *testing.T) {
+func TestInterpreter_Test_Memo_Program_With_LoaderV2(t *testing.T) {
 	// as on mainnet, we set the memo program up such that it is a program owned by the older
 	// and non-upgradeable BPFLoader2
 	programData := fixtures.Load(t, "sealevel", "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr.so")
@@ -2005,6 +1962,62 @@ func TestInterpreter_Test_Memo_Program(t *testing.T) {
 	assert.Equal(t, true, containsExpected)
 	expected = fmt.Sprintf("Program log: Invalid UTF-8, from byte 0")
 	assert.Equal(t, expected, log.Logs[3])
+
+	for _, l := range log.Logs {
+		fmt.Printf("log: %s\n", l)
+	}
+}
+
+func TestInterpreter_Test_Deprecated_Loader(t *testing.T) {
+	// as on mainnet, we set the memo program up such that it is a program owned by the older
+	// and non-upgradeable BPFLoader2
+	programData := fixtures.Load(t, "sbpf", "deprecated_loader_simple_program.so")
+	programPrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	programPubkey := programPrivKey.PublicKey()
+	programAcct := accounts.Account{Key: programPubkey, Lamports: 10000, Data: programData, Owner: BpfLoaderDeprecatedAddr, Executable: true, RentEpoch: 100}
+
+	acct1PrivKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	acct1Pubkey := acct1PrivKey.PublicKey()
+	acct1 := accounts.Account{Key: acct1Pubkey, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: true, RentEpoch: 100}
+	acct1 = accounts.Account{Key: SystemProgramAddr, Lamports: 10000, Data: make([]byte, 0), Owner: SystemProgramAddr, Executable: true, RentEpoch: 100}
+
+	acct2PrivateKey, err := solana.NewRandomPrivateKey()
+	assert.NoError(t, err)
+	acct2Pubkey := acct2PrivateKey.PublicKey()
+	acct2 := accounts.Account{Key: acct2Pubkey, Lamports: 0x1337, Data: make([]byte, 0), Owner: VoteProgramAddr, Executable: true, RentEpoch: 100}
+	acct2 = accounts.Account{Key: VoteProgramAddr, Lamports: 0x1337, Data: make([]byte, 0), Owner: VoteProgramAddr, Executable: true, RentEpoch: 100}
+
+	fmt.Printf("acct1 key: %s\n", acct1.Key)
+	fmt.Printf("acct2 key: %s\n", acct2.Key)
+
+	instrData := []byte("hello world")
+
+	transactionAccts := NewTransactionAccounts([]accounts.Account{programAcct, acct1, acct2})
+	acctMetas := []AccountMeta{{Pubkey: acct1.Key, IsSigner: true, IsWritable: false},
+		{Pubkey: acct2.Key, IsSigner: false, IsWritable: true}}
+
+	instructionAccts := InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
+
+	txCtx := NewTestTransactionCtx(*transactionAccts, 5, 64)
+	var log LogRecorder
+	execCtx := ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(10000000000)}
+	f := features.NewFeaturesDefault()
+	f.EnableFeature(features.Curve25519SyscallEnabled, 0)
+	execCtx.GlobalCtx.Features = *f
+
+	execCtx.Accounts = accounts.NewMemAccounts()
+
+	pk := [32]byte(programAcct.Key)
+	err = execCtx.Accounts.SetAccount(&pk, &programAcct)
+	assert.NoError(t, err)
+
+	execCtx.SlotCtx = new(SlotCtx)
+	execCtx.SlotCtx.Slot = 1337
+
+	err = execCtx.ProcessInstruction(instrData, instructionAccts, []uint64{0})
+	assert.Equal(t, nil, err)
 
 	for _, l := range log.Logs {
 		fmt.Printf("log: %s\n", l)
