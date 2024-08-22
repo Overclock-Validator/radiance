@@ -17,7 +17,7 @@ func (l *Loader) parse() error {
 	if err := l.readHeader(); err != nil {
 		return err
 	}
-	if err := l.validateHeader(); err != nil {
+	if err := l.validateElfHeader(); err != nil {
 		return err
 	}
 	if err := l.loadProgramHeaderTable(); err != nil {
@@ -52,6 +52,11 @@ const (
 	maxSymbolNameLen  = 1024
 )
 
+const (
+	EM_SBPF    = 263
+	EF_SBPF_V2 = 32
+)
+
 func (l *Loader) newPhTableIter() *tableIter[elf.Prog64] {
 	eh := &l.eh
 	return newTableIterator[elf.Prog64](l, eh.Phoff, uint32(eh.Phnum), phEntLen)
@@ -70,7 +75,11 @@ func (l *Loader) readHeader() error {
 	return binary.Read(bytes.NewReader(hdrBuf[:]), binary.LittleEndian, &l.eh)
 }
 
-func (l *Loader) validateHeader() error {
+func isAligned(val uint64, alignment uint64) bool {
+	return (val % alignment) == 0
+}
+
+func (l *Loader) validateElfHeader() error {
 	eh := &l.eh
 	ident := &eh.Ident
 
@@ -82,11 +91,11 @@ func (l *Loader) validateHeader() error {
 		elf.Data(ident[elf.EI_DATA]) != elf.ELFDATA2LSB ||
 		elf.Version(ident[elf.EI_VERSION]) != elf.EV_CURRENT ||
 		elf.OSABI(ident[elf.EI_OSABI]) != elf.ELFOSABI_NONE ||
-		elf.Machine(eh.Machine) != elf.EM_BPF ||
-		elf.Type(eh.Type) != elf.ET_DYN {
+		elf.Type(eh.Type) != elf.ET_DYN ||
+		(elf.Machine(eh.Machine) != elf.EM_BPF && elf.Machine(eh.Machine) != EM_SBPF) ||
+		eh.Version != 1 {
 		return fmt.Errorf("incompatible binary")
 	}
-	// note: EI_PAD and EI_ABIVERSION are ignored
 
 	if eh.Version != uint32(elf.EV_CURRENT) ||
 		eh.Ehsize != ehLen ||
@@ -94,6 +103,11 @@ func (l *Loader) validateHeader() error {
 		eh.Shentsize != shEntLen ||
 		eh.Shstrndx >= eh.Shnum {
 		return fmt.Errorf("invalid ELF file")
+	}
+
+	// only SBPFv1 is supported in production at present
+	if eh.Flags == EF_SBPF_V2 {
+		return fmt.Errorf("ElfError::UnsupportedSBPFVersion")
 	}
 
 	if eh.Phoff < ehLen {
@@ -112,34 +126,36 @@ func (l *Loader) validateHeader() error {
 // scan the program header table and remember the last PT_LOAD segment
 func (l *Loader) loadProgramHeaderTable() error {
 	iter := l.newPhTableIter()
+
 	for iter.Next() && iter.Err() == nil {
 		ph := iter.Item()
 
 		switch elf.ProgType(ph.Type) {
 		case elf.PT_DYNAMIC:
-			// remember first segment with PT_DYNAMIC in case we need it later
-			if l.phDynamic == nil {
-				l.phDynamic = new(elf.Prog64)
-				*l.phDynamic = ph
+			{
+				// remember first segment with PT_DYNAMIC in case we need it later
+				if l.phDynamic == nil {
+					l.phDynamic = new(elf.Prog64)
+					*l.phDynamic = ph
+				}
 			}
-			continue
 		case elf.PT_LOAD:
-			// ok
+			{
+				// vaddr must be ascending
+				if ph.Vaddr < l.phLoad.Vaddr {
+					return fmt.Errorf("invalid program header")
+				}
+
+				segmentEnd, overflow := bits.Add64(ph.Off, ph.Filesz, 0)
+				if segmentEnd > l.fileSize || overflow > 0 {
+					return fmt.Errorf("segment out of bounds")
+				}
+
+				l.phLoad = ph
+			}
 		default:
-			continue
+			// ignoring other segment types
 		}
-
-		// vaddr must be ascending
-		if ph.Vaddr < l.phLoad.Vaddr {
-			return fmt.Errorf("invalid program header")
-		}
-
-		segmentEnd, overflow := bits.Add64(ph.Off, ph.Filesz, 0)
-		if segmentEnd > l.fileSize || overflow > 0 {
-			return fmt.Errorf("segment out of bounds")
-		}
-
-		l.phLoad = ph
 	}
 	return iter.Err()
 }
@@ -269,6 +285,7 @@ func (l *Loader) parseSections() error {
 			return err
 		}
 
+		// ElfError::WritableSectionNotSupported
 		if strings.HasPrefix(sectionName, ".bss") {
 			return fmt.Errorf("unsupported bss-like section")
 		}
@@ -279,6 +296,7 @@ func (l *Loader) parseSections() error {
 		}
 
 		// bounds check
+		// ElfError::ValueOutOfBounds
 		if sh.Off+sh.Size < sh.Off || sh.Off+sh.Size > l.fileSize {
 			return io.ErrUnexpectedEOF
 		}
