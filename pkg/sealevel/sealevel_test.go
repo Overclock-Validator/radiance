@@ -2024,6 +2024,18 @@ func TestInterpreter_Test_Deprecated_Loader(t *testing.T) {
 	}
 }
 
+func TestLoader_Old_Program(t *testing.T) {
+	loader, err := loader.NewLoaderFromBytes(fixtures.Load(t, "sbpf", "old_program.so"))
+	require.NoError(t, err)
+	require.NotNil(t, loader)
+
+	program, err := loader.Load()
+	require.NoError(t, err)
+	require.NotNil(t, program)
+
+	require.NoError(t, program.Verify())
+}
+
 type executeCase struct {
 	Name    string
 	Program string

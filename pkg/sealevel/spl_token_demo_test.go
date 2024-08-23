@@ -307,7 +307,8 @@ func Test_Spl_Token_Program_Demo(t *testing.T) {
 	execCtx.TransactionContext = NewTestTransactionCtx(*transactionAccts, 5, 64)
 
 	// Transfer: serialize up a Transfer instruction
-	transferInstrData := newTransferToInstructionBytes(1337)
+	numTokensToTransfer := uint64(1337)
+	transferInstrData := newTransferToInstructionBytes(numTokensToTransfer)
 
 	// Transfer: execute SPL token Transfer instruction
 	err = execCtx.ProcessInstruction(transferInstrData, instructionAccts, []uint64{0})
@@ -324,8 +325,8 @@ func Test_Spl_Token_Program_Demo(t *testing.T) {
 	dstBalancePostTransfer := extractTokenAmountFromAccountBlob(dstAcctPost.Data)
 
 	assert.Equal(t, numTokensToMint, srcBalancePostTransfer+dstBalancePostTransfer)
-	assert.Equal(t, uint64(1337), dstBalancePostTransfer)
-	assert.Equal(t, numTokensToMint-1337, srcBalancePostTransfer)
+	assert.Equal(t, uint64(numTokensToTransfer), dstBalancePostTransfer)
+	assert.Equal(t, numTokensToMint-numTokensToTransfer, srcBalancePostTransfer)
 
 	fmt.Printf("src account num tokens after transfer: %d\n", extractTokenAmountFromAccountBlob(srcAcctPost.Data))
 	fmt.Printf("dst account num tokens after transfer: %d\n", extractTokenAmountFromAccountBlob(dstAcctPost.Data))

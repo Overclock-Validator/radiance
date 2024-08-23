@@ -341,7 +341,7 @@ func (l *Loader) parseDynamicTable() error {
 		if dyn.Tag == int64(elf.DT_NULL) {
 			break
 		}
-		if dyn.Tag >= int64(len(l.dynamic)) {
+		if dyn.Tag >= int64(elf.DT_REL) {
 			continue
 		}
 

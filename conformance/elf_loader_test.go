@@ -84,17 +84,20 @@ func TestConformance_Elf_Loader(t *testing.T) {
 		fmt.Printf("\n")
 
 		if fixture.Output != nil && err == nil {
-			fmt.Printf("******** SUCCESS: testcase %s loaded successfully, and fixture also indicated successful load\n", fn)
+			//fmt.Printf("******** SUCCESS: testcase %s loaded successfully, and fixture also indicated successful load\n", fn)
 		} else if fixture.Output == nil && err != nil {
-			fmt.Printf("******** SUCCESS: testcase %s failed to load (%s), and fixture also indicated failure to load\n", fn, err)
+			//fmt.Printf("******** SUCCESS: testcase %s failed to load (%s), and fixture also indicated failure to load\n", fn, err)
 		} else if fixture.Output == nil && err == nil {
 			fmt.Printf("******** FAILURE [1]: testcase %s loaded successfully but fixture indicated failure to load\n", fn)
 			failedTestcases = append(failedTestcases, fn)
 		} else if fixture.Output != nil && err != nil {
 			fmt.Printf("******** FAILURE [2]: fixture indicates success, but loader returned an error: %s\n\n", err)
-			fmt.Printf("******** output: %s\n", fixture.Output)
-			outputStr := fmt.Sprintf("%s", fixture.Output)
-			fmt.Printf("%d\n", len(outputStr))
+			fmt.Printf("entry PC: %x\n", fixture.Output.EntryPc)
+			fmt.Printf("rodata: %x\n", fixture.Output.Rodata)
+			fmt.Printf("rodata sz: %x\n", fixture.Output.RodataSz)
+			fmt.Printf("TextCnt: %x\n", fixture.Output.TextCnt)
+			fmt.Printf("TextOff: %x\n", fixture.Output.TextOff)
+			//fmt.Printf("******** +++ output: %v\n", fixture.Output)
 			failedTestcases = append(failedTestcases, fn)
 		} else {
 			panic("is this even possible??")
