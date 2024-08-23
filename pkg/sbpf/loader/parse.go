@@ -341,11 +341,7 @@ func (l *Loader) parseDynamicTable() error {
 		if dyn.Tag == int64(elf.DT_NULL) {
 			break
 		}
-		if dyn.Tag >= int64(elf.DT_REL) {
-			continue
-		}
-
-		if dyn.Tag < 0 {
+		if uint64(dyn.Tag) >= 35 { /* DT_NUM in rBPF */
 			continue
 		}
 		l.dynamic[dyn.Tag] = dyn.Val
