@@ -83,6 +83,7 @@ var (
 
 var (
 	PubkeyErrIllegalOwner          = errors.New("PubkeyErrIllegalOwner")
+	PubkeyErrInvalidSeeds          = errors.New("PubkeyErrInvalidSeeds")
 	PubkeyErrMaxSeedLengthExceeded = errors.New("PubkeyErrMaxSeedLengthExceeded")
 )
 
@@ -229,6 +230,7 @@ var solanaNumericalErrCodes = map[error]int{
 
 	/* pubkey errors */
 	PubkeyErrMaxSeedLengthExceeded: 0,
+	PubkeyErrInvalidSeeds:          1,
 	PubkeyErrIllegalOwner:          2,
 
 	/* stake program errors */
@@ -285,6 +287,7 @@ var customErrs = map[error]bool{
 	SystemProgErrNonceNoRecentBlockhashes:                                  true,
 	SystemProgErrNonceBlockhashNotExpired:                                  true,
 	PubkeyErrMaxSeedLengthExceeded:                                         true,
+	PubkeyErrInvalidSeeds:                                                  true,
 	PubkeyErrIllegalOwner:                                                  true,
 	StakeErrRedelegateTransientOrInactiveStake:                             true,
 	StakeErrRedelegateToSameVoteAccount:                                    true,

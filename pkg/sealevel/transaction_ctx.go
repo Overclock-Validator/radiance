@@ -158,6 +158,10 @@ func (txCtx *TransactionCtx) InstructionAccountsLamportSum(instrCtx *Instruction
 		}
 
 		acct, err := txCtx.AccountAtIndex(idxInTx)
+		if err != nil {
+			return wide.NewUint128(0, 0), err
+		}
+
 		lamportsUint128 := wide.Uint128FromUint64(acct.Lamports)
 		instructionAcctsLamportSum, err = safemath.CheckedAddU128(instructionAcctsLamportSum, lamportsUint128)
 		if err != nil {

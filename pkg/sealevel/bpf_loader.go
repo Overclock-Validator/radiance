@@ -1401,7 +1401,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 
 	signer, err := solana.CreateProgramAddress(seeds, callerProgramId)
 	if err != nil {
-		return err
+		return PubkeyErrInvalidSeeds
 	}
 
 	var signers []solana.PublicKey

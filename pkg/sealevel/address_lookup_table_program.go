@@ -3,7 +3,6 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"math"
 
 	bin "github.com/gagliardetto/binary"
@@ -107,6 +106,9 @@ func (extendLookupTable *AddrLookupTableInstrExtendLookupTable) UnmarshalWithDec
 		}
 		pk := solana.PublicKeyFromBytes(pkBytes)
 		extendLookupTable.NewAddresses = append(extendLookupTable.NewAddresses, pk)
+		if decoder.Position() > 1232 {
+			return InstrErrInvalidInstructionData
+		}
 	}
 
 	return nil
@@ -305,7 +307,7 @@ func marshalAddressLookupTable(addrLookupTable *AddressLookupTable) ([]byte, err
 func AddressLookupTableExecute(execCtx *ExecutionCtx) error {
 	err := execCtx.ComputeMeter.Consume(CUAddressLookupTableDefaultComputeUnits)
 	if err != nil {
-		return err
+		return InstrErrComputationalBudgetExceeded
 	}
 
 	txCtx := execCtx.TransactionContext
@@ -491,7 +493,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 
 	derivedTableKey, err := solana.CreateProgramAddress(seeds, AddressLookupTableAddr)
 	if err != nil {
-		return err
+		return PubkeyErrInvalidSeeds
 	}
 
 	if tableKey != derivedTableKey {
@@ -594,7 +596,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	lookupTableData := lookupTableAcct.Data()
 	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	if lookupTable.Meta.Authority == nil {
@@ -670,8 +672,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 	lookupTableLamports := lookupTableAcct.Lamports()
 	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
-		fmt.Printf("failed to unmarshal lookup table\n")
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	if lookupTable.Meta.Authority == nil {
@@ -807,7 +808,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	lookupTableData := lookupTableAcct.Data()
 	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
-		return InstrErrInvalidAccountData
+		return err
 	}
 
 	if lookupTable.Meta.Authority == nil {

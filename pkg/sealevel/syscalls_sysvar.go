@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"k8s.io/klog/v2"
 )
 
 // SyscallGetClockSysvarImpl is an implementation of the sol_get_clock_sysvar syscall
@@ -43,6 +44,8 @@ var SyscallGetClockSysvar = sbpf.SyscallFunc1(SyscallGetClockSysvarImpl)
 
 // SyscallGetRentSysvarImpl is an implementation of the sol_get_rent_sysvar syscall
 func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
+	klog.Infof("SyscallGetRentSysvarImpl")
+
 	execCtx := executionCtx(vm)
 
 	cost := uint64(CUSyscallBaseCost + SysvarRentStructLen)

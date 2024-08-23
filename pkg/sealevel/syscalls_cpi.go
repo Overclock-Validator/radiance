@@ -223,7 +223,7 @@ func translateSigners(vm sbpf.VM, programId solana.PublicKey, signersSeedsAddr, 
 
 		pubkey, err := solana.CreateProgramAddress(seedBytes, programId)
 		if err != nil {
-			return nil, err
+			return nil, PubkeyErrInvalidSeeds
 		}
 		pdas = append(pdas, pubkey)
 	}
