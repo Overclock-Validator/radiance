@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gagliardetto/solana-go"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -85,12 +87,19 @@ func TestBlockFetch_LatestFinalized(t *testing.T) {
 	} else {
 		fmt.Printf("block contained %d transactions.\n", len(result.Transactions))
 
+		var numAccounts uint64
+		allAccounts := make([]solana.PublicKey, 0)
 		for _, tx := range result.Transactions {
 			txParsed, err := tx.GetTransaction()
 			assert.NoError(t, err)
 			//fmt.Printf("%+v\n", txParsed)
 			err = txParsed.VerifySignatures()
 			assert.NoError(t, err)
+			numAccounts += uint64(len(txParsed.Message.AccountKeys))
+			allAccounts = append(allAccounts, txParsed.Message.AccountKeys...)
 		}
+		fmt.Printf("%d accounts in block\n", numAccounts)
+		uniqAccts := lo.Uniq(allAccounts)
+		fmt.Printf("unique accounts in block: %d\n", len(uniqAccts))
 	}
 }

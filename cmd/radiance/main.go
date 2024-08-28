@@ -6,9 +6,6 @@ import (
 	"os"
 	"os/signal"
 
-	"go.firedancer.io/radiance/cmd/radiance/tpu_quic"
-	"go.firedancer.io/radiance/cmd/radiance/tpu_udp"
-
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/cmd/radiance/blockstore"
 	"go.firedancer.io/radiance/cmd/radiance/gossip"
@@ -34,8 +31,6 @@ func init() {
 		&blockstore.Cmd,
 		&gossip.Cmd,
 		&replay.Cmd,
-		&tpu_udp.Cmd,
-		&tpu_quic.Cmd,
 	)
 }
 
