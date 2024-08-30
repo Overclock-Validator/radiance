@@ -1344,3 +1344,13 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 
 	return nil
 }
+
+func (snapshotManifest *SnapshotManifest) AppendVecInfoForSlot(slot uint64) *SlotAcctVecs {
+	for _, s := range snapshotManifest.AccountsDb.Storages {
+		if s.Slot == slot {
+			return &s
+		}
+	}
+
+	return nil
+}

@@ -14,3 +14,9 @@ var validHostnameRegexp = regexp.MustCompile(`^(?i)[a-z0-9-]+(\.[a-z0-9-]+)+\.?$
 func IsValidHostname(hostname string) bool {
 	return validHostnameRegexp.MatchString(hostname)
 }
+
+func AlignUp(unaligned uint64, align uint64) uint64 {
+	mask := align - 1
+	alignedVal := unaligned + (-unaligned & mask)
+	return alignedVal
+}

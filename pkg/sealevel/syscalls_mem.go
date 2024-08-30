@@ -3,6 +3,7 @@ package sealevel
 import (
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"go.firedancer.io/radiance/pkg/util"
 )
 
 func MemOpConsume(execCtx *ExecutionCtx, n uint64) error {
@@ -132,12 +133,6 @@ func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64) (uint64, error) {
 
 var SyscallMemset = sbpf.SyscallFunc3(SyscallMemsetImpl)
 
-func alignUp(unaligned uint64, align uint64) uint64 {
-	mask := align - 1
-	alignedVal := unaligned + (-unaligned & mask)
-	return alignedVal
-}
-
 // SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
 func SyscallAllocFreeImpl(vm sbpf.VM, size, freeAddr uint64) (uint64, error) {
 	execCtx := executionCtx(vm)
@@ -154,7 +149,7 @@ func SyscallAllocFreeImpl(vm sbpf.VM, size, freeAddr uint64) (uint64, error) {
 		align = 1
 	}
 
-	heapSize := alignUp(vm.HeapSize(), align)
+	heapSize := util.AlignUp(vm.HeapSize(), align)
 	heapAddr := safemath.SaturatingAddU64(heapSize, sbpf.VaddrHeap)
 	heapSize = safemath.SaturatingAddU64(heapSize, size)
 
