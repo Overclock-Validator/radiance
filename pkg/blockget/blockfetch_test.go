@@ -89,6 +89,7 @@ func TestBlockFetch_LatestFinalized(t *testing.T) {
 
 		var numAccounts uint64
 		allAccounts := make([]solana.PublicKey, 0)
+
 		for _, tx := range result.Transactions {
 			txParsed, err := tx.GetTransaction()
 			assert.NoError(t, err)
