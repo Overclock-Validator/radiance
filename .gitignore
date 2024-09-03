@@ -34,3 +34,9 @@ conformance/test-vectors
 [._]s[a-rt-v][a-z]
 [._]ss[a-gi-z]
 [._]sw[a-p]
+mithril
+cmd/.DS_Store
+conformance/.DS_Store
+fixtures/.DS_Store
+pkg/.DS_Store
+.DS_Store

@@ -14,6 +14,7 @@ type Accounts interface {
 }
 
 type Account struct {
+	Slot       uint64
 	Key        solana.PublicKey
 	Lamports   uint64
 	Data       []byte
@@ -64,6 +65,18 @@ func (a *Account) Resize(newLen uint64, fillVal byte) {
 }
 
 func (a *Account) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
+	a.Slot, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	var keyBytes []byte
+	keyBytes, err = decoder.ReadNBytes(solana.PublicKeyLength)
+	if err != nil {
+		return err
+	}
+	a.Key = solana.PublicKeyFromBytes(keyBytes)
+
 	a.Lamports, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		return err
@@ -80,18 +93,26 @@ func (a *Account) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = decoder.Decode(&a.Owner); err != nil {
+
+	var ownerBytes []byte
+	ownerBytes, err = decoder.ReadNBytes(solana.PublicKeyLength)
+	if err != nil {
 		return err
 	}
+	copy(a.Owner[:], ownerBytes)
+
 	a.Executable, err = decoder.ReadBool()
 	if err != nil {
 		return err
 	}
+
 	a.RentEpoch, err = decoder.ReadUint64(bin.LE)
-	return
+	return err
 }
 
-func (a *Account) MarshalWihEncoder(encoder *bin.Encoder) error {
+func (a *Account) MarshalWithEncoder(encoder *bin.Encoder) error {
+	_ = encoder.WriteUint64(a.Slot, bin.LE)
+	_ = encoder.WriteBytes(a.Key[:], false)
 	_ = encoder.WriteUint64(a.Lamports, bin.LE)
 	_ = encoder.WriteUint64(uint64(len(a.Data)), bin.LE)
 	_ = encoder.WriteBytes(a.Data, false)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gagliardetto/solana-go"
+	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/util"
 )
 
@@ -64,7 +65,7 @@ func (acctHdr *AppendVecAcctHeader) Unmarshal(data []byte) (uint64, error) {
 	}
 
 	if (uint64(len(data)) - offset) < acctHdr.DataLen {
-		return 0, fmt.Errorf("not enough data for %d byte acct data len (%d)", acctHdr.DataLen, uint64(len(data))-offset)
+		return 0, fmt.Errorf("not enough data for %x byte, acct data len %d", acctHdr.DataLen, uint64(len(data))-offset)
 	}
 
 	acctHdr.Data = make([]byte, acctHdr.DataLen)
@@ -76,11 +77,17 @@ func (acctHdr *AppendVecAcctHeader) Unmarshal(data []byte) (uint64, error) {
 	return offset, nil
 }
 
-func UnmarshalAccountsFromAppendVecs(data []byte, appendVecInfo SlotAcctVecs) ([]*AppendVecAcctHeader, error) {
+func (acctHdr *AppendVecAcctHeader) ToAccount() *accounts.Account {
+	return &accounts.Account{Key: acctHdr.Pubkey, Lamports: acctHdr.Lamports,
+		Data: acctHdr.Data, Owner: acctHdr.Owner, Executable: acctHdr.Executable,
+		RentEpoch: acctHdr.RentEpoch}
+}
+
+func UnmarshalAccountsFromAppendVecs(data []byte, appendVecInfo SlotAcctVecs) ([]*accounts.Account, error) {
 	fileSize := appendVecInfo.AcctVecs[0].FileSize
 	appendVecBytes := data
 
-	accts := make([]*AppendVecAcctHeader, 0)
+	acctHdrs := make([]*AppendVecAcctHeader, 0)
 	var offset uint64
 
 	for {
@@ -102,7 +109,13 @@ func UnmarshalAccountsFromAppendVecs(data []byte, appendVecInfo SlotAcctVecs) ([
 
 		offset += bytesReadAligned
 
-		accts = append(accts, acct)
+		acctHdrs = append(acctHdrs, acct)
+	}
+
+	accts := make([]*accounts.Account, 0)
+	for _, acct := range acctHdrs {
+		a := acct.ToAccount()
+		accts = append(accts, a)
 	}
 
 	return accts, nil

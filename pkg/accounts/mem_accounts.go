@@ -6,6 +6,8 @@ import (
 	"go.firedancer.io/radiance/pkg/base58"
 )
 
+// A simple in-memory implementation for accountsdb used for testing only
+
 type MemAccounts struct {
 	Map map[[32]byte]*Account
 }

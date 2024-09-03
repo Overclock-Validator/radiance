@@ -65,7 +65,7 @@ func (a *AccountEntry) MarshalWihEncoder(encoder *bin.Encoder) (err error) {
 	if err = encoder.WriteBytes(a.Pubkey[:], false); err != nil {
 		return err
 	}
-	return a.Account.MarshalWihEncoder(encoder)
+	return a.Account.MarshalWithEncoder(encoder)
 }
 
 func (b *BuiltinProgram) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {

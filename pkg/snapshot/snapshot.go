@@ -8,9 +8,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/klauspost/compress/zstd"
+	"go.firedancer.io/radiance/pkg/accounts"
 )
 
 func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
@@ -55,9 +57,7 @@ func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
 	return manifest, err
 }
 
-// TODO: store accounts to AccountsDB
-// TODO: handle multiple versions of the same account key by using the one with the most recent slot number
-func LoadAccountsFromSnapshot(filename string) error {
+func LoadAccountsToAccountsDbFromSnapshot(filename string, accountsDb accounts.Accounts) error {
 	manifest, err := UnmarshalManifestFromSnapshot(filename)
 	if err != nil {
 		fmt.Printf("err: %s\n", err)
@@ -77,11 +77,15 @@ func LoadAccountsFromSnapshot(filename string) error {
 	defer zstdReader.Close()
 
 	tarReader := tar.NewReader(zstdReader)
-	writer := new(bytes.Buffer)
+
+	var numAcctsProcessed uint64
+	start := time.Now()
 
 	for {
 		header, err := tarReader.Next()
-		if err != nil {
+		if err == io.EOF {
+			break
+		} else if err != nil {
 			return err
 		}
 
@@ -91,7 +95,9 @@ func LoadAccountsFromSnapshot(filename string) error {
 				continue
 			}
 
+			writer := new(bytes.Buffer)
 			_, err := io.Copy(writer, tarReader)
+
 			if err != nil {
 				return err
 			}
@@ -119,9 +125,37 @@ func LoadAccountsFromSnapshot(filename string) error {
 				fmt.Printf("error decoding append vecs: %s\n", err)
 			}
 
+			// add accounts to accounts db
 			for _, a := range accts {
-				fmt.Printf("acct: %+v\n", *a)
+				numAcctsProcessed++
+
+				var k [32]byte
+				copy(k[:], a.Key[:])
+
+				// if an account for this pubkey already exists in the accounts db, only go ahead and add
+				// this entry we have here if the existing entry's slot is lower (older).
+				slotForExistingAcct, err := accountsDb.(accounts.PersistentAccountsDb).SlotForAcct(&k)
+				if err == nil && slotForExistingAcct > slot {
+					//fmt.Printf("skipped dupe %s. slotForExistingAcct = %d, current slot = %d\n", a.Key, slotForExistingAcct, slot)
+					continue
+				}
+
+				(*a).Slot = slot
+				err = accountsDb.SetAccount(&k, a)
+				if err != nil {
+					fmt.Printf("error adding acct %s to accounts db: %s\n", a.Key, err)
+					return err
+				}
+
+				//fmt.Printf("added account to acctsdb (# %d)\n", numAcctsProcessed)
+
+				if (numAcctsProcessed % 50000000) == 0 {
+					fmt.Printf("accts processed: %d, in %s\n", numAcctsProcessed, time.Since(start))
+				}
 			}
 		}
 	}
+
+	fmt.Printf("accts processed: %d, in %s\n", numAcctsProcessed, time.Since(start))
+	return nil
 }
