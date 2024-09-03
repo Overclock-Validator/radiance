@@ -4,7 +4,9 @@
 # Build artifacts
 _bin
 /radiance
+/mithril
 /cmd/radiance/radiance
+/cmd/mithril/mithril
 /vendor
 
 # Data
@@ -34,7 +36,6 @@ conformance/test-vectors
 [._]s[a-rt-v][a-z]
 [._]ss[a-gi-z]
 [._]sw[a-p]
-mithril
 cmd/.DS_Store
 conformance/.DS_Store
 fixtures/.DS_Store
