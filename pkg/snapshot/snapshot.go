@@ -17,7 +17,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/klauspost/compress/zstd"
 	"github.com/panjf2000/ants/v2"
-	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/accountsdb"
 )
 
 func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
@@ -75,7 +75,7 @@ type indexEntryBuilderTask struct {
 }
 
 type indexEntryCommitterTask struct {
-	IndexEntries []*accounts.AccountIndexEntry
+	IndexEntries []*accountsdb.AccountIndexEntry
 	Pubkeys      []solana.PublicKey
 }
 
@@ -155,7 +155,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 		numTimesIndexEntryBuilderPool.Add(1)
 
 		task := i.(indexEntryBuilderTask)
-		pubkeys, entries, err := buildIndexEntriesFromAppendVecs(task.Data, task.FileSize, task.Slot, task.FileId)
+		pubkeys, entries, err := accountsdb.BuildIndexEntriesFromAppendVecs(task.Data, task.FileSize, task.Slot, task.FileId)
 		if err != nil {
 			fmt.Printf("%s\n", err)
 			return
