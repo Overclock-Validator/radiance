@@ -11,17 +11,18 @@ import (
 var Cmd = cobra.Command{
 	Use:   "verifier",
 	Short: "Run Solana verifier node",
-	Args:  cobra.NoArgs,
+	Args:  cobra.ExactArgs(2),
 	Run:   run,
 }
 
 func init() {
 }
 
-func run(c *cobra.Command, _ []string) {
-	snapshotFileName := "/mnt/solana-snapshots/snapshot-288081692-9xDqLJKJaRgeQwVkyEMEiTV6e4TZbJUoQ25p4QpCweuh.tar.zst"
+func run(c *cobra.Command, args []string) {
+	snapshotFileName := args[0]
+	accountsDbDir := args[1]
 
-	err := snapshot.BuildAccountsIndexFromSnapshot(snapshotFileName)
+	err := snapshot.BuildAccountsIndexFromSnapshot(snapshotFileName, accountsDbDir)
 	if err != nil {
 		klog.Exitf("failed to populate new accounts db from snapshot %s: %s", snapshotFileName, err)
 	}

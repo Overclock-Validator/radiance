@@ -79,14 +79,14 @@ type indexEntryCommitterTask struct {
 	Pubkeys      []solana.PublicKey
 }
 
-func BuildAccountsIndexFromSnapshot(filename string) error {
-	manifest, err := UnmarshalManifestFromSnapshot(filename)
+func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) error {
+	manifest, err := UnmarshalManifestFromSnapshot(snapshotFile)
 	if err != nil {
 		fmt.Printf("err: %s\n", err)
 		return err
 	}
 
-	file, err := os.Open(filename)
+	file, err := os.Open(snapshotFile)
 	if err != nil {
 		return err
 	}
@@ -102,18 +102,17 @@ func BuildAccountsIndexFromSnapshot(filename string) error {
 
 	start := time.Now()
 
-	indexDirPath := "/tmp/accounts"
-	appendVecsPathTemplate := "/tmp/appendvecs/%s"
-
-	if err = os.MkdirAll(indexDirPath, 0775); err != nil {
+	appendVecsOutputDir := fmt.Sprintf("%s/accounts", accountsDbDir)
+	if err = os.MkdirAll(appendVecsOutputDir, 0775); err != nil {
 		return err
 	}
 
-	if err = os.MkdirAll("/tmp/appendvecs/accounts", 0775); err != nil {
+	indexOutputDir := fmt.Sprintf("%s/index", accountsDbDir)
+	if err = os.MkdirAll(indexOutputDir, 0775); err != nil {
 		return err
 	}
 
-	db, err := sniper.Open(sniper.Dir("1"))
+	db, err := sniper.Open(sniper.Dir(indexOutputDir))
 	if err != nil {
 		fmt.Printf("failed to open database: %s\n", err)
 		return err
@@ -184,7 +183,7 @@ func BuildAccountsIndexFromSnapshot(filename string) error {
 				return
 			}
 
-			outFile, err := os.Create(fmt.Sprintf(appendVecsPathTemplate, filename))
+			outFile, err := os.Create(fmt.Sprintf("%s/%s", accountsDbDir, filename))
 			if err != nil {
 				fmt.Printf("err creating new: %s\n", err)
 				return
