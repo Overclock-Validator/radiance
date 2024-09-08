@@ -11,83 +11,43 @@ import (
 
 const hdrLen = 136
 
-type AppendVecAcctHeader struct {
-	WriteVersion uint64
-	DataLen      uint64
-	Pubkey       solana.PublicKey
-	Lamports     uint64
-	RentEpoch    uint64
-	Owner        solana.PublicKey
-	Executable   bool
-	Padding      [7]byte
-	Hash         [32]byte
-	Data         []byte
-}
-
-func (acctHdr *AppendVecAcctHeader) Unmarshal(data []byte) (uint64, error) {
+func unpackOffsetAndPubkey(data []byte) (uint64, solana.PublicKey, bool, error) {
 	var offset uint64
-
-	acctHdr.WriteVersion = binary.LittleEndian.Uint64(data[offset:])
 	offset += 8
 
-	acctHdr.DataLen = binary.LittleEndian.Uint64(data[offset:])
+	dataLen := binary.LittleEndian.Uint64(data[offset : offset+8])
 	offset += 8
 
-	acctHdr.Pubkey = solana.PublicKeyFromBytes(data[offset:])
-	offset += solana.PublicKeyLength
-
-	acctHdr.Lamports = binary.LittleEndian.Uint64(data[offset:])
+	pubkey := solana.PublicKeyFromBytes(data[offset : offset+solana.PublicKeyLength])
 	offset += 8
 
-	acctHdr.RentEpoch = binary.LittleEndian.Uint64(data[offset:])
-	offset += 8
+	lamports := binary.LittleEndian.Uint64(data[offset : offset+8])
 
-	acctHdr.Owner = solana.PublicKeyFromBytes(data[offset:])
-	offset += solana.PublicKeyLength
+	offset += 112
 
-	acctHdr.Executable = data[offset] == 1
-	offset++
-
-	for count := uint64(0); count < 7; count++ {
-		acctHdr.Padding[count] = data[offset]
-		offset++
+	if dataLen == 0 {
+		return offset, pubkey, lamports == 0, nil
 	}
 
-	copy(acctHdr.Hash[:], data[offset:])
-	offset += 32
-
-	if offset != hdrLen {
-		panic(fmt.Sprintf("error, offset = %d and should be hdrLen %d", offset, hdrLen))
+	if (uint64(len(data)) - offset) < dataLen {
+		return 0, solana.PublicKey{}, lamports == 0, fmt.Errorf("not enough data for %x byte, acct data len %d", dataLen, uint64(len(data))-offset)
 	}
 
-	if acctHdr.DataLen == 0 {
-		return offset, nil
-	}
-
-	if (uint64(len(data)) - offset) < acctHdr.DataLen {
-		return 0, fmt.Errorf("not enough data for %x byte, acct data len %d", acctHdr.DataLen, uint64(len(data))-offset)
-	}
-
-	acctHdr.Data = make([]byte, acctHdr.DataLen)
-	copy(acctHdr.Data, data[offset:])
-
-	offset += acctHdr.DataLen
+	offset += dataLen
 	offset = util.AlignUp(offset, 8)
 
-	return offset, nil
+	return offset, pubkey, lamports == 0, nil
 }
 
-func (acctHdr *AppendVecAcctHeader) ToAccount() *accounts.Account {
-	return &accounts.Account{Key: acctHdr.Pubkey, Lamports: acctHdr.Lamports,
-		Data: acctHdr.Data, Owner: acctHdr.Owner, Executable: acctHdr.Executable,
-		RentEpoch: acctHdr.RentEpoch}
+type offsetAndPubkey struct {
+	Pubkey solana.PublicKey
+	Offset uint64
 }
 
-func UnmarshalAccountsFromAppendVecs(data []byte, appendVecInfo SlotAcctVecs) ([]*accounts.Account, error) {
-	fileSize := appendVecInfo.AcctVecs[0].FileSize
-	appendVecBytes := data
+func buildIndexEntriesFromAppendVecs(data []byte, fileSize uint64, slot uint64, fileId uint64) ([]solana.PublicKey, []*accounts.AccountIndexEntry, error) {
+	var offsetAndPubkeys []*accounts.AccountIndexEntry
+	var pubkeys []solana.PublicKey
 
-	acctHdrs := make([]*AppendVecAcctHeader, 0)
 	var offset uint64
 
 	for {
@@ -95,28 +55,24 @@ func UnmarshalAccountsFromAppendVecs(data []byte, appendVecInfo SlotAcctVecs) ([
 			break
 		}
 
-		input := appendVecBytes[offset:]
-
-		if uint64(len(input)) < hdrLen {
+		if uint64(len(data[offset:])) < hdrLen {
 			break
 		}
 
-		acct := new(AppendVecAcctHeader)
-		bytesReadAligned, err := acct.Unmarshal(input)
+		bytesReadAligned, pubkey, shouldSkip, err := unpackOffsetAndPubkey(data[offset:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		offset += bytesReadAligned
 
-		acctHdrs = append(acctHdrs, acct)
+		if shouldSkip {
+			continue
+		}
+
+		offsetAndPubkeys = append(offsetAndPubkeys, &accounts.AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset})
+		pubkeys = append(pubkeys, pubkey)
 	}
 
-	accts := make([]*accounts.Account, 0)
-	for _, acct := range acctHdrs {
-		a := acct.ToAccount()
-		accts = append(accts, a)
-	}
-
-	return accts, nil
+	return pubkeys, offsetAndPubkeys, nil
 }

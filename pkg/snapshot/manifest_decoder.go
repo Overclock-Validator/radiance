@@ -192,7 +192,8 @@ type SlotMapPair struct {
 }
 
 type AccountsDbFields struct {
-	Storages                []SlotAcctVecs
+	//Storages                []SlotAcctVecs
+	Storages                map[uint64]SlotAcctVecs
 	Version                 uint64
 	Slot                    uint64
 	BankHashInfo            BankHashInfo
@@ -1112,13 +1113,16 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 		return err
 	}
 
+	acctDbFields.Storages = make(map[uint64]SlotAcctVecs)
+
 	for count := uint64(0); count < numStorages; count++ {
 		var slotAcctVecs SlotAcctVecs
 		err = slotAcctVecs.UnmarshalWithDecoder(decoder)
 		if err != nil {
 			return err
 		}
-		acctDbFields.Storages = append(acctDbFields.Storages, slotAcctVecs)
+		acctDbFields.Storages[slotAcctVecs.Slot] = slotAcctVecs
+		//acctDbFields.Storages = append(acctDbFields.Storages, slotAcctVecs)
 	}
 
 	acctDbFields.Version, err = decoder.ReadUint64(bin.LE)
@@ -1341,16 +1345,6 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 			return err
 		}
 	}*/
-
-	return nil
-}
-
-func (snapshotManifest *SnapshotManifest) AppendVecInfoForSlot(slot uint64) *SlotAcctVecs {
-	for _, s := range snapshotManifest.AccountsDb.Storages {
-		if s.Slot == slot {
-			return &s
-		}
-	}
 
 	return nil
 }
