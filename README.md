@@ -10,7 +10,7 @@ Milestone 1 (Completed in August 2024): Reimplementation of the Solana Virtual M
 - Implementation of the remainder of the runtime and VM, with a comprehensive test suite also developed. Any bugs found as a result of testing and review to be fixed.
 
 Milestone 2 (In progress): Full block replay, ledger update, and RPC interface achieved. Assurance that implementation “does the right thing” also achieved.
-- Snaphot retrieval and decoding (Completed)
+- Snaphot retrieval and loading (Completed)
 - Full implementation of transaction (and therefore block) handling
 - Work on minimal RPC interface and improve important infrastructure components (principally the AccountsDB and Blockstore facilities) that are necessary for data storage and retrieval.
 - Development and intensive use of a robust and comprehensive ‘conformance suite’ for verification of compliance of the VM, interpreter, and runtime as a complete unit. Differential fuzzing will be used to detect differences versus relevant versions of the Labs client, and guided fuzzing will be used generally to uncover security and loss-of-availability issues. Any bugs identified during this phase will be remediated.
