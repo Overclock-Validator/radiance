@@ -34,7 +34,7 @@ func (entry *AccountIndexEntry) MarshalWithEncoder(encoder *bin.Encoder) error {
 
 const hdrLen = 136
 
-func unpackOffsetAndPubkey(data []byte) (uint64, solana.PublicKey, bool, error) {
+func parseAcctAndAdvanceOffset(data []byte) (uint64, solana.PublicKey, bool, error) {
 	var offset uint64
 	offset += 8
 
@@ -82,19 +82,17 @@ func BuildIndexEntriesFromAppendVecs(data []byte, fileSize uint64, slot uint64, 
 			break
 		}
 
-		bytesReadAligned, pubkey, shouldSkip, err := unpackOffsetAndPubkey(data[offset:])
+		bytesReadAligned, pubkey, shouldSkip, err := parseAcctAndAdvanceOffset(data[offset:])
 		if err != nil {
 			return nil, nil, err
 		}
 
-		offset += bytesReadAligned
-
-		if shouldSkip {
-			continue
+		if !shouldSkip {
+			offsetAndPubkeys = append(offsetAndPubkeys, &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset})
+			pubkeys = append(pubkeys, pubkey)
 		}
 
-		offsetAndPubkeys = append(offsetAndPubkeys, &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset})
-		pubkeys = append(pubkeys, pubkey)
+		offset += bytesReadAligned
 	}
 
 	return pubkeys, offsetAndPubkeys, nil

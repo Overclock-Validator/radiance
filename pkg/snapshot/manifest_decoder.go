@@ -1122,7 +1122,6 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 			return err
 		}
 		acctDbFields.Storages[slotAcctVecs.Slot] = slotAcctVecs
-		//acctDbFields.Storages = append(acctDbFields.Storages, slotAcctVecs)
 	}
 
 	acctDbFields.Version, err = decoder.ReadUint64(bin.LE)
