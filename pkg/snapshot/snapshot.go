@@ -117,10 +117,11 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 		fmt.Printf("failed to open database: %s\n", err)
 		return err
 	}
+	defer db.Close()
 
 	defer ants.Release()
 
-	var numEntriesCommitted atomic.Uint64
+	//var numEntriesCommitted atomic.Uint64
 	var numTimesAppendVecCopyingPoolCalled atomic.Uint64
 	var numTimesIndexEntryBuilderPool atomic.Uint64
 	var numTimesIndexEntryCommiterPool atomic.Uint64
@@ -146,7 +147,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 			}
 
 			db.SetIfHigherSlot(task.Pubkeys[idx][:], writer.Bytes(), 0)
-			numEntriesCommitted.Add(1)
+			//numEntriesCommitted.Add(1)
 		}
 	})
 
@@ -210,8 +211,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 
 			fileId, err := strconv.ParseUint(idStr, 10, 64)
 			if err != nil {
-				fmt.Printf("invalid snapshot - unable to convert string to file id\n")
-				panic("")
+				panic("invalid snapshot - unable to convert string to file id\n")
 			}
 
 			// find the relevant appendvec storage info
@@ -255,6 +255,6 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 
 	wg.Wait()
 
-	fmt.Printf("accts processed: %d, in %s. numTimesAppendVecCopyingPoolCalled: %d, numTimesIndexEntryBuilderPool: %d, numTimesIndexEntryCommiterPool: %d\n", numEntriesCommitted.Load(), time.Since(start), numTimesAppendVecCopyingPoolCalled.Load(), numTimesIndexEntryBuilderPool.Load(), numTimesIndexEntryCommiterPool.Load())
+	//fmt.Printf("accts processed: %d, in %s. numTimesAppendVecCopyingPoolCalled: %d, numTimesIndexEntryBuilderPool: %d, numTimesIndexEntryCommiterPool: %d\n", numEntriesCommitted.Load(), time.Since(start), numTimesAppendVecCopyingPoolCalled.Load(), numTimesIndexEntryBuilderPool.Load(), numTimesIndexEntryCommiterPool.Load())
 	return nil
 }

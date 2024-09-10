@@ -32,7 +32,34 @@ func (entry *AccountIndexEntry) MarshalWithEncoder(encoder *bin.Encoder) error {
 	return err
 }
 
-const hdrLen = 136
+func (entry *AccountIndexEntry) UnmarshalWithDecoder(decoder *bin.Decoder) error {
+	var err error
+
+	entry.Slot, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	entry.FileId, err = decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	entry.Offset, err = decoder.ReadUint64(bin.LE)
+	return err
+}
+
+func unmarshalAcctIdxEntry(data []byte) (*AccountIndexEntry, error) {
+	decoder := bin.NewBinDecoder(data)
+	acctIdxEntry := new(AccountIndexEntry)
+
+	err := acctIdxEntry.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return nil, err
+	}
+
+	return acctIdxEntry, nil
+}
 
 func parseAcctAndAdvanceOffset(data []byte) (uint64, solana.PublicKey, bool, error) {
 	var offset uint64
