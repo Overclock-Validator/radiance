@@ -1,9 +1,11 @@
 package accountsdb
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 
 	"github.com/Overclock-Validator/sniper"
 	"github.com/gagliardetto/solana-go"
@@ -11,9 +13,10 @@ import (
 )
 
 type AccountsDb struct {
-	db       *sniper.Store
-	acctsDir string
-	indexDir string
+	db            *sniper.Store
+	acctsDir      string
+	indexDir      string
+	largestFileId atomic.Uint64
 }
 
 var (
@@ -29,6 +32,26 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 		return nil, err
 	}
 
+	// attempt to open largest_file_id file
+	largestFileIdFn := fmt.Sprintf("%s/largest_file_id", accountsDbDir)
+	lfi, err := os.Open(largestFileIdFn)
+	if err != nil {
+		fmt.Printf("failed to open %s\n", largestFileIdFn)
+		return nil, err
+	}
+
+	largestFileIdBytes := make([]byte, 8)
+	bytesRead, err := lfi.Read(largestFileIdBytes)
+	if err != nil {
+		fmt.Printf("error reading %s: %s\n", largestFileIdFn, err)
+		return nil, err
+	} else if bytesRead != 8 {
+		fmt.Printf("error reading %s: expected 8 bytes, got %d\n", largestFileIdFn, bytesRead)
+		return nil, fmt.Errorf("only got %d bytes", bytesRead)
+	}
+
+	largestFileId := binary.LittleEndian.Uint64(largestFileIdBytes)
+
 	// attempt to open the index kv store
 	indexDir := fmt.Sprintf("%s/index", accountsDbDir)
 	db, err := sniper.Open(sniper.Dir(indexDir))
@@ -38,6 +61,8 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 	}
 
 	accountsDb := &AccountsDb{db: db, acctsDir: appendVecsDir, indexDir: indexDir}
+	accountsDb.largestFileId.Store(largestFileId)
+
 	return accountsDb, nil
 }
 

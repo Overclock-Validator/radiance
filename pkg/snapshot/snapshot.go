@@ -3,12 +3,14 @@ package snapshot
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+
 	"sync/atomic"
 	"time"
 
@@ -122,15 +124,17 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 	defer ants.Release()
 
 	//var numEntriesCommitted atomic.Uint64
-	var numTimesAppendVecCopyingPoolCalled atomic.Uint64
-	var numTimesIndexEntryBuilderPool atomic.Uint64
-	var numTimesIndexEntryCommiterPool atomic.Uint64
+	//var numTimesAppendVecCopyingPoolCalled atomic.Uint64
+	//var numTimesIndexEntryBuilderPool atomic.Uint64
+	//var numTimesIndexEntryCommiterPool atomic.Uint64
+
+	var largestFileId atomic.Uint64
 
 	wg := sync.WaitGroup{}
 
 	indexEntryCommiterPool, _ := ants.NewPoolWithFunc(500, func(i interface{}) {
 		defer wg.Done()
-		numTimesIndexEntryCommiterPool.Add(1)
+		//numTimesIndexEntryCommiterPool.Add(1)
 
 		task := i.(indexEntryCommitterTask)
 
@@ -153,7 +157,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 
 	indexEntryBuilderPool, _ := ants.NewPoolWithFunc(500, func(i interface{}) {
 		defer wg.Done()
-		numTimesIndexEntryBuilderPool.Add(1)
+		//numTimesIndexEntryBuilderPool.Add(1)
 
 		task := i.(indexEntryBuilderTask)
 		pubkeys, entries, err := accountsdb.BuildIndexEntriesFromAppendVecs(task.Data, task.FileSize, task.Slot, task.FileId)
@@ -172,7 +176,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 
 	appendVecCopyingPool, _ := ants.NewPoolWithFunc(500, func(i interface{}) {
 		defer wg.Done()
-		numTimesAppendVecCopyingPoolCalled.Add(1)
+		//numTimesAppendVecCopyingPoolCalled.Add(1)
 
 		task := i.(appendVecCopyingTask)
 		filename := task.Filename
@@ -212,6 +216,10 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 			fileId, err := strconv.ParseUint(idStr, 10, 64)
 			if err != nil {
 				panic("invalid snapshot - unable to convert string to file id\n")
+			}
+
+			if fileId > largestFileId.Load() {
+				largestFileId.Store(fileId)
 			}
 
 			// find the relevant appendvec storage info
@@ -256,5 +264,26 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 	wg.Wait()
 
 	//fmt.Printf("accts processed: %d, in %s. numTimesAppendVecCopyingPoolCalled: %d, numTimesIndexEntryBuilderPool: %d, numTimesIndexEntryCommiterPool: %d\n", numEntriesCommitted.Load(), time.Since(start), numTimesAppendVecCopyingPoolCalled.Load(), numTimesIndexEntryBuilderPool.Load(), numTimesIndexEntryCommiterPool.Load())
+
+	largestFileIdFile, err := os.Create(fmt.Sprintf("%s/largest_file_id", accountsDbDir))
+	if err != nil {
+		fmt.Printf("err creating new: %s\n", err)
+		return err
+	}
+
+	largestFileIdBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(largestFileIdBytes, largestFileId.Load())
+
+	numBytesWritten, err := largestFileIdFile.Write(largestFileIdBytes[:])
+	if err != nil {
+		fmt.Printf("error writing largest file ID to file: %s\n", err)
+		return err
+	} else if numBytesWritten != 8 {
+		fmt.Printf("error writing largest file ID to file\n")
+		return fmt.Errorf("error writing largest file ID to file, wrote %d bytes", numBytesWritten)
+	}
+
+	largestFileIdFile.Close()
+
 	return nil
 }
