@@ -5,7 +5,9 @@ package node
 import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/spf13/cobra"
+	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/accountsdb"
+	"go.firedancer.io/radiance/pkg/sealevel"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
@@ -74,20 +76,51 @@ func run(c *cobra.Command, args []string) {
 	defer accountsDb.CloseDb()
 
 	// token program account
-	pubkey := solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-	acct, err := accountsDb.GetAccount(pubkey)
+	pubkey1 := solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+	acct1, err := accountsDb.GetAccount(pubkey1)
 	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey)
+		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey1)
 	}
 
-	klog.Infof("%+v, owner: %s\n", acct, solana.PublicKeyFromBytes(acct.Owner[:]))
+	klog.Infof("%+v, owner: %s\n", acct1, solana.PublicKeyFromBytes(acct1.Owner[:]))
 
 	// Overclock validator vote account
-	pubkey = solana.MustPublicKeyFromBase58("AS3nKBQfKs8fJ8ncyHrdvo4FDT6S8HMRhD75JjCcyr1t")
-	acct, err = accountsDb.GetAccount(pubkey)
+	pubkey2 := solana.MustPublicKeyFromBase58("AS3nKBQfKs8fJ8ncyHrdvo4FDT6S8HMRhD75JjCcyr1t")
+	acct2, err := accountsDb.GetAccount(pubkey2)
 	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey)
+		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey2)
 	}
 
-	klog.Infof("%+v, owner: %s\n", acct, solana.PublicKeyFromBytes(acct.Owner[:]))
+	klog.Infof("%+v, owner: %s\n", acct2, solana.PublicKeyFromBytes(acct2.Owner[:]))
+
+	dataBytes := make([]byte, 3)
+	dataBytes[0] = 'a'
+	dataBytes[1] = 'b'
+	dataBytes[2] = 'c'
+	acct1.Lamports = 13370
+	acct1.Owner = sealevel.AddressLookupTableAddr
+	acct1.Data = dataBytes
+
+	acct2.Lamports = 13380
+	acct2.Owner = sealevel.BpfLoaderUpgradeableAddr
+	acct2.Data = dataBytes
+
+	err = accountsDb.StoreAccounts([]*accounts.Account{acct1, acct2}, 13370)
+	if err != nil {
+		klog.Fatalf("unable to set account to accountsdb\n")
+	}
+
+	acct1, err = accountsDb.GetAccount(pubkey1)
+	if err != nil {
+		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey1)
+	}
+
+	klog.Infof("%+v, owner: %s\n", acct1, solana.PublicKeyFromBytes(acct1.Owner[:]))
+
+	acct2, err = accountsDb.GetAccount(pubkey2)
+	if err != nil {
+		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey2)
+	}
+
+	klog.Infof("%+v, owner: %s\n", acct2, solana.PublicKeyFromBytes(acct2.Owner[:]))
 }

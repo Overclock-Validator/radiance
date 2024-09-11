@@ -1,6 +1,7 @@
 package accountsdb
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Overclock-Validator/sniper"
+	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
 )
@@ -106,4 +108,61 @@ func (accountsDb *AccountsDb) GetAccount(pubkey solana.PublicKey) (*accounts.Acc
 	}
 
 	return acct, err
+}
+
+func (accountsDb *AccountsDb) StoreAccounts(accts []*accounts.Account, slot uint64) error {
+	fileId := accountsDb.largestFileId.Add(1)
+
+	appendVecFileName := fmt.Sprintf("%s/%d.%d", accountsDb.acctsDir, slot, fileId)
+	appendVecFile, err := os.OpenFile(appendVecFileName, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer appendVecFile.Close()
+
+	// allocate required memory all at once to avoid constant reallocs
+	marshaledSize := appendVecAcctsMarshaledSize(accts)
+	appendVecAcctsBuf := new(bytes.Buffer)
+	appendVecAcctsBuf.Grow(int(marshaledSize))
+
+	indexWriter := new(bytes.Buffer)
+	indexWriter.Grow(24)
+	indexEncoder := bin.NewBinEncoder(indexWriter)
+
+	for _, acct := range accts {
+
+		// create index entry, encode it and write it to the index kv store
+		// offset field is specified as the current num of bytes written to the appendvec buffer.
+		indexWriter.Reset()
+		indexEntry := AccountIndexEntry{Slot: slot, FileId: fileId, Offset: uint64(appendVecAcctsBuf.Len())}
+
+		err = indexEntry.MarshalWithEncoder(indexEncoder)
+		if err != nil {
+			return err
+		}
+
+		err = accountsDb.db.Set(acct.Key[:], indexWriter.Bytes(), 0)
+		if err != nil {
+			return err
+		}
+
+		// marshal up the account as an appendvec style account and write it to the buffer
+		appendVecAcct := AppendVecAccount{DataLen: uint64(len(acct.Data)), Pubkey: acct.Key, Lamports: acct.Lamports,
+			RentEpoch: acct.RentEpoch, Owner: acct.Owner, Executable: acct.Executable, Data: acct.Data}
+
+		err = appendVecAcct.Marshal(appendVecAcctsBuf)
+		if err != nil {
+			return err
+		}
+	}
+
+	// write the appendvecs data into the file
+	n, err := appendVecFile.Write(appendVecAcctsBuf.Bytes())
+	if err != nil {
+		return err
+	} else if n != appendVecAcctsBuf.Len() {
+		return fmt.Errorf("only wrote %d appendvec account bytes, rather than %d", n, appendVecAcctsBuf.Len())
+	}
+
+	return nil
 }
