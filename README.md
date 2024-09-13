@@ -8,7 +8,7 @@ This project is under active development. Our aim is to move rapidly with Mithri
 - Reimplementation of all syscalls, with a comprehensive test suite developed and exercised; bugs found as a result fixed.
 - Reimplementation of all native programs, with a comprehensive test suite developed and exercised; bugs found as a result fixed.
 - Implementation of the remainder of the runtime and VM, with a comprehensive test suite also developed. Any bugs found as a result of testing and review to be fixed.
-- Read more about Milestone 1 [here[(https://overclock.one/rnd/unveiling-mithril)
+- Read more about Milestone 1 [here](https://overclock.one/rnd/unveiling-mithril)
 
 ### Milestone 2 (In progress): Block replay and simple RPC interface
 - Snaphot retrieval and loading (Completed)
