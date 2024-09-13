@@ -9,7 +9,7 @@ This project is under active development. Our aim is to move rapidly with Mithri
 - Reimplementation of all native programs, with a comprehensive test suite developed and exercised; bugs found as a result fixed.
 - Implementation of the remainder of the runtime and VM, with a comprehensive test suite also developed. Any bugs found as a result of testing and review to be fixed.
 
-## Milestone 2 (In progress): Full block replay, ledger update, and RPC interface achieved. Assurance that implementation “does the right thing” also achieved.
+## Milestone 2 (In progress): Block replay and simple RPC interface
 - Snaphot retrieval and loading (Completed)
 - Full implementation of transaction (and therefore block) handling
 - Work on minimal RPC interface and improve important infrastructure components (principally the AccountsDB and Blockstore facilities) that are necessary for data storage and retrieval.
@@ -19,6 +19,6 @@ This project is under active development. Our aim is to move rapidly with Mithri
 - Thorough optimization work on entire system, including on components such as the Virtual Machine and AccountsDB.
 - Implementation of block batch processing with configurable block window size.
 
-## Potential Future Directions:
+## Potential Future Directions
 - Broaden block retrieval sources beyond RPC node services (TBD how this is implemented). Current inclusion in Solana's Gossip network leads to high egress so we need to brainstorm bandwidth optimizations here. 
 - Implementation of ‘archival node’ features which would include building out historical replay compatibility.
