@@ -67,7 +67,9 @@ func (sr *SysvarSlotHistory) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func ReadSlotHistorySysvar(accts *accounts.Accounts) SysvarSlotHistory {
+func ReadSlotHistorySysvar(execCtx *ExecutionCtx) SysvarSlotHistory {
+	accts := addrObjectForLookup(execCtx)
+
 	slotHistorySysvarAcct, err := (*accts).GetAccount(&SysvarSlotHistoryAddr)
 	if err != nil {
 		panic("failed to read SlotHistory sysvar account")

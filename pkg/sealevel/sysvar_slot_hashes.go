@@ -7,7 +7,6 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
-	"k8s.io/klog/v2"
 )
 
 const SysvarSlotHashesAddrStr = "SysvarS1otHashes111111111111111111111111111"
@@ -34,7 +33,7 @@ func (sh *SysvarSlotHashes) UnmarshalWithDecoder(decoder *bin.Decoder) (err erro
 	for count := uint64(0); count < hashesLen; count++ {
 		slot, err := decoder.ReadUint64(bin.LE)
 		if err != nil {
-			return fmt.Errorf("failed to read Slot when decoding a SlotHash in SysvarSlotHashes: %w", err)
+			return fmt.Errorf("%d: failed to read Slot when decoding a SlotHash in SysvarSlotHashes: %w", count, err)
 		}
 		hash, err := decoder.ReadBytes(32)
 		if err != nil {
@@ -59,6 +58,36 @@ func (sh *SysvarSlotHashes) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
+func (sh *SysvarSlotHashes) MustMarshal() []byte {
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	numSlotHashes := len(*sh)
+
+	err := enc.WriteUint64(uint64(numSlotHashes), bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize len of SlotHashes for SlotHashes sysvar: %w", err)
+		panic(err)
+	}
+
+	for _, slotHashEntry := range *sh {
+		err = enc.WriteUint64(slotHashEntry.Slot, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Slot for SlotHashes sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteBytes(slotHashEntry.Hash[:], false)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize Hash for SlotHashes sysvar: %w", err)
+			panic(err)
+		}
+	}
+
+	fmt.Printf("returning %d bytes for SysvarSlotHashes\n", len(data.Bytes()))
+	return data.Bytes()
+}
+
 func (sh *SysvarSlotHashes) Get(slot uint64) ([32]byte, error) {
 	for _, slotHash := range *sh {
 		if slotHash.Slot == slot {
@@ -78,15 +107,52 @@ func (sh *SysvarSlotHashes) Position(slot uint64) (uint64, error) {
 	return 0, fmt.Errorf("not found")
 }
 
-func ReadSlotHashesSysvar(accts *accounts.Accounts) (SysvarSlotHashes, error) {
+func (sh *SysvarSlotHashes) UpdateWithSlotCtx(slotCtx *SlotCtx) {
+	var found bool
+
+	for count := 0; count < len(*sh); count++ {
+		if (*sh)[count].Slot == slotCtx.Slot {
+			(*sh)[count].Hash = slotCtx.SlotBank.BanksHash
+			found = true
+		}
+	}
+
+	if !found {
+		slotHashEntry := SlotHash{Hash: slotCtx.SlotBank.BanksHash, Slot: slotCtx.SlotBank.PreviousSlot}
+		*sh = append(*sh, slotHashEntry)
+	}
+}
+
+func (sh *SysvarSlotHashes) Update(slot uint64, hash [32]byte) {
+	fmt.Printf("slothashes was %d entries long in Update()\n", len(*sh))
+
+	var found bool
+
+	for count := 0; count < len(*sh); count++ {
+		if (*sh)[count].Slot == slot {
+			(*sh)[count].Hash = hash
+			found = true
+		}
+	}
+
+	if !found {
+		slotHashEntry := SlotHash{Hash: hash, Slot: slot - 1}
+		if len(*sh) == SlotHashesMaxEntries {
+			*sh = (*sh)[:len(*sh)-1]
+		}
+		*sh = append([]SlotHash{slotHashEntry}, (*sh)...)
+	}
+}
+
+func ReadSlotHashesSysvar(execCtx *ExecutionCtx) (SysvarSlotHashes, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	slotHashesSysvarAcct, err := (*accts).GetAccount(&SysvarSlotHashesAddr)
 	if err != nil {
-		klog.Infof("failed for slothashes here [1]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
 	if slotHashesSysvarAcct.Lamports == 0 {
-		klog.Infof("failed for slothashes here [2]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
@@ -95,7 +161,6 @@ func ReadSlotHashesSysvar(accts *accounts.Accounts) (SysvarSlotHashes, error) {
 	var slotHashes SysvarSlotHashes
 	err = slotHashes.UnmarshalWithDecoder(dec)
 	if err != nil {
-		klog.Infof("failed for slothashes here [3]")
 		return SysvarSlotHashes{}, InstrErrUnsupportedSysvar
 	}
 
@@ -137,7 +202,6 @@ func WriteSlotHashesSysvar(accts *accounts.Accounts, slotHashes SysvarSlotHashes
 		err = fmt.Errorf("failed to write newly serialized SlotHashes sysvar to sysvar account: %w", err)
 		panic(err)
 	}
-	klog.Infof("wrote SlotHashes sysvar")
 }
 
 func (slotHashes *SysvarSlotHashes) FromInstrAcct(execCtx *ExecutionCtx, instrAcctIdx uint64) error {

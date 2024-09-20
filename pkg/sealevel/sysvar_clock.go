@@ -63,7 +63,14 @@ func (sc *SysvarClock) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func ReadClockSysvar(accts *accounts.Accounts) (SysvarClock, error) {
+func (sc *SysvarClock) Update(epoch uint64, slot uint64) {
+	sc.Slot = slot
+	sc.Epoch = epoch
+}
+
+func ReadClockSysvar(execCtx *ExecutionCtx) (SysvarClock, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	clockAccount, err := (*accts).GetAccount(&SysvarClockAddr)
 	if err != nil {
 		return SysvarClock{}, InstrErrUnsupportedSysvar

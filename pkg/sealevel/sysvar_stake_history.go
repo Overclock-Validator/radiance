@@ -81,7 +81,9 @@ func (sh *SysvarStakeHistory) Get(epoch uint64) *StakeHistoryEntry {
 	return nil
 }
 
-func ReadStakeHistorySysvar(accts *accounts.Accounts) (SysvarStakeHistory, error) {
+func ReadStakeHistorySysvar(execCtx *ExecutionCtx) (SysvarStakeHistory, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	stakeHistorySysvarAcct, err := (*accts).GetAccount(&SysvarStakeHistoryAddr)
 	if err != nil {
 		return SysvarStakeHistory{}, InstrErrUnsupportedSysvar

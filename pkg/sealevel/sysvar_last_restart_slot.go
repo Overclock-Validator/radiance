@@ -35,7 +35,9 @@ func (sr *SysvarLastRestartSlot) MustUnmarshalWithDecoder(decoder *bin.Decoder) 
 	}
 }
 
-func ReadLastRestartSlotSysvar(accts *accounts.Accounts) SysvarLastRestartSlot {
+func ReadLastRestartSlotSysvar(execCtx *ExecutionCtx) SysvarLastRestartSlot {
+	accts := addrObjectForLookup(execCtx)
+
 	lrsAcct, err := (*accts).GetAccount(&SysvarLastRestartSlotAddr)
 	if err != nil {
 		panic("failed to read LastRestartSlot sysvar account")

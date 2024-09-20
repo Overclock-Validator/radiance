@@ -473,8 +473,6 @@ func serializeParametersAligned(execCtx *ExecutionCtx) ([]byte, []uint64, error)
 		}
 	}
 
-	acctsMetaData := make([]serializedAcctMetadata, len(accts))
-
 	size := uint64(8)
 
 	for _, acct := range accts {
@@ -511,11 +509,11 @@ func serializeParametersAligned(execCtx *ExecutionCtx) ([]byte, []uint64, error)
 		borrowedAcct := acct.acct
 		if acct.isDuplicate { // duplicate
 			position := acct.indexOfAcct
-			acctsMetaData = append(acctsMetaData, acctsMetaData[position])
 			serializedData = append(serializedData, byte(position))
 			for count := 0; count < 7; count++ {
 				serializedData = append(serializedData, 0)
 			}
+			preLens = append(preLens, preLens[position])
 		} else { // not a duplicate
 			serializedData = append(serializedData, 0xff)
 
@@ -653,7 +651,8 @@ func deserializeParametersAligned(execCtx *ExecutionCtx, parameterBytes []byte, 
 			off += 8 // data length
 
 			if safemath.SaturatingSubU64(postLen, preLen) > MaxPermittedDataIncrease ||
-				postLen > MaxPermittedDataIncrease {
+				postLen > MaxPermittedDataLength {
+				klog.Infof("preLen = %d, postLen = %d, max increase = %d", preLen, postLen, MaxPermittedDataIncrease)
 				return InstrErrInvalidRealloc
 			}
 
@@ -747,8 +746,6 @@ func serializeParametersUnaligned(execCtx *ExecutionCtx) ([]byte, []uint64, erro
 		}
 	}
 
-	acctsMetaData := make([]serializedAcctMetadata, len(accts))
-
 	size := uint64(8)
 
 	for _, acct := range accts {
@@ -779,8 +776,8 @@ func serializeParametersUnaligned(execCtx *ExecutionCtx) ([]byte, []uint64, erro
 		borrowedAcct := acct.acct
 		if acct.isDuplicate { // duplicate
 			position := acct.indexOfAcct
-			acctsMetaData = append(acctsMetaData, acctsMetaData[position])
 			serializedData = append(serializedData, byte(position))
+			preLens = append(preLens, preLens[position])
 		} else { // not a duplicate
 			serializedData = append(serializedData, 0xff)
 
@@ -992,8 +989,11 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 
 	if runErr != nil {
 		klog.Infof("program execution result: %s", runErr)
+	} else if ret != 0 {
+		runErr = fmt.Errorf("program execution (%s) returned failure: %d", programId, ret)
+		klog.Infof("program execution (%s) returned failure: %d", programId, ret)
 	} else {
-		klog.Infof("program execution was successful and returned %d", ret)
+		klog.Infof("program execution (%s) returned success", programId)
 	}
 
 	returnedDataProgId, returnData := execCtx.TransactionContext.ReturnData()
@@ -1068,7 +1068,7 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	}
 
 	if !programAcct.IsExecutable() {
-		klog.Infof("program is not executable")
+		klog.Infof("program %s is not executable", programAcct)
 		return InstrErrUnsupportedProgramId
 	}
 
@@ -1087,8 +1087,12 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 
 		programAcct.Drop()
 
-		programDataPubkey := [32]byte(programAcctState.Program.ProgramDataAddress)
-		programDataAcct, err := execCtx.Accounts.GetAccount(&programDataPubkey)
+		programDataAcct, err := execCtx.SlotCtx.GetAccountFromAccountsDb(programAcctState.Program.ProgramDataAddress)
+		if err != nil {
+			klog.Infof("unable to get account %s as program data", programAcctState.Program.ProgramDataAddress)
+			return InstrErrUnsupportedProgramId
+		}
+
 		programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data)
 		if err != nil {
 			return err
@@ -1100,6 +1104,7 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 
 		programDataSlot := programDataAcctState.ProgramData.Slot
 		if programDataSlot >= execCtx.SlotCtx.Slot {
+			klog.Infof("programDataSlot (%d) >= execCtx.SlotCtx.Slot (%d)", programDataSlot, execCtx.SlotCtx.Slot)
 			return InstrErrInvalidAccountData
 		}
 
@@ -1241,7 +1246,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -1251,7 +1256,7 @@ func UpgradeableLoaderDeployWithMaxDataLen(execCtx *ExecutionCtx, txCtx *Transac
 		return err
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -1517,7 +1522,7 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return err
 	}
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -1527,7 +1532,7 @@ func UpgradeableLoaderUpgrade(execCtx *ExecutionCtx, txCtx *TransactionCtx, inst
 		return err
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -2176,7 +2181,7 @@ func UpgradeableLoaderClose(execCtx *ExecutionCtx, txCtx *TransactionCtx, instrC
 				return InstrErrIncorrectProgramId
 			}
 
-			clock, err := ReadClockSysvar(&execCtx.Accounts)
+			clock, err := ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -2320,7 +2325,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return InstrErrInvalidRealloc
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -2347,7 +2352,7 @@ func UpgradeableLoaderExtendProgram(execCtx *ExecutionCtx, txCtx *TransactionCtx
 		return InstrErrInvalidAccountData
 	}
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return err
 	}

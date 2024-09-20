@@ -3,11 +3,11 @@
 package node
 
 import (
-	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
-	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/accountsdb"
-	"go.firedancer.io/radiance/pkg/sealevel"
+	"go.firedancer.io/radiance/pkg/blockget"
+	"go.firedancer.io/radiance/pkg/replay"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
@@ -21,15 +21,33 @@ var (
 
 	loadFromSnapshot   bool
 	loadFromAccountsDb bool
+	updateAccountsDb   bool
 	path               string
 	outputDir          string
+	slot               int64
 )
 
 func init() {
 	Cmd.Flags().BoolVarP(&loadFromSnapshot, "snapshot", "s", false, "Load from a full snapshot")
 	Cmd.Flags().BoolVarP(&loadFromAccountsDb, "accountsdb", "a", false, "Load from AccountsDB")
+	Cmd.Flags().BoolVarP(&updateAccountsDb, "update-accounts-db", "u", false, "Update accountsdb after execution")
 	Cmd.Flags().StringVarP(&path, "path", "p", "", "Path of full snapshot or AccountsDB to load from")
 	Cmd.Flags().StringVarP(&outputDir, "out", "o", "", "Output path for writing AccountsDB data to")
+	Cmd.Flags().Int64VarP(&slot, "slot", "b", -1, "Block at which to begin replaying")
+}
+
+func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, error) {
+	block := new(replay.Block)
+
+	for _, tx := range blockResult.Transactions {
+		txParsed, err := tx.GetTransaction()
+		if err != nil {
+			return nil, err
+		}
+		block.Transactions = append(block.Transactions, txParsed)
+	}
+
+	return block, nil
 }
 
 func run(c *cobra.Command, args []string) {
@@ -39,6 +57,14 @@ func run(c *cobra.Command, args []string) {
 		return
 	}
 
+	if slot < 0 {
+		if loadFromAccountsDb {
+			klog.Errorf("must specify a slot at which to begin replaying")
+			return
+		}
+	}
+
+	var err error
 	var accountsDbDir string
 
 	if loadFromSnapshot {
@@ -50,18 +76,22 @@ func run(c *cobra.Command, args []string) {
 		klog.Infof("building AccountsDB from snapshot at %s\n", path)
 
 		// extract accountvecs from full snapshot, build accountsdb index, and write it all out to disk
-		err := snapshot.BuildAccountsIndexFromSnapshot(path, outputDir)
+		err = snapshot.BuildAccountsIndexFromSnapshot(path, outputDir)
 		if err != nil {
 			klog.Exitf("failed to populate new accounts db from snapshot %s: %s", path, err)
 		}
 
 		klog.Infof("successfully created accounts db from snapshot %s", path)
 
+		// just processing the snapshot - not executing blocks.
+		if slot < 0 {
+			return
+		}
+
 		accountsDbDir = outputDir
 	} else if loadFromAccountsDb {
 		if path == "" {
-			klog.Errorf("must specify an AccountsDB directory path to load from")
-			return
+			klog.Fatalf("must specify an AccountsDB directory path to load from")
 		}
 
 		accountsDbDir = path
@@ -75,52 +105,24 @@ func run(c *cobra.Command, args []string) {
 	}
 	defer accountsDb.CloseDb()
 
-	// token program account
-	pubkey1 := solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-	acct1, err := accountsDb.GetAccount(pubkey1)
+	blockFetcher := blockget.NewBlockFetcher("https://api.mainnet-beta.solana.com")
+	blockResult, err := blockFetcher.GetBlockFinalized(uint64(slot))
 	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey1)
+		klog.Fatalf("error fetching block: %s\n", err)
 	}
 
-	klog.Infof("%+v, owner: %s\n", acct1, solana.PublicKeyFromBytes(acct1.Owner[:]))
-
-	// Overclock validator vote account
-	pubkey2 := solana.MustPublicKeyFromBase58("AS3nKBQfKs8fJ8ncyHrdvo4FDT6S8HMRhD75JjCcyr1t")
-	acct2, err := accountsDb.GetAccount(pubkey2)
+	block, err := newBlockFromBlockResult(blockResult)
 	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey2)
+		klog.Fatalf("error creating block from BlockResult: %s\n", err)
 	}
 
-	klog.Infof("%+v, owner: %s\n", acct2, solana.PublicKeyFromBytes(acct2.Owner[:]))
+	block.Slot = uint64(slot)
+	block.BankHash = accountsDb.BankHash()
 
-	dataBytes := make([]byte, 3)
-	dataBytes[0] = 'a'
-	dataBytes[1] = 'b'
-	dataBytes[2] = 'c'
-	acct1.Lamports = 13370
-	acct1.Owner = sealevel.AddressLookupTableAddr
-	acct1.Data = dataBytes
-
-	acct2.Lamports = 13380
-	acct2.Owner = sealevel.BpfLoaderUpgradeableAddr
-	acct2.Data = dataBytes
-
-	err = accountsDb.StoreAccounts([]*accounts.Account{acct1, acct2}, 13370)
+	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
 	if err != nil {
-		klog.Fatalf("unable to set account to accountsdb\n")
+		klog.Errorf("error encountered during block replay: %s\n", err)
+	} else {
+		klog.Infof("block replayed successfully.\n")
 	}
-
-	acct1, err = accountsDb.GetAccount(pubkey1)
-	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey1)
-	}
-
-	klog.Infof("%+v, owner: %s\n", acct1, solana.PublicKeyFromBytes(acct1.Owner[:]))
-
-	acct2, err = accountsDb.GetAccount(pubkey2)
-	if err != nil {
-		klog.Fatalf("unable to fetch account %s from accountsdb\n", pubkey2)
-	}
-
-	klog.Infof("%+v, owner: %s\n", acct2, solana.PublicKeyFromBytes(acct2.Owner[:]))
 }

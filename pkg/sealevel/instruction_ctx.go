@@ -6,6 +6,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/ryanavella/wide"
 	"go.firedancer.io/radiance/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 type InstructionCtx struct {
@@ -23,6 +24,7 @@ func (instrCtx *InstructionCtx) ProgramId() solana.PublicKey {
 
 func (instrCtx *InstructionCtx) IndexOfProgramAccountInTransaction(programAccountIndex uint64) (uint64, error) {
 	if len(instrCtx.ProgramAccounts) == 0 || programAccountIndex > uint64(len(instrCtx.ProgramAccounts)-1) {
+		klog.Infof("InstrErrNotEnoughAccountKeys")
 		return 0, InstrErrNotEnoughAccountKeys
 	}
 	return instrCtx.ProgramAccounts[programAccountIndex], nil
@@ -56,6 +58,7 @@ func (instrCtx *InstructionCtx) IndexOfInstructionAccountInTransaction(instrAcct
 
 func (instrCtx *InstructionCtx) IsInstructionAccountDuplicate(instrAcctIdx uint64) (bool, uint64, error) {
 	if len(instrCtx.InstructionAccounts) == 0 || instrAcctIdx > uint64(len(instrCtx.InstructionAccounts)-1) {
+		klog.Infof("InstrErrNotEnoughAccountKeys")
 		return false, 0, InstrErrNotEnoughAccountKeys
 	}
 
@@ -146,6 +149,7 @@ func (instrCtx *InstructionCtx) StackHeight() uint64 {
 
 func (instrCtx *InstructionCtx) CheckNumOfInstructionAccounts(num uint64) error {
 	if instrCtx.NumberOfInstructionAccounts() < num {
+		klog.Infof("InstrErrNotEnoughAccountKeys")
 		return InstrErrNotEnoughAccountKeys
 	} else {
 		return nil

@@ -2,7 +2,6 @@ package sealevel
 
 import (
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
 )
 
@@ -94,7 +93,9 @@ func (recentBlockhashes *SysvarRecentBlockhashes) GetLatest() RecentBlockHashesE
 	return rbh[len(rbh)-1]
 }
 
-func ReadRecentBlockHashesSysvar(accts *accounts.Accounts) (SysvarRecentBlockhashes, error) {
+func ReadRecentBlockHashesSysvar(execCtx *ExecutionCtx) (SysvarRecentBlockhashes, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	recentBlockhashesAcct, err := (*accts).GetAccount(&SysvarRecentBlockHashesAddr)
 	if err != nil {
 		return SysvarRecentBlockhashes{}, InstrErrUnsupportedSysvar
@@ -120,5 +121,5 @@ func ReadRecentBlockHashesSysvarFromCache(execCtx *ExecutionCtx, instrCtx *Instr
 	if err != nil {
 		return nil, err
 	}
-	return execCtx.SysvarCache.GetRecentBlockHashes(), nil
+	return execCtx.SlotCtx.SysvarCache.GetRecentBlockHashes(), nil
 }

@@ -226,7 +226,7 @@ func (lookupTableMeta *LookupTableMeta) MarshalWithEncoder(encoder *bin.Encoder)
 	return err
 }
 
-func unmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
+func UnmarshalAddressLookupTable(data []byte) (*AddressLookupTable, error) {
 	addrLookupTable := new(AddressLookupTable)
 	decoder := bin.NewBinDecoder(data)
 
@@ -473,7 +473,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 
 	payerAcct.Drop()
 
-	slotHashes, err := ReadSlotHashesSysvar(&execCtx.Accounts)
+	slotHashes, err := ReadSlotHashesSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -507,7 +507,7 @@ func AddressLookupTableCreateLookupTable(execCtx *ExecutionCtx, untrustedRecentS
 	}
 
 	tableAcctDataLen := uint64(AddressLookupTableMetaSize)
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -594,7 +594,7 @@ func AddressLookupTableFreezeLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	lookupTableData := lookupTableAcct.Data()
-	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	lookupTable, err := UnmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
 		return err
 	}
@@ -670,7 +670,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 
 	lookupTableData := lookupTableAcct.Data()
 	lookupTableLamports := lookupTableAcct.Lamports()
-	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	lookupTable, err := UnmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
 		return err
 	}
@@ -705,7 +705,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 		return InstrErrInvalidInstructionData
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -731,7 +731,7 @@ func AddressLookupTableExtendLookupTable(execCtx *ExecutionCtx, newAddresses []s
 
 	lookupTableAcct.Drop()
 
-	rent, err := ReadRentSysvar(&execCtx.Accounts)
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -806,7 +806,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 	}
 
 	lookupTableData := lookupTableAcct.Data()
-	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	lookupTable, err := UnmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
 		return err
 	}
@@ -825,7 +825,7 @@ func AddressLookupTableDeactivateLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrInvalidArgument
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -899,7 +899,7 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 	withdrawnLamports := lookupTableAcct.Lamports()
 	lookupTableData := lookupTableAcct.Data()
 
-	lookupTable, err := unmarshalAddressLookupTable(lookupTableData)
+	lookupTable, err := UnmarshalAddressLookupTable(lookupTableData)
 	if err != nil {
 		return err
 	}
@@ -913,12 +913,12 @@ func AddressLookupTableCloseLookupTable(execCtx *ExecutionCtx) error {
 		return InstrErrIncorrectAuthority
 	}
 
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
 
-	slotHashes, err := ReadSlotHashesSysvar(&execCtx.Accounts)
+	slotHashes, err := ReadSlotHashesSysvar(execCtx)
 	if err != nil {
 		return err
 	}

@@ -38,6 +38,10 @@ func (sf *SysvarFees) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
+func (sf *SysvarFees) Update(lamportsPerSignature uint64) {
+	sf.FeeCalculator.LamportsPerSignature = lamportsPerSignature
+}
+
 func ReadFeesSysvar(accts *accounts.Accounts) SysvarFees {
 	feesSysvarAcct, err := (*accts).GetAccount(&SysvarFeesAddr)
 	if err != nil {

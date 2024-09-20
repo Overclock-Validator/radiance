@@ -3,6 +3,7 @@ package sealevel
 import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/global"
 	"k8s.io/klog/v2"
@@ -20,9 +21,22 @@ type ExecutionCtx struct {
 	SlotCtx              *SlotCtx
 }
 
+type SlotBank struct {
+	PreviousSlot uint64
+	BanksHash    [32]byte
+}
+
 type SlotCtx struct {
-	Accounts accounts.Accounts
-	Slot     uint64
+	Accounts             accounts.Accounts
+	AccountsDb           *accountsdb.AccountsDb
+	Slot                 uint64
+	Epoch                uint64
+	LamportsPerSignature uint64
+	ModifiedAccts        []*accounts.Account
+	// TODO: use sysvar cache instead of deserializing from accounts each time
+	SysvarCache SysvarCache
+	SlotBank    SlotBank
+	Replay      bool
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {
@@ -174,6 +188,8 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 		return InstrErrUnsupportedProgramId
 	}
 
+	klog.Infof("ExecuteInstruction, account: %s, owner: %s\n", borrowedRootAccount.Key(), borrowedRootAccount.Owner())
+
 	ownerId := borrowedRootAccount.Owner()
 	borrowedRootAccount.Drop()
 
@@ -193,8 +209,6 @@ func (execCtx *ExecutionCtx) ExecuteInstruction() error {
 
 	klog.Infof("calling native program %s", builtinId)
 	err = nativeProgramFn(execCtx)
-
-	// TODO: other error handling
 
 	return err
 }
@@ -298,4 +312,22 @@ func (slotCtx *SlotCtx) GetAccount(pubkey solana.PublicKey) (*accounts.Account, 
 	} else {
 		return acct, nil
 	}
+}
+
+func (slotCtx *SlotCtx) GetAccountFromAccountsDb(pubkey solana.PublicKey) (*accounts.Account, error) {
+	acct, err := slotCtx.AccountsDb.GetAccount(pubkey)
+	if err != nil {
+		return nil, err
+	} else {
+		return acct, nil
+	}
+}
+
+func (slotCtx *SlotCtx) SetAccount(pubkey solana.PublicKey, acct *accounts.Account) error {
+	pk := [32]byte(pubkey)
+	err := slotCtx.Accounts.SetAccount(&pk, acct)
+	return err
+}
+
+func (slotCtx *SlotCtx) SetupSysvarCache(slot uint64) {
 }

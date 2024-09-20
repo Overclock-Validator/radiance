@@ -12,16 +12,26 @@ var SysvarOwnerAddr = base58.MustDecodeFromString(SysvarOwnerStr)
 
 type SysvarCache struct {
 	RecentBlockHashes *SysvarRecentBlockhashes
+	Rent              SysvarRent
+	Clock             SysvarClock
+	Fees              SysvarFees
+	SlotHashes        SysvarSlotHashes
 }
 
 func (sysvarCache *SysvarCache) GetRecentBlockHashes() *SysvarRecentBlockhashes {
 	return sysvarCache.RecentBlockHashes
 }
 
-func (sysvarCache *SysvarCache) Initialize() {
+func (sysvarCache *SysvarCache) UpdateForSlot(slotCtx *SlotCtx) {
 	if sysvarCache.RecentBlockHashes == nil {
 		sysvarCache.RecentBlockHashes = new(SysvarRecentBlockhashes)
 	}
+
+	sysvarCache.Rent.InitializeDefault()
+	sysvarCache.Clock.Update(slotCtx.Epoch, slotCtx.Slot)
+	sysvarCache.Fees.Update(slotCtx.LamportsPerSignature)
+	sysvarCache.SlotHashes.UpdateWithSlotCtx(slotCtx)
+
 }
 
 func (sysvarCache *SysvarCache) AddRecentBlockHashEntry(entry RecentBlockHashesEntry) {

@@ -107,7 +107,9 @@ func (sr *SysvarEpochRewards) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func ReadEpochRewardsSysvar(accts *accounts.Accounts) (SysvarEpochRewards, error) {
+func ReadEpochRewardsSysvar(execCtx *ExecutionCtx) (SysvarEpochRewards, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	epochRewardsSysvarAcct, err := (*accts).GetAccount(&SysvarEpochRewardsAddr)
 	if err != nil {
 		return SysvarEpochRewards{}, InstrErrUnsupportedSysvar

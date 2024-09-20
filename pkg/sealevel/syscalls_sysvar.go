@@ -26,7 +26,7 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 	}
 
 	var clock SysvarClock
-	clock, err = ReadClockSysvar(getAccounts(vm))
+	clock, err = ReadClockSysvar(execCtx)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -59,7 +59,7 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 		return syscallErr(err)
 	}
 
-	rent, err := ReadRentSysvar(getAccounts(vm))
+	rent, err := ReadRentSysvar(execCtx)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -89,7 +89,7 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) 
 		return syscallErr(err)
 	}
 
-	epochSchedule, err := ReadEpochScheduleSysvar(getAccounts(vm))
+	epochSchedule, err := ReadEpochScheduleSysvar(execCtx)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -124,7 +124,7 @@ func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 		return syscallErr(err)
 	}
 
-	epochRewards, err := ReadEpochRewardsSysvar(getAccounts(vm))
+	epochRewards, err := ReadEpochRewardsSysvar(execCtx)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -160,7 +160,7 @@ func SyscallGetLastRestartSlotSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error
 		return syscallErr(err)
 	}
 
-	lrs := ReadLastRestartSlotSysvar(getAccounts(vm))
+	lrs := ReadLastRestartSlotSysvar(execCtx)
 
 	binary.LittleEndian.PutUint64(lastRestartSlotDst[:8], lrs.LastRestartSlot)
 

@@ -59,7 +59,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 				execCtx.Accounts.SetAccount(&sealevel.SysvarClockAddr, &clockAcct)
 			}
 
-			_, err := sealevel.ReadClockSysvar(&execCtx.Accounts)
+			_, err := sealevel.ReadClockSysvar(execCtx)
 			if err == nil {
 				foundClockSysvar = true
 			}
@@ -76,7 +76,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		sealevel.WriteClockSysvar(&execCtx.Accounts, clock)
 	}
 
-	clock, _ := sealevel.ReadClockSysvar(&execCtx.Accounts)
+	clock, _ := sealevel.ReadClockSysvar(execCtx)
 	fmt.Printf("clock sysvar just set: %+v\n", clock)
 
 	/// rent
@@ -89,7 +89,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 
 			execCtx.Accounts.SetAccount(&sealevel.SysvarRentAddr, &rentAcct)
 
-			_, err := sealevel.ReadRentSysvar(&execCtx.Accounts)
+			_, err := sealevel.ReadRentSysvar(execCtx)
 			if err == nil {
 				foundRentSysvar = true
 			}
@@ -109,7 +109,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 		sealevel.WriteRentSysvar(&execCtx.Accounts, rent)
 	}
 
-	rent, _ := sealevel.ReadRentSysvar(&execCtx.Accounts)
+	rent, _ := sealevel.ReadRentSysvar(execCtx)
 	execCtx.TransactionContext.Rent = rent
 
 	/// SlotHashes
@@ -141,7 +141,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 				break
 			}
 			execCtx.Accounts.SetAccount(&sealevel.SysvarEpochScheduleAddr, &epochScheduleAcct)
-			_, err := sealevel.ReadEpochScheduleSysvar(&execCtx.Accounts)
+			_, err := sealevel.ReadEpochScheduleSysvar(execCtx)
 			if err == nil {
 				foundEpochScheduleSysvar = true
 			}
@@ -176,7 +176,7 @@ func configureSysvars(execCtx *sealevel.ExecutionCtx, fixture *InstrFixture) {
 			fmt.Printf("adding state for sysvar: SysvarRecentBlockhashes\n")
 			recentBlockhashesAcct := fixtureAcctStateToAccount(acct)
 			execCtx.Accounts.SetAccount(&sealevel.SysvarRecentBlockHashesAddr, &recentBlockhashesAcct)
-			rbh, err := sealevel.ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			rbh, err := sealevel.ReadRecentBlockHashesSysvar(execCtx)
 			if err == nil {
 				if len(rbh) != 0 {
 					execCtx.Blockhash = rbh[len(rbh)-1].Blockhash

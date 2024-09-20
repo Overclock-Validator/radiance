@@ -803,7 +803,7 @@ func newWarmupCooldownRateEpoch(execCtx *ExecutionCtx) (*uint64, error) {
 		return nil, nil
 	}
 
-	epochSchedule, err := ReadEpochScheduleSysvar(&execCtx.Accounts)
+	epochSchedule, err := ReadEpochScheduleSysvar(execCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -999,7 +999,7 @@ func (mergeKind *MergeKind) Merge(execCtx *ExecutionCtx, src *MergeKind, clock S
 func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags, epoch uint64) error {
 	if execCtx.GlobalCtx.Features.IsActive(features.StakeRedelegateInstruction) {
 		if stakeFlags.Contains(StakeFlagsMustFullyActivateBeforeDeactivationIsPermitted) {
-			stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
+			stakeHistory, err := ReadStakeHistorySysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -1025,7 +1025,7 @@ func deactivateStake(execCtx *ExecutionCtx, stake *Stake, stakeFlags *StakeFlags
 }
 
 func getStakeStatus(execCtx *ExecutionCtx, stake *Stake, clock SysvarClock) (StakeHistoryEntry, error) {
-	stakeHistory, err := ReadStakeHistorySysvar(&execCtx.Accounts)
+	stakeHistory, err := ReadStakeHistorySysvar(execCtx)
 	if err != nil {
 		return StakeHistoryEntry{}, err
 	}

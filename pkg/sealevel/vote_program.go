@@ -567,7 +567,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 			var rent SysvarRent
-			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			rent, err = ReadRentSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -583,7 +583,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -606,7 +606,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -700,13 +700,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 
 			// TODO: switch to using a sysvar cache
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
 
 			var epochSchedule SysvarEpochSchedule
-			epochSchedule, err = ReadEpochScheduleSysvar(&execCtx.Accounts)
+			epochSchedule, err = ReadEpochScheduleSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -740,7 +740,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 			var slotHashes SysvarSlotHashes
-			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
+			slotHashes, err = ReadSlotHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -750,7 +750,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 				return err
 			}
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -781,13 +781,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			// TODO: switch to using a sysvar cache
 
 			var slotHashes SysvarSlotHashes
-			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
+			slotHashes, err = ReadSlotHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -821,13 +821,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			// TODO: switch to using a sysvar cache
 
 			var slotHashes SysvarSlotHashes
-			slotHashes, err = ReadSlotHashesSysvar(&execCtx.Accounts)
+			slotHashes, err = ReadSlotHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -849,13 +849,13 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var rent SysvarRent
-			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			rent, err = ReadRentSysvar(execCtx)
 			if err != nil {
 				return err
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -907,7 +907,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var clock SysvarClock
-			clock, err = ReadClockSysvar(&execCtx.Accounts)
+			clock, err = ReadClockSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -1002,7 +1002,7 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 	if err != nil {
 		return err
 	}
-	clock, err := ReadClockSysvar(&execCtx.Accounts)
+	clock, err := ReadClockSysvar(execCtx)
 	if err != nil {
 		return err
 	}
@@ -1278,6 +1278,7 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 	if ok {
 		lastVoteSlot := lastLandedVote.Lockout.Slot
 		if lastVoteStateUpdateSlot <= lastVoteSlot {
+			klog.Infof("lastVoteStateUpdateSlot (%d) <= lastVoteSlot (%d)", lastVoteStateUpdateSlot, lastVoteSlot)
 			return VoteErrVoteTooOld
 		}
 	}
@@ -1289,6 +1290,7 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 	earliestSlotHashInHistory := slotHashes[len(slotHashes)-1].Slot
 
 	if lastVoteStateUpdateSlot < earliestSlotHashInHistory {
+		klog.Infof("lastVoteStateUpdateSlot (%d) < earliestSlotHashInHistory (%d)", lastVoteStateUpdateSlot, earliestSlotHashInHistory)
 		return VoteErrVoteTooOld
 	}
 
@@ -1624,6 +1626,7 @@ func checkAndFilterProposedVoteState(voteState *VoteState, proposedLockouts *deq
 	if ok {
 		lastVoteSlot = lo.Lockout.Slot
 		if lastProposedSlot <= lastVoteSlot {
+			klog.Infof("lastProposedSlot (%d) <= lastVoteSlot (%d)", lastProposedSlot, lastVoteSlot)
 			return VoteErrVoteTooOld
 		}
 	}
@@ -1631,11 +1634,6 @@ func checkAndFilterProposedVoteState(voteState *VoteState, proposedLockouts *deq
 	if len(slotHashes) == 0 {
 		return VoteErrSlotsMismatch
 	}
-
-	return nil
-}
-
-func doProcessVoteStateUpdate(voteState *VoteState, slotHashes SysvarSlotHashes, epoch uint64, slot uint64, voteStateUpdate *VoteInstrUpdateVoteState, f features.Features) error {
 
 	return nil
 }

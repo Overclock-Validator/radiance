@@ -108,7 +108,7 @@ func (l *Loader) copySections() error {
 	l.progRange.extendToFit(0)
 
 	// Allocate!
-	l.program = make([]byte, l.progRange.len())
+	l.program = make([]byte, l.fileSize)
 
 	// Read data from ELF file
 	for _, section := range l.rodatas {

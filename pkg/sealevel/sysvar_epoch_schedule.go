@@ -92,7 +92,9 @@ func (sr *SysvarEpochSchedule) GetEpochAndSlotIndex(slot uint64) (uint64, uint64
 	}
 }
 
-func ReadEpochScheduleSysvar(accts *accounts.Accounts) (SysvarEpochSchedule, error) {
+func ReadEpochScheduleSysvar(execCtx *ExecutionCtx) (SysvarEpochSchedule, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	epochScheduleSysvarAcct, err := (*accts).GetAccount(&SysvarEpochScheduleAddr)
 	if err != nil {
 		return SysvarEpochSchedule{}, InstrErrUnsupportedSysvar

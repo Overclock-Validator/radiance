@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"unicode/utf8"
 
 	bin "github.com/gagliardetto/binary"
@@ -818,7 +819,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var recentBlockHashes SysvarRecentBlockhashes
-			recentBlockHashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -848,7 +849,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var recentBlockhashes SysvarRecentBlockhashes
-			recentBlockhashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			recentBlockhashes, err = ReadRecentBlockHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -860,7 +861,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var rent SysvarRent
-			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			rent, err = ReadRentSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -894,7 +895,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var recentBlockHashes SysvarRecentBlockhashes
-			recentBlockHashes, err = ReadRecentBlockHashesSysvar(&execCtx.Accounts)
+			recentBlockHashes, err = ReadRecentBlockHashesSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -909,7 +910,7 @@ func SystemProgramExecute(execCtx *ExecutionCtx) error {
 			}
 
 			var rent SysvarRent
-			rent, err = ReadRentSysvar(&execCtx.Accounts)
+			rent, err = ReadRentSysvar(execCtx)
 			if err != nil {
 				return err
 			}
@@ -1243,6 +1244,8 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 		klog.Errorf("Transfer: 'from' must not carry data")
 		return InstrErrInvalidArgument
 	}
+
+	fmt.Printf("transfer from %s\n", from.Key())
 
 	if lamports > from.Lamports() {
 		klog.Errorf("Transfer: insufficient lamports %d, need %d", from.Lamports(), lamports)

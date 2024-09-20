@@ -107,7 +107,7 @@ func TestExecute_AddrLookupTable_Program_Test_Create_Lookup_Table_Idempotent(t *
 	expectedBalance := rent.MinimumBalance(AddressLookupTableMetaSize)
 	assert.Equal(t, expectedBalance, addrLookupTablePost.Lamports)
 
-	acctStatePost, err := unmarshalAddressLookupTable(addrLookupTablePost.Data)
+	acctStatePost, err := UnmarshalAddressLookupTable(addrLookupTablePost.Data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint64(math.MaxUint64), acctStatePost.Meta.DeactivationSlot)
@@ -214,7 +214,7 @@ func TestExecute_AddrLookupTable_Program_Test_Create_Lookup_Table_Not_Idempotent
 	expectedBalance := rent.MinimumBalance(AddressLookupTableMetaSize)
 	assert.Equal(t, expectedBalance, addrLookupTablePost.Lamports)
 
-	acctStatePost, err := unmarshalAddressLookupTable(addrLookupTablePost.Data)
+	acctStatePost, err := UnmarshalAddressLookupTable(addrLookupTablePost.Data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint64(math.MaxUint64), acctStatePost.Meta.DeactivationSlot)
@@ -318,7 +318,7 @@ func TestExecute_AddrLookupTable_Program_Test_Create_Lookup_Table_Use_Payer_As_A
 	expectedBalance := rent.MinimumBalance(AddressLookupTableMetaSize)
 	assert.Equal(t, expectedBalance, addrLookupTablePost.Lamports)
 
-	acctStatePost, err := unmarshalAddressLookupTable(addrLookupTablePost.Data)
+	acctStatePost, err := UnmarshalAddressLookupTable(addrLookupTablePost.Data)
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint64(math.MaxUint64), acctStatePost.Meta.DeactivationSlot)
@@ -1218,7 +1218,7 @@ func TestExecute_AddrLookupTable_Program_Test_DeactivateLookupTable_Success(t *t
 	tableAcctPost, err := txCtx.Accounts.GetAccount(1)
 	assert.NoError(t, err)
 
-	tableAcctStatePost, err := unmarshalAddressLookupTable(tableAcctPost.Data)
+	tableAcctStatePost, err := UnmarshalAddressLookupTable(tableAcctPost.Data)
 	assert.NoError(t, err)
 	// deactivate slot should be clock.Slot, which is 10 as above
 	assert.Equal(t, uint64(10), tableAcctStatePost.Meta.DeactivationSlot)
@@ -1585,7 +1585,7 @@ func TestExecute_AddrLookupTable_Program_Test_FreezeLookupTable_Success(t *testi
 	tableAcctPost, err := txCtx.Accounts.GetAccount(1)
 	assert.NoError(t, err)
 
-	tableAcctStatePost, err := unmarshalAddressLookupTable(tableAcctPost.Data)
+	tableAcctStatePost, err := UnmarshalAddressLookupTable(tableAcctPost.Data)
 	assert.NoError(t, err)
 	isNil := tableAcctStatePost.Meta.Authority == nil
 	assert.Equal(t, true, isNil)
@@ -1667,7 +1667,7 @@ func getBytesForFrozenLookupTable(t *testing.T) []byte {
 	tableAcctPost, err := txCtx.Accounts.GetAccount(1)
 	assert.NoError(t, err)
 
-	tableAcctStatePost, err := unmarshalAddressLookupTable(tableAcctPost.Data)
+	tableAcctStatePost, err := UnmarshalAddressLookupTable(tableAcctPost.Data)
 	assert.NoError(t, err)
 	isNil := tableAcctStatePost.Meta.Authority == nil
 	assert.Equal(t, true, isNil)
@@ -2128,7 +2128,7 @@ func TestExecute_AddrLookupTable_Program_Test_ExtendLookupTable_Success(t *testi
 	tableAcctPost, err := txCtx.Accounts.GetAccount(1)
 	assert.NoError(t, err)
 
-	tableAcctStatePost, err := unmarshalAddressLookupTable(tableAcctPost.Data)
+	tableAcctStatePost, err := UnmarshalAddressLookupTable(tableAcctPost.Data)
 	assert.NoError(t, err)
 
 	// check that three accounts were added to the lookup table

@@ -56,7 +56,7 @@ func (requestHeapFrame *ComputeBudgetInstrRequestHeapFrame) UnmarshalWithDecoder
 func (requestHeapFrame *ComputeBudgetInstrRequestHeapFrame) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
 
-	err = encoder.WriteUint32(ComputeBudgetInstrTypeRequestHeapFrame, bin.LE)
+	err = encoder.WriteUint8(ComputeBudgetInstrTypeRequestHeapFrame)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (setComputeUnitLimit *ComputeBudgetInstrSetComputeUnitLimit) UnmarshalWithD
 func (setComputeUnitLimit *ComputeBudgetInstrSetComputeUnitLimit) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
 
-	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetComputeUnitLimit, bin.LE)
+	err = encoder.WriteUint8(ComputeBudgetInstrTypeSetComputeUnitLimit)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (setComputeUnitPrice *ComputeBudgetInstrSetComputeUnitPrice) UnmarshalWithD
 func (setComputeUnitPrice *ComputeBudgetInstrSetComputeUnitPrice) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
 
-	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetComputeUnitPrice, bin.LE)
+	err = encoder.WriteUint8(ComputeBudgetInstrTypeSetComputeUnitPrice)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (setLoadedAccountsDataSizeLimit *ComputeBudgetInstrSetLoadedAccountsDataSiz
 func (setLoadedAccountsDataSizeLimit *ComputeBudgetInstrSetLoadedAccountsDataSizeLimit) MarshalWithEncoder(encoder *bin.Encoder) error {
 	var err error
 
-	err = encoder.WriteUint32(ComputeBudgetInstrTypeSetLoadedAccountsDataSizeLimit, bin.LE)
+	err = encoder.WriteUint8(ComputeBudgetInstrTypeSetLoadedAccountsDataSizeLimit)
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,6 @@ func duplicateInstructionErr(idx int) error {
 }
 
 func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudgetLimits, error) {
-
 	var hasRequestedHeapSize bool
 	var hasComputeUnitLimit bool
 	var hasComputeUnitPrice bool
@@ -153,8 +152,11 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 		instrData := instr.Data
 		decoder := bin.NewBorshDecoder(instrData)
 
-		instrType, err := decoder.ReadUint32(bin.LE)
+		klog.Infof("ComputeBudgetExecuteInstructions - processing instr (%d bytes)", len(instrData))
+
+		instrType, err := decoder.ReadUint8()
 		if err != nil {
+			fmt.Printf("[1]\n")
 			return nil, invalidInstructionDataErr(idx)
 		}
 
@@ -164,6 +166,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var requestHeapFrame ComputeBudgetInstrRequestHeapFrame
 				err = requestHeapFrame.UnmarshalWithDecoder(decoder)
 				if err != nil {
+					fmt.Printf("[2]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -177,6 +180,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 					requestedHeapSize = requestedSize
 					hasRequestedHeapSize = true
 				} else {
+					fmt.Printf("[3]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 			}
@@ -186,6 +190,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setComputeUnitLimit ComputeBudgetInstrSetComputeUnitLimit
 				err = setComputeUnitLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
+					fmt.Printf("[4]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -202,6 +207,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setComputeUnitPrice ComputeBudgetInstrSetComputeUnitPrice
 				err = setComputeUnitPrice.UnmarshalWithDecoder(decoder)
 				if err != nil {
+					fmt.Printf("[5]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -218,6 +224,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setLoadedAccountsDataSizeLimit ComputeBudgetInstrSetLoadedAccountsDataSizeLimit
 				err = setLoadedAccountsDataSizeLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
+					fmt.Printf("[6]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -231,6 +238,7 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 
 		default:
 			{
+				fmt.Printf("[7]\n")
 				return nil, invalidInstructionDataErr(idx)
 			}
 		}

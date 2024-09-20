@@ -10,6 +10,7 @@ import (
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -572,7 +573,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 		return nil, err
 	}
 
-	accounts := make(TranslatedAccounts, len(instructionAccts)+1)
+	accounts := make(TranslatedAccounts, 0)
 
 	idx := len(programIndices) - 1
 	if idx < 0 {
@@ -645,7 +646,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 		return nil, err
 	}
 
-	accounts := make(TranslatedAccounts, len(instructionAccts)+1)
+	accounts := make(TranslatedAccounts, 0)
 
 	idx := len(programIndices) - 1
 	if idx < 0 {
@@ -785,19 +786,18 @@ func SyscallInvokeSignedCImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, acc
 	}
 
 	for _, acct := range accounts {
-		var calleeAcct *BorrowedAccount
-		calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
-		if err != nil {
-			return syscallErr(err)
-		}
-		defer calleeAcct.Drop()
 		if acct.CallerAccount != nil {
+			var calleeAcct *BorrowedAccount
+			calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
+			if err != nil {
+				return syscallErr(err)
+			}
+			defer calleeAcct.Drop()
 			err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 			if err != nil {
 				return syscallErr(err)
 			}
 		}
-		calleeAcct.Drop()
 	}
 
 	return syscallSuccess(0)
@@ -864,19 +864,20 @@ func SyscallInvokeSignedRustImpl(vm sbpf.VM, instructionAddr, accountInfosAddr, 
 	}
 
 	for _, acct := range accounts {
-		var calleeAcct *BorrowedAccount
-		calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
-		if err != nil {
-			return syscallErr(err)
-		}
-		defer calleeAcct.Drop()
 		if acct.CallerAccount != nil {
+			var calleeAcct *BorrowedAccount
+			calleeAcct, err = instructionCtx.BorrowInstructionAccount(txCtx, acct.IndexOfAccount)
+			if err != nil {
+				klog.Infof("calling BorrowInstructionAccount for updateCallerAccount failed! %s", err)
+				return syscallErr(err)
+			}
+			calleeAcct.Drop()
 			err = updateCallerAccount(vm, acct.CallerAccount, calleeAcct)
 			if err != nil {
 				return syscallErr(err)
 			}
+			calleeAcct.Drop()
 		}
-		calleeAcct.Drop()
 	}
 
 	return syscallSuccess(0)

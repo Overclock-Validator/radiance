@@ -15,10 +15,11 @@ import (
 )
 
 type AccountsDb struct {
-	db            *sniper.Store
+	indexDb       *sniper.Store
 	acctsDir      string
 	indexDir      string
 	largestFileId atomic.Uint64
+	bankHash      [32]byte
 }
 
 var (
@@ -54,6 +55,25 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 
 	largestFileId := binary.LittleEndian.Uint64(largestFileIdBytes)
 
+	//////
+	// attempt to open largest_file_id file
+	bankHashFn := fmt.Sprintf("%s/bank_hash", accountsDbDir)
+	bhf, err := os.Open(bankHashFn)
+	if err != nil {
+		fmt.Printf("failed to open %s\n", bankHashFn)
+		return nil, err
+	}
+
+	bankHashBytes := make([]byte, 32)
+	bytesRead, err = bhf.Read(bankHashBytes)
+	if err != nil {
+		fmt.Printf("error reading %s: %s\n", bankHashFn, err)
+		return nil, err
+	} else if bytesRead != 32 {
+		fmt.Printf("error reading %s: expected 8 bytes, got %d\n", bankHashFn, bytesRead)
+		return nil, fmt.Errorf("only got %d bytes", bytesRead)
+	}
+
 	// attempt to open the index kv store
 	indexDir := fmt.Sprintf("%s/index", accountsDbDir)
 	db, err := sniper.Open(sniper.Dir(indexDir))
@@ -62,18 +82,19 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 		return nil, err
 	}
 
-	accountsDb := &AccountsDb{db: db, acctsDir: appendVecsDir, indexDir: indexDir}
+	accountsDb := &AccountsDb{indexDb: db, acctsDir: appendVecsDir, indexDir: indexDir}
 	accountsDb.largestFileId.Store(largestFileId)
+	copy(accountsDb.bankHash[:], bankHashBytes)
 
 	return accountsDb, nil
 }
 
 func (accountsDb *AccountsDb) CloseDb() {
-	accountsDb.db.Close()
+	accountsDb.indexDb.Close()
 }
 
 func (accountsDb *AccountsDb) GetAccount(pubkey solana.PublicKey) (*accounts.Account, error) {
-	acctIdxEntryBytes, err := accountsDb.db.Get(pubkey[:])
+	acctIdxEntryBytes, err := accountsDb.indexDb.Get(pubkey[:])
 	if err != nil {
 		return nil, ErrNoAccount
 	}
@@ -141,7 +162,7 @@ func (accountsDb *AccountsDb) StoreAccounts(accts []*accounts.Account, slot uint
 			return err
 		}
 
-		err = accountsDb.db.Set(acct.Key[:], indexWriter.Bytes(), 0)
+		err = accountsDb.indexDb.Set(acct.Key[:], indexWriter.Bytes(), 0)
 		if err != nil {
 			return err
 		}
@@ -165,4 +186,8 @@ func (accountsDb *AccountsDb) StoreAccounts(accts []*accounts.Account, slot uint
 	}
 
 	return nil
+}
+
+func (accountsDb *AccountsDb) BankHash() [32]byte {
+	return accountsDb.bankHash
 }

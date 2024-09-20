@@ -48,7 +48,6 @@ func (fetcher *BlockFetcher) GetBlockFinalized(slot uint64) (*rpc.GetBlockResult
 		slot,
 		&rpc.GetBlockOpts{
 			MaxSupportedTransactionVersion: &maxSupportedTxVer,
-			Encoding:                       solana.EncodingBase64,
 			Commitment:                     rpc.CommitmentFinalized,
 			TransactionDetails:             rpc.TransactionDetailsFull,
 			Rewards:                        &includeRewards,

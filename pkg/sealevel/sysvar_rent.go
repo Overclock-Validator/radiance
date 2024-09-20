@@ -61,7 +61,13 @@ func (sr *SysvarRent) IsExempt(balance uint64, dataLen uint64) bool {
 	return balance >= sr.MinimumBalance(dataLen)
 }
 
-func ReadRentSysvar(accts *accounts.Accounts) (SysvarRent, error) {
+func (sr *SysvarRent) InitializeDefault() {
+	*sr = NewDefaultRentSysvar()
+}
+
+func ReadRentSysvar(execCtx *ExecutionCtx) (SysvarRent, error) {
+	accts := addrObjectForLookup(execCtx)
+
 	rentAcct, err := (*accts).GetAccount(&SysvarRentAddr)
 	if err != nil {
 		panic("failed to read rent sysvar account")
@@ -113,6 +119,11 @@ func WriteRentSysvar(accts *accounts.Accounts, rent SysvarRent) {
 		err = fmt.Errorf("failed write newly serialized Rent sysvar to sysvar account: %w", err)
 		panic(err)
 	}
+}
+
+func NewDefaultRentSysvar() SysvarRent {
+	rent := SysvarRent{LamportsPerUint8Year: 3480, ExemptionThreshold: 2.0, BurnPercent: 50}
+	return rent
 }
 
 func checkAcctForRentSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {

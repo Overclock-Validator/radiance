@@ -265,6 +265,8 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 
 	//fmt.Printf("accts processed: %d, in %s. numTimesAppendVecCopyingPoolCalled: %d, numTimesIndexEntryBuilderPool: %d, numTimesIndexEntryCommiterPool: %d\n", numEntriesCommitted.Load(), time.Since(start), numTimesAppendVecCopyingPoolCalled.Load(), numTimesIndexEntryBuilderPool.Load(), numTimesIndexEntryCommiterPool.Load())
 
+	fmt.Printf("snapshot processed in %s.\n", time.Since(start))
+
 	largestFileIdFile, err := os.Create(fmt.Sprintf("%s/largest_file_id", accountsDbDir))
 	if err != nil {
 		fmt.Printf("err creating new: %s\n", err)
@@ -284,6 +286,24 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 	}
 
 	largestFileIdFile.Close()
+
+	bankHashOutputFileName := fmt.Sprintf("%s/bank_hash", accountsDbDir)
+	bankHashFile, err := os.Create(bankHashOutputFileName)
+	if err != nil {
+		fmt.Printf("err creating new: %s\n", err)
+		return err
+	}
+
+	numBytesWritten, err = bankHashFile.Write(manifest.Bank.Hash[:])
+	if err != nil {
+		fmt.Printf("error writing bank hash to file: %s\n", err)
+		return err
+	} else if numBytesWritten != 32 {
+		fmt.Printf("error writing bank hash to file\n")
+		return fmt.Errorf("error writing bank hash to file, wrote %d bytes", numBytesWritten)
+	}
+
+	bankHashFile.Close()
 
 	return nil
 }

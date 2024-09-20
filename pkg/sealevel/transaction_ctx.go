@@ -31,6 +31,7 @@ type TransactionCtx struct {
 	Rent                     SysvarRent
 	HeapSize                 uint32
 	AllInstructions          []Instruction
+	ComputeBudgetLimits      ComputeBudgetLimits
 }
 
 func NewTransactionAccounts(accts []accounts.Account) *TransactionAccounts {
