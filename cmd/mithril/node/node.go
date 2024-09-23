@@ -6,6 +6,7 @@ import (
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/pkg/accountsdb"
+	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/blockget"
 	"go.firedancer.io/radiance/pkg/replay"
 	"go.firedancer.io/radiance/pkg/snapshot"
@@ -46,6 +47,11 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 		}
 		block.Transactions = append(block.Transactions, txParsed)
 	}
+
+	tx, _ := blockResult.Transactions[0].GetTransaction()
+
+	block.NumSignatures = uint64(len(blockResult.Signatures))
+	block.RecentBlockhash = tx.Message.RecentBlockhash
 
 	return block, nil
 }
@@ -117,12 +123,16 @@ func run(c *cobra.Command, args []string) {
 	}
 
 	block.Slot = uint64(slot)
-	block.BankHash = accountsDb.BankHash()
+	block.ParentBankhash = accountsDb.BankHash()
+	block.RecentBlockhash = blockResult.PreviousBlockhash
 
-	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
+	bankHash, err := replay.ProcessBlock(accountsDb, block, updateAccountsDb)
 	if err != nil {
 		klog.Errorf("error encountered during block replay: %s\n", err)
 	} else {
 		klog.Infof("block replayed successfully.\n")
+
+		klog.Infof("bank hash from rpc response: %s\n", blockResult.Blockhash)
+		klog.Infof("calculated bank hash: %s\n", base58.Encode(bankHash))
 	}
 }

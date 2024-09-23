@@ -12,9 +12,12 @@ import (
 )
 
 type Block struct {
-	Slot         uint64
-	Transactions []*solana.Transaction
-	BankHash     [32]byte
+	Slot            uint64
+	Transactions    []*solana.Transaction
+	BankHash        [32]byte
+	ParentBankhash  [32]byte
+	NumSignatures   uint64
+	RecentBlockhash [32]byte
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -168,12 +171,12 @@ func loadBlockAccounts(accountsDb *accountsdb.AccountsDb, block *Block) (account
 	return accts, nil
 }
 
-func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) error {
+func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) ([]byte, error) {
 
 	// gather up all accounts used by the block and put them into a SlotCtx object
 	accts, err := loadBlockAccounts(acctsDb, block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Accounts: accts, AccountsDb: acctsDb, Replay: true}
@@ -198,5 +201,10 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 		klog.Infof("accountsdb not updated")
 	}
 
-	return err
+	//acctDeltaHash := calculateAcctsDeltaHash(slotCtx.ModifiedAccts)
+
+	// calculate bankhash
+	//bankHash := calculateBankHash(acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.RecentBlockhash)
+
+	return nil, err
 }
