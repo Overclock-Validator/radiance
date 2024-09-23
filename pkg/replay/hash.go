@@ -9,6 +9,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/base58"
 )
 
 type acctHash struct {
@@ -69,8 +70,7 @@ func divCeil(x uint64, y uint64) uint64 {
 
 func computeMerkleRootLoop(acctHashes [][]byte) []byte {
 	if len(acctHashes) == 0 {
-		empty := make([]byte, 32)
-		return empty
+		return nil
 	}
 
 	totalHashes := uint64(len(acctHashes))
@@ -86,6 +86,7 @@ func computeMerkleRootLoop(acctHashes [][]byte) []byte {
 		a := acctHashes[startIdx:endIdx]
 
 		for _, h := range a {
+			fmt.Printf("hash: %v\n", h)
 			hasher.Write(h)
 		}
 
@@ -99,16 +100,27 @@ func computeMerkleRootLoop(acctHashes [][]byte) []byte {
 	}
 }
 
+func pubkeyCmp(a solana.PublicKey, b solana.PublicKey) bool {
+	for i := uint64(0); i < 4; i++ {
+		a1 := binary.BigEndian.Uint64(a[8*i:])
+		b1 := binary.BigEndian.Uint64(b[8*i:])
+		if a1 != b1 {
+			return a1 < b1
+		}
+	}
+	return false
+}
+
 func calculateAcctsDeltaHash(accts []*accounts.Account) []byte {
 	acctHashes := calculateAccountHashes(accts)
 
 	// sort by pubkey
 	sort.SliceStable(acctHashes, func(i, j int) bool {
-		return string(acctHashes[i].Pubkey[:]) < string(acctHashes[j].Pubkey[:])
+		return pubkeyCmp(acctHashes[i].Pubkey, acctHashes[j].Pubkey)
 	})
 
 	for _, pk := range acctHashes {
-		fmt.Printf("%s\n", pk.Pubkey)
+		fmt.Printf("%s, %s\n", pk.Pubkey, base58.Encode(pk.Hash[:]))
 	}
 
 	hashes := make([][]byte, len(acctHashes))

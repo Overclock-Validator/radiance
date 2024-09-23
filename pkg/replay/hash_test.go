@@ -2,10 +2,13 @@ package replay
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.firedancer.io/radiance/fixtures"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
 )
@@ -24,38 +27,44 @@ func Test_Compute_Bank_Hash(t *testing.T) {
 	assert.Equal(t, bankHash, knownCorrectBankHash)
 }
 
+type testAcct struct {
+	Lamports   string `json:"lamports"`
+	Len        uint64 `json:"data.len"`
+	Owner      string `json:"owner"`
+	Executable bool   `json:"executable"`
+	RentEpoch  string `json:"rent_epoch"`
+	Data       string `json:"data"`
+	Pubkey     string `json:"pubkey"`
+}
+
 func Test_Accounts_Delta_Hash(t *testing.T) {
+	acctsJson := fixtures.Load(t, "hash", "accts.json")
 
-	data1, err := hex.DecodeString("010040000000000000ffffdffffffffffefffffffffffff7fffffffffffffffffffffffffffffefffbfd7f000000000000000000000000000000000000000000")
-	assert.NoError(t, err)
-	acct1 := accounts.Account{Lamports: 913326000, Owner: base58.MustDecodeFromString("Sysvar1111111111111111111111111111111111111"), Executable: false,
-		RentEpoch: 0, Data: data1, Key: base58.MustDecodeFromString("SysvarS1otHistory11111111111111111111111111")}
+	var testAccts []testAcct
+	err := json.Unmarshal(acctsJson, &testAccts)
+	if err != nil {
+		panic(fmt.Sprintf("unable to unmarshal json: %s\n", err))
+	}
 
-	acct2 := accounts.Account{Lamports: 499998715000, Owner: base58.MustDecodeFromString("11111111111111111111111111111111"), Executable: false, RentEpoch: 18446744073709551615, Key: base58.MustDecodeFromString("49EaB72ejufhYAdTVE9GKrQrcCAKyrxvaWS8NSNDfbt1")}
+	fmt.Printf("unmarshaled %d accts\n", len(testAccts))
 
-	data3, err := hex.DecodeString("08010000000000000d01000000000000d8188d726e48bcf62f5066287adb0b5e649f607ac3658c1316e1f37f17b6415a0c01000000000000c9297fdfd1a4679c")
-	assert.NoError(t, err)
-	acct3 := accounts.Account{Lamports: 143487360, Owner: base58.MustDecodeFromString("Sysvar1111111111111111111111111111111111111"), Executable: false, RentEpoch: 0, Data: data3, Key: base58.MustDecodeFromString("SysvarS1otHashes111111111111111111111111111")}
+	accts := make([]*accounts.Account, 0)
+	for _, ta := range testAccts {
+		data, err := hex.DecodeString(ta.Data)
+		assert.NoError(t, err)
+		lamports, err := strconv.ParseUint(ta.Lamports, 10, 64)
+		rentEpoch, err := strconv.ParseUint(ta.RentEpoch, 10, 64)
+		a := &accounts.Account{Key: base58.MustDecodeFromString(ta.Pubkey), Lamports: lamports, Data: data, Executable: ta.Executable, Owner: base58.MustDecodeFromString(ta.Owner), RentEpoch: rentEpoch}
+		accts = append(accts, a)
+	}
 
-	data4, err := hex.DecodeString("020000002eaf0d99aa7260c32313655024147d6eb4fc58bc2cca30c8c4eb8d67c2b424e6f65707763d35460526811ef777a9c246be0c0129bd80c43ec201fed5")
-	assert.NoError(t, err)
-	acct4 := accounts.Account{Lamports: 1000000000000000, Owner: base58.MustDecodeFromString("Vote111111111111111111111111111111111111111"), Executable: false, RentEpoch: 18446744073709551615, Data: data4, Key: base58.MustDecodeFromString("HacGEcrPNhjNUUib432H2aYaGWeZwjFkgHSREE6D8AyB")}
-
-	data5, err := hex.DecodeString("0e010000000000004bfaf066000000000000000000000000010000000000000059fbf06600000000")
-	assert.NoError(t, err)
-	acct5 := accounts.Account{Lamports: 1169280, Owner: base58.MustDecodeFromString("Sysvar1111111111111111111111111111111111111"), Executable: false, RentEpoch: 0, Data: data5, Key: base58.MustDecodeFromString("SysvarC1ock11111111111111111111111111111111")}
-
-	data6, err := hex.DecodeString("9600000000000000717c1c22c5d6bd764329d4027a064a3b7ca0b97a25278e95e02a1a31d7c810138813000000000000afa8a43eb41a93e68bc82a3009293818")
-	assert.NoError(t, err)
-	acct6 := accounts.Account{Lamports: 42706560, Owner: base58.MustDecodeFromString("Sysvar1111111111111111111111111111111111111"), Executable: false, RentEpoch: 0, Data: data6, Key: base58.MustDecodeFromString("SysvarRecentB1ockHashes11111111111111111111")}
-
-	accts := []*accounts.Account{&acct1, &acct2, &acct3, &acct4, &acct5, &acct6}
+	fmt.Printf("%+v\n\n", accts[1])
 
 	acctsDeltaHash := calculateAcctsDeltaHash(accts)
-	knownCorrectAcctsDeltaHash := []byte{148, 1, 99, 1, 94, 42, 27, 37, 216, 66, 0, 57, 116, 109, 251, 51, 250, 101, 228, 74, 44, 3, 94, 73, 120, 148, 27, 210, 78, 34, 112, 212}
+	knownCorrectAcctsDeltaHash := []byte{159, 193, 234, 234, 232, 60, 116, 92, 110, 95, 206, 137, 221, 188, 150, 211, 233, 2, 24, 56, 20, 207, 125, 123, 135, 193, 5, 37, 114, 203, 108, 109}
 
 	fmt.Printf("calculated accts delta hash: %d\n", acctsDeltaHash)
 	fmt.Printf("known accts delta hash: %d\n", knownCorrectAcctsDeltaHash)
 
-	//assert.Equal(t, knownCorrectAcctsDeltaHash, acctsDeltaHash)
+	assert.Equal(t, acctsDeltaHash, knownCorrectAcctsDeltaHash)
 }
