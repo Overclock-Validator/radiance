@@ -3,13 +3,11 @@ package replay
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"sort"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/base58"
 )
 
 type acctHash struct {
@@ -86,7 +84,6 @@ func computeMerkleRootLoop(acctHashes [][]byte) []byte {
 		a := acctHashes[startIdx:endIdx]
 
 		for _, h := range a {
-			fmt.Printf("hash: %v\n", h)
 			hasher.Write(h)
 		}
 
@@ -118,10 +115,6 @@ func calculateAcctsDeltaHash(accts []*accounts.Account) []byte {
 	sort.SliceStable(acctHashes, func(i, j int) bool {
 		return pubkeyCmp(acctHashes[i].Pubkey, acctHashes[j].Pubkey)
 	})
-
-	for _, pk := range acctHashes {
-		fmt.Printf("%s, %s\n", pk.Pubkey, base58.Encode(pk.Hash[:]))
-	}
 
 	hashes := make([][]byte, len(acctHashes))
 	for idx, ah := range acctHashes {

@@ -37,7 +37,7 @@ type testAcct struct {
 	Pubkey     string `json:"pubkey"`
 }
 
-func Test_Accounts_Delta_Hash(t *testing.T) {
+func Test_Accounts_Delta_Hash_And_BankHash(t *testing.T) {
 	acctsJson := fixtures.Load(t, "hash", "accts.json")
 
 	var testAccts []testAcct
@@ -58,8 +58,6 @@ func Test_Accounts_Delta_Hash(t *testing.T) {
 		accts = append(accts, a)
 	}
 
-	fmt.Printf("%+v\n\n", accts[1])
-
 	acctsDeltaHash := calculateAcctsDeltaHash(accts)
 	knownCorrectAcctsDeltaHash := []byte{159, 193, 234, 234, 232, 60, 116, 92, 110, 95, 206, 137, 221, 188, 150, 211, 233, 2, 24, 56, 20, 207, 125, 123, 135, 193, 5, 37, 114, 203, 108, 109}
 
@@ -67,4 +65,16 @@ func Test_Accounts_Delta_Hash(t *testing.T) {
 	fmt.Printf("known accts delta hash: %d\n", knownCorrectAcctsDeltaHash)
 
 	assert.Equal(t, acctsDeltaHash, knownCorrectAcctsDeltaHash)
+
+	parentBankHash := [32]byte{89, 9, 149, 199, 126, 19, 109, 42, 164, 143, 181, 134, 72, 50, 37, 12, 232, 164, 118, 184, 89, 104, 82, 205, 254, 58, 135, 223, 67, 69, 131, 62}
+	numSigs := uint64(2)
+	blockHash := [32]byte{146, 202, 69, 18, 36, 202, 121, 99, 47, 1, 177, 105, 158, 183, 91, 218, 104, 146, 24, 15, 17, 59, 160, 158, 71, 187, 255, 20, 105, 124, 226, 82}
+	knownCorrectBankHash := []byte{119, 170, 167, 64, 81, 16, 52, 152, 70, 85, 198, 20, 1, 9, 69, 90, 128, 26, 216, 178, 224, 255, 106, 149, 70, 45, 52, 83, 69, 197, 64, 245}
+
+	bankHash := calculateBankHash(acctsDeltaHash, parentBankHash, numSigs, blockHash)
+
+	fmt.Printf("calculated bankhash: %d\n", bankHash)
+	fmt.Printf("known bankhash: %d\n", knownCorrectBankHash)
+
+	assert.Equal(t, bankHash, knownCorrectBankHash)
 }
