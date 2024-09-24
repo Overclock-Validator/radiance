@@ -1,6 +1,6 @@
-# Mithril - A Verifying Full Node for Solana
+# Mithril
 
-Mithril is a Solana full node client written in Golang with the goal of serving as a verifying node with lower hardware requirements than that of validators and RPC nodes. This project is being developed upon the foundations of [Radiance](https://github.com/firedancer-io/radiance), which was built by Richard Patel (@ripatel) with contributions from @leoluk.
+Mithril is a Solana full node client written in Golang with the goal of serving as a "verifying full node" with lower hardware requirements than that of Solana validators and RPC nodes. This project is being developed upon the foundations of [Radiance](https://github.com/firedancer-io/radiance), which was built by Richard Patel (@ripatel) with contributions from @leoluk.
 
 This project is under active development. Our aim is to move rapidly with Mithril's development, hence all code is likely to be incomplete, buggy, and/or improperly tested at any particular point in time. Please check the dev branch for the latest version of the codebase. We'll begin to add documentation as Mithril begins to approach a useable state.
 
