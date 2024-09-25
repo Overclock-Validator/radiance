@@ -42,9 +42,7 @@ func Test_Accounts_Delta_Hash_And_BankHash(t *testing.T) {
 
 	var testAccts []testAcct
 	err := json.Unmarshal(acctsJson, &testAccts)
-	if err != nil {
-		panic(fmt.Sprintf("unable to unmarshal json: %s\n", err))
-	}
+	assert.NoError(t, err)
 
 	fmt.Printf("unmarshaled %d accts\n", len(testAccts))
 

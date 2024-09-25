@@ -63,9 +63,41 @@ func (sc *SysvarClock) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	}
 }
 
-func (sc *SysvarClock) Update(epoch uint64, slot uint64) {
-	sc.Slot = slot
-	sc.Epoch = epoch
+func (sc *SysvarClock) MustMarshal() []byte {
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err := enc.WriteUint64(sc.Slot, bin.LE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal slot in sysvar clock: %s", err))
+	}
+
+	err = enc.WriteInt64(sc.EpochStartTimestamp, bin.LE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal epoch_start_timestamp in sysvar clock: %s", err))
+	}
+
+	err = enc.WriteUint64(sc.Epoch, bin.LE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal epoch in sysvar clock: %s", err))
+	}
+
+	err = enc.WriteUint64(sc.LeaderScheduleEpoch, bin.LE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal leader_schedule_epoch in sysvar clock: %s", err))
+	}
+
+	err = enc.WriteInt64(sc.UnixTimestamp, bin.LE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal epoch_start_timestamp in sysvar clock: %s", err))
+	}
+
+	return data.Bytes()
+}
+
+func (sc *SysvarClock) Update() {
+	sc.Slot++
+	sc.Epoch++
 }
 
 func ReadClockSysvar(execCtx *ExecutionCtx) (SysvarClock, error) {

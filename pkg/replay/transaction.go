@@ -6,7 +6,6 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
-	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"k8s.io/klog/v2"
 )
@@ -49,14 +48,12 @@ func programIndices(tx *solana.Transaction, instrIdx int) []uint64 {
 	return []uint64{idx}
 }
 
-func newExecCtx(slotCtx *sealevel.SlotCtx, transactionAccts *sealevel.TransactionAccounts) *sealevel.ExecutionCtx {
+func newExecCtx(slotCtx *sealevel.SlotCtx, transactionAccts *sealevel.TransactionAccounts, log *sealevel.LogRecorder) *sealevel.ExecutionCtx {
 	txCtx := sealevel.NewTestTransactionCtx(*transactionAccts, 64, 64)
 
-	var log sealevel.LogRecorder
-	execCtx := &sealevel.ExecutionCtx{Log: &log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
+	execCtx := &sealevel.ExecutionCtx{Log: log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
 
-	f := features.NewFeaturesDefault()
-	execCtx.GlobalCtx.Features = *f
+	execCtx.GlobalCtx.Features = *slotCtx.Features
 	execCtx.Accounts = accounts.NewMemAccounts()
 	execCtx.SlotCtx = slotCtx
 
@@ -125,7 +122,8 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 		return err
 	}
 
-	execCtx := newExecCtx(slotCtx, transactionAccts)
+	var log sealevel.LogRecorder
+	execCtx := newExecCtx(slotCtx, transactionAccts, &log)
 
 	computeBudgetLimits, err := sealevel.ComputeBudgetExecuteInstructions(instrs)
 	if err != nil {
@@ -154,6 +152,9 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 		err = execCtx.ProcessInstruction(instr.Data, instructionAccts, programIndices(tx, instrIdx))
 		if err != nil {
 			klog.Infof("%+v", tx)
+			for _, l := range log.Logs {
+				klog.Infof("%s", l)
+			}
 			return err
 		}
 	}

@@ -38,8 +38,8 @@ const AccountMetaSize = 34
 
 type AccountMeta struct {
 	Pubkey     solana.PublicKey
-	IsWritable bool
 	IsSigner   bool
+	IsWritable bool
 }
 
 const SolAccountMetaCSize = 16

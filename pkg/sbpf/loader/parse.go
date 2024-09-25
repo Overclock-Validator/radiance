@@ -315,9 +315,10 @@ func (l *Loader) newDynamicIter() (*tableIter[elf.Dyn64], error) {
 		return nil, nil
 	}
 
-	if size%dynLen != 0 {
+	// TODO: check Agave
+	/*if size%dynLen != 0 {
 		return nil, fmt.Errorf("odd .dynamic size")
-	}
+	}*/
 	if (off+size) > l.fileSize || (off+size) < off {
 		return nil, io.ErrUnexpectedEOF
 	}

@@ -84,7 +84,6 @@ func (sh *SysvarSlotHashes) MustMarshal() []byte {
 		}
 	}
 
-	fmt.Printf("returning %d bytes for SysvarSlotHashes\n", len(data.Bytes()))
 	return data.Bytes()
 }
 

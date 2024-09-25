@@ -1,6 +1,8 @@
 package sealevel
 
 import (
+	"encoding/binary"
+
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/util"
@@ -101,12 +103,15 @@ func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64) (uint64, 
 			break
 		}
 	}
-	err = vm.Write32(resultAddr, uint32(cmpResult))
+
+	resultSlice, err := vm.Translate(resultAddr, 4, true)
 	if err != nil {
 		return syscallErr(err)
-	} else {
-		return syscallSuccess(0)
 	}
+
+	binary.LittleEndian.PutUint32(resultSlice, uint32(cmpResult))
+
+	return syscallSuccess(0)
 }
 
 var SyscallMemcmp = sbpf.SyscallFunc4(SyscallMemcmpImpl)

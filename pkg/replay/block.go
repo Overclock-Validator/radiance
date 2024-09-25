@@ -1,23 +1,27 @@
 package replay
 
 import (
+	"bytes"
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/accountsdb"
+	"go.firedancer.io/radiance/pkg/base58"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"k8s.io/klog/v2"
 )
 
 type Block struct {
-	Slot            uint64
-	Transactions    []*solana.Transaction
-	BankHash        [32]byte
-	ParentBankhash  [32]byte
-	NumSignatures   uint64
-	RecentBlockhash [32]byte
+	Slot             uint64
+	Transactions     []*solana.Transaction
+	BankHash         [32]byte
+	ParentBankhash   [32]byte
+	NumSignatures    uint64
+	Blockhash        [32]byte
+	ExpectedBankhash [32]byte
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -31,15 +35,23 @@ func numBlockAccts(block *Block) uint64 {
 func resolveAddrTableLookups(accountsDb *accountsdb.AccountsDb, block *Block) error {
 	tables := make(map[solana.PublicKey]solana.PublicKeySlice)
 
-	for _, tx := range block.Transactions {
+	for idx, tx := range block.Transactions {
+		klog.Infof("resolveAddrTableLookups for transaction %d", idx)
+
 		if !tx.Message.IsVersioned() {
 			continue
 		}
 
+		var skipLookup bool
 		for _, addrTableKey := range tx.Message.GetAddressTableLookups().GetTableIDs() {
 			acct, err := accountsDb.GetAccount(addrTableKey)
 			if err != nil {
-				return err
+				klog.Infof("unable to get address lookup table account: %s", addrTableKey)
+				for _, sig := range tx.Signatures {
+					klog.Infof("tx sig: %s", sig)
+				}
+				skipLookup = true
+				break
 			}
 
 			addrLookupTable, err := sealevel.UnmarshalAddressLookupTable(acct.Data)
@@ -48,6 +60,10 @@ func resolveAddrTableLookups(accountsDb *accountsdb.AccountsDb, block *Block) er
 			}
 
 			tables[addrTableKey] = addrLookupTable.Addresses
+		}
+
+		if skipLookup {
+			continue
 		}
 
 		err := tx.Message.SetAddressTables(tables)
@@ -95,7 +111,7 @@ func isNativeProgram(pubkey solana.PublicKey) bool {
 	}
 }
 
-func loadBlockAccounts(accountsDb *accountsdb.AccountsDb, block *Block) (accounts.Accounts, error) {
+func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block *Block) (accounts.Accounts, error) {
 	err := resolveAddrTableLookups(accountsDb, block)
 	if err != nil {
 		return nil, err
@@ -146,17 +162,33 @@ func loadBlockAccounts(accountsDb *accountsdb.AccountsDb, block *Block) (account
 				panic(fmt.Sprintf("unable to retrieve sysvar %s from accountsdb", sysvarAddr))
 			}
 
-			// update slothashes sysvar
 			if sysvarAcct.Key == sealevel.SysvarSlotHashesAddr {
 				decoder := bin.NewBinDecoder(sysvarAcct.Data)
 				var slotHashes sealevel.SysvarSlotHashes
+
 				err = slotHashes.UnmarshalWithDecoder(decoder)
 				if err != nil {
 					panic(fmt.Sprintf("unable to unmarshal slothashes sysvar"))
 				}
-				slotHashes.Update(block.Slot, block.BankHash)
+
+				slotHashes.Update(block.Slot, block.ParentBankhash)
 				newSlotHashesBytes := slotHashes.MustMarshal()
 				copy(sysvarAcct.Data, newSlotHashesBytes)
+			} else if sysvarAcct.Key == sealevel.SysvarClockAddr {
+				decoder := bin.NewBinDecoder(sysvarAcct.Data)
+				var clock sealevel.SysvarClock
+
+				err = clock.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					panic(fmt.Sprintf("unable to unmarshal clock sysvar"))
+				}
+
+				clock.Update()
+
+				fmt.Printf("********++++++++ sysvar clock slot: %d, epoch: %d\n", clock.Slot, clock.Epoch)
+
+				newClockBytes := clock.MustMarshal()
+				copy(sysvarAcct.Data, newClockBytes)
 			}
 
 			var sysvarPkBytes [32]byte
@@ -171,15 +203,29 @@ func loadBlockAccounts(accountsDb *accountsdb.AccountsDb, block *Block) (account
 	return accts, nil
 }
 
-func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) ([]byte, error) {
+func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *features.Features {
+	f := features.NewFeaturesDefault()
+	for _, featureGate := range features.AllFeatureGates {
+		_, err := acctsDb.GetAccount(featureGate.Address)
+		if err == nil {
+			klog.Infof("enabled feature: %s, %s", featureGate.Name, solana.PublicKeyFromBytes(featureGate.Address[:]))
+			f.EnableFeature(featureGate, slot)
+		}
+	}
+	return f
+}
+
+func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) error {
 
 	// gather up all accounts used by the block and put them into a SlotCtx object
-	accts, err := loadBlockAccounts(acctsDb, block)
+	accts, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Accounts: accts, AccountsDb: acctsDb, Replay: true}
+	f := scanAndEnableFeatures(acctsDb, block.Slot)
+
+	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
 
 	// process & execute each transaction in turn
 	for idx, tx := range block.Transactions {
@@ -201,10 +247,15 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 		klog.Infof("accountsdb not updated")
 	}
 
-	//acctDeltaHash := calculateAcctsDeltaHash(slotCtx.ModifiedAccts)
+	acctDeltaHash := calculateAcctsDeltaHash(slotCtx.ModifiedAccts)
 
 	// calculate bankhash
-	//bankHash := calculateBankHash(acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.RecentBlockhash)
+	bankHash := calculateBankHash(acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.Blockhash)
+	if bytes.Equal(bankHash, block.ExpectedBankhash[:]) {
+		klog.Infof("calculated bankhash matched expected bankhash.")
+	} else {
+		klog.Infof("calculated bankhash (%s) mismatch (%s)", base58.Encode(bankHash), base58.Encode(block.ExpectedBankhash[:]))
+	}
 
-	return nil, err
+	return err
 }

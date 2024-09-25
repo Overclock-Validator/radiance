@@ -5,6 +5,7 @@ import (
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/cu"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/global"
 	"k8s.io/klog/v2"
 )
@@ -36,6 +37,7 @@ type SlotCtx struct {
 	// TODO: use sysvar cache instead of deserializing from accounts each time
 	SysvarCache SysvarCache
 	SlotBank    SlotBank
+	Features    *features.Features
 	Replay      bool
 }
 
@@ -70,9 +72,8 @@ func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana
 			if duplicateIndex > len(dedupInstructionAccounts)-1 {
 				return nil, nil, InstrErrNotEnoughAccountKeys
 			}
-			instructionAcct := dedupInstructionAccounts[duplicateIndex]
-			instructionAcct.IsSigner = instructionAcct.IsSigner || accountMeta.IsSigner
-			instructionAcct.IsWritable = instructionAcct.IsWritable || accountMeta.IsWritable
+			dedupInstructionAccounts[duplicateIndex].IsSigner = dedupInstructionAccounts[duplicateIndex].IsSigner || accountMeta.IsSigner
+			dedupInstructionAccounts[duplicateIndex].IsWritable = dedupInstructionAccounts[duplicateIndex].IsWritable || accountMeta.IsWritable
 		} else {
 			indexInCaller, err := ixCtx.IndexOfInstructionAccount(txCtx, accountMeta.Pubkey)
 			if err != nil {

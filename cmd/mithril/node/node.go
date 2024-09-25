@@ -48,10 +48,12 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 		block.Transactions = append(block.Transactions, txParsed)
 	}
 
-	tx, _ := blockResult.Transactions[0].GetTransaction()
+	block.Blockhash = blockResult.Blockhash
+	block.ExpectedBankhash = base58.MustDecodeFromString("7ajPmmwFqzwan217uio15D7RQ6HXjz2VVkvA48rfRVKW")
 
-	block.NumSignatures = uint64(len(blockResult.Signatures))
-	block.RecentBlockhash = tx.Message.RecentBlockhash
+	for _, tx := range block.Transactions {
+		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
+	}
 
 	return block, nil
 }
@@ -124,15 +126,11 @@ func run(c *cobra.Command, args []string) {
 
 	block.Slot = uint64(slot)
 	block.ParentBankhash = accountsDb.BankHash()
-	block.RecentBlockhash = blockResult.PreviousBlockhash
 
-	bankHash, err := replay.ProcessBlock(accountsDb, block, updateAccountsDb)
+	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
 	if err != nil {
 		klog.Errorf("error encountered during block replay: %s\n", err)
 	} else {
 		klog.Infof("block replayed successfully.\n")
-
-		klog.Infof("bank hash from rpc response: %s\n", blockResult.Blockhash)
-		klog.Infof("calculated bank hash: %s\n", base58.Encode(bankHash))
 	}
 }
