@@ -55,8 +55,6 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 
 	largestFileId := binary.LittleEndian.Uint64(largestFileIdBytes)
 
-	//////
-	// attempt to open largest_file_id file
 	bankHashFn := fmt.Sprintf("%s/bank_hash", accountsDbDir)
 	bhf, err := os.Open(bankHashFn)
 	if err != nil {

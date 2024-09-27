@@ -951,7 +951,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	programAcct.Drop()
 
 	computeRemainingPrev := execCtx.ComputeMeter.Remaining()
-	heapSize := execCtx.TransactionContext.HeapSize
+	heapSize := execCtx.TransactionContext.ComputeBudgetLimits.UpdatedHeapBytes
 	heapCostResult := calculateHeapCost(heapSize, CUHeapCostDefault)
 
 	err = execCtx.ComputeMeter.Consume(heapCostResult)
@@ -975,7 +975,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	opts := &sbpf.VMOpts{
-		HeapMax:  int(execCtx.TransactionContext.HeapSize),
+		HeapMax:  int(heapSize),
 		Input:    parameterBytes,
 		Syscalls: syscallRegistry,
 		Context:  execCtx,
@@ -1089,7 +1089,7 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 
 		programDataAcct, err := execCtx.SlotCtx.GetAccountFromAccountsDb(programAcctState.Program.ProgramDataAddress)
 		if err != nil {
-			klog.Infof("unable to get account %s as program data", programAcctState.Program.ProgramDataAddress)
+			klog.Infof("unable to get account %s as program data: %s", programAcctState.Program.ProgramDataAddress, err)
 			return InstrErrUnsupportedProgramId
 		}
 

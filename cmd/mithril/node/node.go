@@ -3,6 +3,8 @@
 package node
 
 import (
+	"fmt"
+
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/pkg/accountsdb"
@@ -49,7 +51,7 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 	}
 
 	block.Blockhash = blockResult.Blockhash
-	block.ExpectedBankhash = base58.MustDecodeFromString("7ajPmmwFqzwan217uio15D7RQ6HXjz2VVkvA48rfRVKW")
+	block.ExpectedBankhash = base58.MustDecodeFromString("5jTwSaYKKR1DYAaMDsU8ZDJ1UmxTgms2yCQrg7shfZMh")
 
 	for _, tx := range block.Transactions {
 		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
@@ -113,6 +115,11 @@ func run(c *cobra.Command, args []string) {
 	}
 	defer accountsDb.CloseDb()
 
+	manifest, err := snapshot.LoadManifestFromFile(fmt.Sprintf("%s/manifest", accountsDbDir))
+	if err != nil {
+		klog.Fatalf("unable to open manifest file")
+	}
+
 	blockFetcher := blockget.NewBlockFetcher("https://api.mainnet-beta.solana.com")
 	blockResult, err := blockFetcher.GetBlockFinalized(uint64(slot))
 	if err != nil {
@@ -126,6 +133,7 @@ func run(c *cobra.Command, args []string) {
 
 	block.Slot = uint64(slot)
 	block.ParentBankhash = accountsDb.BankHash()
+	block.Manifest = manifest
 
 	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
 	if err != nil {

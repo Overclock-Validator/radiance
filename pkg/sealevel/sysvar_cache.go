@@ -28,7 +28,7 @@ func (sysvarCache *SysvarCache) UpdateForSlot(slotCtx *SlotCtx) {
 	}
 
 	sysvarCache.Rent.InitializeDefault()
-	sysvarCache.Clock.Update()
+	//sysvarCache.Clock.Update()
 	sysvarCache.Fees.Update(slotCtx.LamportsPerSignature)
 	sysvarCache.SlotHashes.UpdateWithSlotCtx(slotCtx)
 

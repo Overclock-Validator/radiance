@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ import (
 	"go.firedancer.io/radiance/pkg/accountsdb"
 )
 
-func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
+func UnmarshalManifestFromSnapshot(filename string, accountsDbDir string) (*SnapshotManifest, error) {
 	manifest := new(SnapshotManifest)
 
 	file, err := os.Open(filename)
@@ -30,6 +31,16 @@ func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
 		return nil, err
 	}
 	defer file.Close()
+
+	manifestOutputFile := fmt.Sprintf("%s/manifest", accountsDbDir)
+	if err = os.MkdirAll(accountsDbDir, 0775); err != nil {
+		return nil, err
+	}
+	manifestOut, err := os.Create(manifestOutputFile)
+	if err != nil {
+		return nil, err
+	}
+	defer manifestOut.Close()
 
 	zstdReader, err := zstd.NewReader(file)
 	if err != nil {
@@ -51,6 +62,11 @@ func UnmarshalManifestFromSnapshot(filename string) (*SnapshotManifest, error) {
 			if strings.Count(header.Name, "/") == 2 {
 				_, err := io.Copy(writer, tarReader)
 				if err != nil {
+					return nil, err
+				}
+				_, err = io.Copy(manifestOut, bytes.NewBuffer(writer.Bytes()))
+				if err != nil {
+					fmt.Printf("err copying manifest file out: %s\n", err)
 					return nil, err
 				}
 				break
@@ -82,7 +98,7 @@ type indexEntryCommitterTask struct {
 }
 
 func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) error {
-	manifest, err := UnmarshalManifestFromSnapshot(snapshotFile)
+	manifest, err := UnmarshalManifestFromSnapshot(snapshotFile, accountsDbDir)
 	if err != nil {
 		fmt.Printf("err: %s\n", err)
 		return err
@@ -306,4 +322,25 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 	bankHashFile.Close()
 
 	return nil
+}
+
+func LoadManifestFromFile(filename string) (*SnapshotManifest, error) {
+	manifestFile, err := os.Open(filename)
+	if err != nil {
+		fmt.Printf("failed to open %s\n", filename)
+		return nil, err
+	}
+	manifestBytes, err := ioutil.ReadAll(manifestFile)
+	if err != nil {
+		return nil, err
+	}
+
+	manifest := new(SnapshotManifest)
+	decoder := bin.NewBinDecoder(manifestBytes)
+	err = manifest.UnmarshalWithDecoder(decoder)
+	if err != nil {
+		return nil, err
+	}
+
+	return manifest, nil
 }

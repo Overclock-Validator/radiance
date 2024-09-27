@@ -11,6 +11,7 @@ import (
 	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
+	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
 
@@ -22,6 +23,7 @@ type Block struct {
 	NumSignatures    uint64
 	Blockhash        [32]byte
 	ExpectedBankhash [32]byte
+	Manifest         *snapshot.SnapshotManifest
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -183,7 +185,19 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 					panic(fmt.Sprintf("unable to unmarshal clock sysvar"))
 				}
 
-				clock.Update()
+				epochScheduleAcct, err := accountsDb.GetAccount(sealevel.SysvarEpochScheduleAddr)
+				if err != nil {
+					panic("unable to retrieve epoch schedule sysvar acct when updating clock sysvar")
+				}
+
+				decoder.Reset(epochScheduleAcct.Data)
+				var epochSchedule sealevel.SysvarEpochSchedule
+				err = epochSchedule.UnmarshalWithDecoder(decoder)
+				if err != nil {
+					panic(fmt.Sprintf("unable to unmarshal epoch schedule sysvar when updating clock sysvar"))
+				}
+
+				clock.Update(&epochSchedule)
 
 				fmt.Printf("********++++++++ sysvar clock slot: %d, epoch: %d\n", clock.Slot, clock.Epoch)
 

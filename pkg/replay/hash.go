@@ -49,6 +49,9 @@ func calculateSingleAcctHash(acct accounts.Account) acctHash {
 func calculateAccountHashes(accts []*accounts.Account) []acctHash {
 	pairs := make([]acctHash, len(accts))
 	for idx, acct := range accts {
+		if acct.Lamports == 0 {
+			continue
+		}
 		pair := calculateSingleAcctHash(*acct)
 		pairs[idx] = pair
 	}

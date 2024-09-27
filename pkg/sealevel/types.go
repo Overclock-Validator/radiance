@@ -392,6 +392,7 @@ func (vectorDescr *VectorDescrRust) Unmarshal(buf io.Reader) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

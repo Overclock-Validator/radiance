@@ -156,7 +156,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 
 		instrType, err := decoder.ReadUint8()
 		if err != nil {
-			fmt.Printf("[1]\n")
 			return nil, invalidInstructionDataErr(idx)
 		}
 
@@ -166,7 +165,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var requestHeapFrame ComputeBudgetInstrRequestHeapFrame
 				err = requestHeapFrame.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					fmt.Printf("[2]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -180,7 +178,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 					requestedHeapSize = requestedSize
 					hasRequestedHeapSize = true
 				} else {
-					fmt.Printf("[3]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 			}
@@ -190,7 +187,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setComputeUnitLimit ComputeBudgetInstrSetComputeUnitLimit
 				err = setComputeUnitLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					fmt.Printf("[4]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -207,7 +203,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setComputeUnitPrice ComputeBudgetInstrSetComputeUnitPrice
 				err = setComputeUnitPrice.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					fmt.Printf("[5]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -224,7 +219,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 				var setLoadedAccountsDataSizeLimit ComputeBudgetInstrSetLoadedAccountsDataSizeLimit
 				err = setLoadedAccountsDataSizeLimit.UnmarshalWithDecoder(decoder)
 				if err != nil {
-					fmt.Printf("[6]\n")
 					return nil, invalidInstructionDataErr(idx)
 				}
 
@@ -238,7 +232,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 
 		default:
 			{
-				fmt.Printf("[7]\n")
 				return nil, invalidInstructionDataErr(idx)
 			}
 		}

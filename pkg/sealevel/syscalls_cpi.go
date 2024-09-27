@@ -3,6 +3,7 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"unsafe"
 
 	"github.com/gagliardetto/solana-go"
@@ -134,6 +135,7 @@ func translateInstructionRust(vm sbpf.VM, addr uint64) (Instruction, error) {
 		return Instruction{}, err
 	}
 
+	fmt.Printf("translateInstructionRust: addr: %d, len: %d\n", ix.Accounts.Addr, ix.Accounts.Len)
 	accountMetasData, err := vm.Translate(ix.Accounts.Addr, AccountMetaSize*ix.Accounts.Len, false)
 	if err != nil {
 		return Instruction{}, err

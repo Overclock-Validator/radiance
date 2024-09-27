@@ -504,6 +504,10 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (
 }
 
 func (ip *Interpreter) Translate(addr uint64, size uint64, write bool) ([]byte, error) {
+	if size == 0 {
+		return nil, nil
+	}
+
 	ptr, err := ip.translateInternal(addr, size, write)
 	if err != nil {
 		return nil, err

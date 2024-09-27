@@ -9,6 +9,7 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/base58"
+	"go.firedancer.io/radiance/pkg/safemath"
 )
 
 const SysvarEpochScheduleAddrStr = "SysvarEpochSchedu1e111111111111111111111111"
@@ -89,6 +90,14 @@ func (sr *SysvarEpochSchedule) GetEpochAndSlotIndex(slot uint64) (uint64, uint64
 		epoch := sr.FirstNormalEpoch + normalEpochIndex
 		slotIndex := normalSlotIndex % sr.SlotsPerEpoch
 		return epoch, slotIndex
+	}
+}
+
+func (sr *SysvarEpochSchedule) FirstSlotInEpoch(epoch uint64) uint64 {
+	if epoch <= sr.FirstNormalEpoch {
+		return (safemath.SaturatingPow(2, uint32(epoch)) - 1) * MinimumSlotsPerEpoch
+	} else {
+		return safemath.SaturatingAddU64(safemath.SaturatingMulU64(safemath.SaturatingSubU64(epoch, sr.FirstNormalEpoch), sr.SlotsPerEpoch), sr.FirstNormalSlot)
 	}
 }
 

@@ -129,7 +129,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 	if err != nil {
 		return err
 	}
-	execCtx.TransactionContext.ComputeBudgetLimits = *computeBudgetLimits
+	execCtx.TransactionContext.ComputeBudgetLimits = computeBudgetLimits
 
 	for instrIdx, instr := range tx.Message.Instructions {
 		err = fixupInstructionsSysvarAcct(execCtx, uint16(instrIdx))
