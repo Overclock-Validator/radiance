@@ -49,9 +49,6 @@ func resolveAddrTableLookups(accountsDb *accountsdb.AccountsDb, block *Block) er
 			acct, err := accountsDb.GetAccount(addrTableKey)
 			if err != nil {
 				klog.Infof("unable to get address lookup table account: %s", addrTableKey)
-				for _, sig := range tx.Signatures {
-					klog.Infof("tx sig: %s", sig)
-				}
 				skipLookup = true
 				break
 			}
@@ -185,21 +182,10 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 					panic(fmt.Sprintf("unable to unmarshal clock sysvar"))
 				}
 
-				epochScheduleAcct, err := accountsDb.GetAccount(sealevel.SysvarEpochScheduleAddr)
+				err = updateClockSysvar(&clock, accountsDb, block)
 				if err != nil {
-					panic("unable to retrieve epoch schedule sysvar acct when updating clock sysvar")
+					panic(fmt.Sprintf("failed to update clock sysvar: %s", err))
 				}
-
-				decoder.Reset(epochScheduleAcct.Data)
-				var epochSchedule sealevel.SysvarEpochSchedule
-				err = epochSchedule.UnmarshalWithDecoder(decoder)
-				if err != nil {
-					panic(fmt.Sprintf("unable to unmarshal epoch schedule sysvar when updating clock sysvar"))
-				}
-
-				clock.Update(&epochSchedule)
-
-				fmt.Printf("********++++++++ sysvar clock slot: %d, epoch: %d\n", clock.Slot, clock.Epoch)
 
 				newClockBytes := clock.MustMarshal()
 				copy(sysvarAcct.Data, newClockBytes)
@@ -243,7 +229,7 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 
 	// process & execute each transaction in turn
 	for idx, tx := range block.Transactions {
-		klog.Infof("******** executing transaction %d", idx+1)
+		klog.Infof("[+] executing transaction %d, %s", idx+1, tx.Signatures[0])
 		txErr := ProcessTransaction(slotCtx, tx)
 		if txErr != nil {
 			klog.Infof("tx %d returned error: %s\n", idx+1, txErr)

@@ -8,18 +8,15 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"k8s.io/klog/v2"
 )
 
 func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64) (uint64, error) {
+	klog.Infof("SyscallLog")
+
 	execCtx := executionCtx(vm)
 
-	var cost uint64
-	if strlen > CUSyscallBaseCost {
-		cost = strlen
-	} else {
-		cost = CUSyscallBaseCost
-	}
-
+	cost := max(CUSyscallBaseCost, strlen)
 	err := execCtx.ComputeMeter.Consume(cost)
 	if err != nil {
 		return syscallCuErr()
@@ -36,6 +33,8 @@ func SyscallLogImpl(vm sbpf.VM, ptr, strlen uint64) (uint64, error) {
 var SyscallLog = sbpf.SyscallFunc2(SyscallLogImpl)
 
 func SyscallLog64Impl(vm sbpf.VM, r1, r2, r3, r4, r5 uint64) (uint64, error) {
+	klog.Infof("SyscallLog64")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CULog64Units)
 	if err != nil {
@@ -50,6 +49,8 @@ func SyscallLog64Impl(vm sbpf.VM, r1, r2, r3, r4, r5 uint64) (uint64, error) {
 var SyscallLog64 = sbpf.SyscallFunc5(SyscallLog64Impl)
 
 func SyscallLogCUsImpl(vm sbpf.VM) (uint64, error) {
+	klog.Infof("SyscallLogCUs")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
@@ -64,13 +65,14 @@ func SyscallLogCUsImpl(vm sbpf.VM) (uint64, error) {
 var SyscallLogCUs = sbpf.SyscallFunc0(SyscallLogCUsImpl)
 
 func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64) (uint64, error) {
+	klog.Infof("SyscallLogPubkey")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CULogPubkeyUnits)
 	if err != nil {
 		return syscallCuErr()
 	}
 
-	// TODO alignment check
 	var pubkey solana.PublicKey
 	if err = vm.Read(pubkeyAddr, pubkey[:]); err != nil {
 		return syscallErr(err)
@@ -83,6 +85,8 @@ func SyscallLogPubkeyImpl(vm sbpf.VM, pubkeyAddr uint64) (uint64, error) {
 var SyscallLogPubkey = sbpf.SyscallFunc1(SyscallLogPubkeyImpl)
 
 func SyscallLogDataImpl(vm sbpf.VM, addr uint64, len uint64) (uint64, error) {
+	klog.Infof("SyscallLogData")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {

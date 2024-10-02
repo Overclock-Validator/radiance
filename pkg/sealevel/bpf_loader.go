@@ -404,13 +404,28 @@ func deployProgram(execCtx *ExecutionCtx, programData []byte) error {
 	return nil
 }
 
+const (
+	kibibyte   uint64 = 1024
+	pageSizeKB uint64 = 32
+)
+
 func calculateHeapCost(heapSize uint32, heapCost uint64) uint64 {
-	KiBiByteMulPages := uint64(1024 * 32)
-	KiBiByteMulPagesSub1 := KiBiByteMulPages - 1
 	roundedHeapSize := uint64(heapSize)
-	roundedHeapSize = roundedHeapSize + KiBiByteMulPagesSub1
-	roundedHeapSize = ((roundedHeapSize / KiBiByteMulPagesSub1) * heapCost)
-	return roundedHeapSize
+	roundedHeapSize += pageSizeKB*kibibyte - 1
+
+	divisor := pageSizeKB * kibibyte
+	if divisor == 0 {
+		panic("programming error - PAGE_SIZE_KB * KIBIBYTE must be > 0. should be impossible.")
+	}
+
+	// any heap size <= default heap size has zero cost
+	roundedHeapSize = roundedHeapSize / divisor
+	if roundedHeapSize == 0 {
+		return 0
+	}
+
+	roundedHeapSize -= 1
+	return roundedHeapSize * heapCost
 }
 
 const MaxInstructionAccounts = 255
@@ -950,14 +965,17 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 
 	programAcct.Drop()
 
-	computeRemainingPrev := execCtx.ComputeMeter.Remaining()
 	heapSize := execCtx.TransactionContext.ComputeBudgetLimits.UpdatedHeapBytes
 	heapCostResult := calculateHeapCost(heapSize, CUHeapCostDefault)
+
+	klog.Infof("heapCost: %d", heapCostResult)
 
 	err = execCtx.ComputeMeter.Consume(heapCostResult)
 	if err != nil {
 		return err
 	}
+
+	computeRemainingPrev := execCtx.ComputeMeter.Remaining()
 
 	var parameterBytes []byte
 	var preLens []uint64
@@ -975,16 +993,19 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	opts := &sbpf.VMOpts{
-		HeapMax:  int(heapSize),
-		Input:    parameterBytes,
-		Syscalls: syscallRegistry,
-		Context:  execCtx,
+		HeapMax:      int(heapSize),
+		Input:        parameterBytes,
+		Syscalls:     syscallRegistry,
+		MaxCU:        int(execCtx.ComputeMeter.Remaining()),
+		ComputeMeter: &execCtx.ComputeMeter,
+		Context:      execCtx,
 	}
 
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
 	ret, runErr := interpreter.Run()
 
 	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
+
 	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
 
 	if runErr != nil {

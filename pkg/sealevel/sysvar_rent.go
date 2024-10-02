@@ -13,7 +13,7 @@ const SysvarRentAddrStr = "SysvarRent111111111111111111111111111111111"
 
 var SysvarRentAddr = base58.MustDecodeFromString(SysvarRentAddrStr)
 
-const SysvarRentStructLen = 17
+const SysvarRentStructLen = 24
 
 const rentAccountStorageOverhead = 128
 

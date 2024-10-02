@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/global"
 )
 
@@ -39,9 +40,10 @@ type VMOpts struct {
 	Tracer   TraceSink
 
 	// Execution parameters
-	Context any // passed to syscalls
-	MaxCU   int
-	Input   []byte // mapped at VaddrInput
+	Context      any // passed to syscalls
+	MaxCU        int
+	ComputeMeter *cu.ComputeMeter
+	Input        []byte // mapped at VaddrInput
 }
 
 type Exception struct {

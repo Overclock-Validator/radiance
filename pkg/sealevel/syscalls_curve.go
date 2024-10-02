@@ -14,6 +14,7 @@ import (
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"k8s.io/klog/v2"
 )
 
 // curve types
@@ -70,6 +71,8 @@ const (
 )
 
 func SyscallCurveValidatePointImpl(vm sbpf.VM, curveId, pointAddr uint64) (uint64, error) {
+	klog.Infof("SyscallCurveValidatePoint")
+
 	execCtx := executionCtx(vm)
 
 	switch curveId {
@@ -224,6 +227,8 @@ func unmarshalRistrettoElements(elementsBytes []byte) ([]*ristretto255.Element, 
 }
 
 func SyscallCurveMultiscalarMultiplicationImpl(vm sbpf.VM, curveId, scalarsAddr, pointsAddr, pointsLen, resultPointAddr uint64) (uint64, error) {
+	klog.Infof("SyscallCurveMultiscalarMultiplication")
+
 	execCtx := executionCtx(vm)
 
 	if pointsLen > 512 {
@@ -589,6 +594,8 @@ func handleRistrettoCurveGroupOps(vm sbpf.VM, groupOp, leftInputAddr, rightInput
 }
 
 func SyscallCurveGroupOpsImpl(vm sbpf.VM, curveId, groupOp, leftInputAddr, rightInputAddr, resultPointAddr uint64) (uint64, error) {
+	klog.Infof("SyscallCurveGroupOps")
+
 	switch curveId {
 	case Curve25519Edwards:
 		{
@@ -662,6 +669,7 @@ func G2FromInts(x *gfP2, y *gfP2) (*bn256lib.G2, error) {
 }
 
 func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultAddr uint64) (uint64, error) {
+	klog.Infof("SyscallAltBn128Compression")
 
 	var cost uint64
 	var outputLen uint64
@@ -797,6 +805,8 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 var SyscallAltBn128Compression = sbpf.SyscallFunc4(SyscallAltBn128CompressionImpl)
 
 func SyscallAltBn128Impl(vm sbpf.VM, groupOp, inputAddr, inputLen, resultAddr uint64) (uint64, error) {
+	klog.Infof("SyscallAltBn128")
+
 	var cost uint64
 	var outputLen uint64
 

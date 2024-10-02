@@ -13,7 +13,7 @@ const SysvarEpochRewardsAddrStr = "SysvarEpochRewards1111111111111111111111111"
 
 var SysvarEpochRewardsAddr = base58.MustDecodeFromString(SysvarEpochRewardsAddrStr)
 
-const SysvarEpochRewardsStructLen = 81
+const SysvarEpochRewardsStructLen = 96
 
 type SysvarEpochRewards struct {
 	DistributionStartingBlockHeight uint64

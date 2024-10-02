@@ -9,13 +9,7 @@ import (
 )
 
 func MemOpConsume(execCtx *ExecutionCtx, n uint64) error {
-	perBytesCost := n / CUCpiBytesPerUnit
-	var cost uint64
-	if CUMemOpBaseCost > perBytesCost {
-		cost = CUMemOpBaseCost
-	} else {
-		cost = perBytesCost
-	}
+	cost := max(CUMemOpBaseCost, n/CUCpiBytesPerUnit)
 	return execCtx.ComputeMeter.Consume(cost)
 }
 

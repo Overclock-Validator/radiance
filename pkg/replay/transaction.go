@@ -23,7 +23,7 @@ func (err *TxErrInvalidSignature) Error() string {
 }
 
 // XXX: rewrite using tx.AccountMetaList()
-func transactionAcctsAndAcctMetasFromTx(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) (*sealevel.TransactionAccounts, error) {
+func transactionAcctsFromTx(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) (*sealevel.TransactionAccounts, error) {
 	acctsForTx := make([]accounts.Account, 0)
 
 	txAcctMetas, err := tx.AccountMetaList()
@@ -48,14 +48,14 @@ func programIndices(tx *solana.Transaction, instrIdx int) []uint64 {
 	return []uint64{idx}
 }
 
-func newExecCtx(slotCtx *sealevel.SlotCtx, transactionAccts *sealevel.TransactionAccounts, log *sealevel.LogRecorder) *sealevel.ExecutionCtx {
+func newExecCtx(slotCtx *sealevel.SlotCtx, transactionAccts *sealevel.TransactionAccounts, computeBudgetLimits *sealevel.ComputeBudgetLimits, log *sealevel.LogRecorder) *sealevel.ExecutionCtx {
 	txCtx := sealevel.NewTestTransactionCtx(*transactionAccts, 64, 64)
-
-	execCtx := &sealevel.ExecutionCtx{Log: log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeterDefault()}
+	execCtx := &sealevel.ExecutionCtx{Log: log, TransactionContext: txCtx, ComputeMeter: cu.NewComputeMeter(uint64(computeBudgetLimits.ComputeUnitLimit))}
 
 	execCtx.GlobalCtx.Features = *slotCtx.Features
 	execCtx.Accounts = accounts.NewMemAccounts()
 	execCtx.SlotCtx = slotCtx
+	execCtx.TransactionContext.ComputeBudgetLimits = computeBudgetLimits
 
 	return execCtx
 }
@@ -117,19 +117,19 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 		return err
 	}
 
-	transactionAccts, err := transactionAcctsAndAcctMetasFromTx(slotCtx, tx)
+	transactionAccts, err := transactionAcctsFromTx(slotCtx, tx)
 	if err != nil {
 		return err
 	}
-
-	var log sealevel.LogRecorder
-	execCtx := newExecCtx(slotCtx, transactionAccts, &log)
 
 	computeBudgetLimits, err := sealevel.ComputeBudgetExecuteInstructions(instrs)
 	if err != nil {
 		return err
 	}
-	execCtx.TransactionContext.ComputeBudgetLimits = computeBudgetLimits
+
+	var log sealevel.LogRecorder
+	execCtx := newExecCtx(slotCtx, transactionAccts, computeBudgetLimits, &log)
+	execCtx.TransactionContext.AllInstructions = instrs
 
 	for instrIdx, instr := range tx.Message.Instructions {
 		err = fixupInstructionsSysvarAcct(execCtx, uint16(instrIdx))
@@ -158,6 +158,8 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 			return err
 		}
 	}
+
+	klog.Infof("[+] tx %s - compute units consumed: %d", tx.Signatures[0], execCtx.ComputeMeter.Used())
 
 	// update account states in slotCtx for all accounts 'touched' during the tx's execution
 	for idx, wasTouched := range execCtx.TransactionContext.Accounts.Touched {

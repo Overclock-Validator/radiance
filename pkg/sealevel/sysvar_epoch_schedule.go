@@ -16,7 +16,7 @@ const SysvarEpochScheduleAddrStr = "SysvarEpochSchedu1e111111111111111111111111"
 
 var SysvarEpochScheduleAddr = base58.MustDecodeFromString(SysvarEpochScheduleAddrStr)
 
-const SysvarEpochScheduleStructLen = 33
+const SysvarEpochScheduleStructLen = 40
 
 const MinimumSlotsPerEpoch = 32
 
@@ -72,6 +72,23 @@ func (sr *SysvarEpochSchedule) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 func (sr *SysvarEpochSchedule) GetEpoch(slot uint64) uint64 {
 	epoch, _ := sr.GetEpochAndSlotIndex(slot)
 	return epoch
+}
+
+func (sr *SysvarEpochSchedule) Slot0(epoch uint64) uint64 {
+	if epoch < sr.FirstNormalEpoch {
+		var power uint64
+		if epoch < 64 {
+			power = 1 << epoch
+		} else {
+			power = math.MaxUint64
+		}
+		return safemath.SaturatingMulU64(power-1, MinimumSlotsPerEpoch)
+	}
+
+	nEpoch := epoch - sr.FirstNormalEpoch
+	nSlot := nEpoch * sr.SlotsPerEpoch
+
+	return sr.FirstNormalSlot + nSlot
 }
 
 func (sr *SysvarEpochSchedule) GetEpochAndSlotIndex(slot uint64) (uint64, uint64) {

@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/solana"
+	"k8s.io/klog/v2"
 )
 
 const MaxSeeds = 16
@@ -47,6 +48,8 @@ func translateAndValidateSeeds(vm sbpf.VM, seedsAddr, seedsLen uint64) ([][]byte
 }
 
 func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr uint64) (uint64, error) {
+	klog.Infof("SyscallCreateProgramAddress")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {
@@ -80,6 +83,8 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 var SyscallCreateProgramAddress = sbpf.SyscallFunc4(SyscallCreateProgramAddressImpl)
 
 func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdAddr, addressAddr, bumpSeedAddr uint64) (uint64, error) {
+	klog.Infof("SyscallTryFindProgramAddress")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {

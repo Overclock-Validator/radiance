@@ -17,6 +17,8 @@ import (
 
 // SyscallSha256Impl is the implementation for the sol_sha256 syscall
 func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
+	klog.Infof("SyscallSha256Impl")
+
 	if valsLen > CUSha256MaxSlices {
 		return syscallErr(SyscallErrTooManySlices)
 	}
@@ -80,6 +82,8 @@ var SyscallSha256 = sbpf.SyscallFunc3(SyscallSha256Impl)
 
 // SyscallKeccak256Impl is the implementation for the sol_keccak256 syscall
 func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
+	klog.Infof("SyscallKeccak256")
+
 	if valsLen > CUSha256MaxSlices {
 		return syscallErr(SyscallErrTooManySlices)
 	}
@@ -144,6 +148,8 @@ var SyscallKeccak256 = sbpf.SyscallFunc3(SyscallKeccak256Impl)
 
 // SyscallBlake3Impl is the implementation for the sol_blake3 syscall
 func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint64, error) {
+	klog.Infof("SyscallBlake3")
+
 	if valsLen > CUSha256MaxSlices {
 		return syscallErr(SyscallErrTooManySlices)
 	}
@@ -208,6 +214,8 @@ var SyscallBlake3 = sbpf.SyscallFunc3(SyscallBlake3Impl)
 
 // SyscallSecp256k1Recover is an implementation of the sol_secp256k1_recover syscall
 func SyscallSecp256k1RecoverImpl(vm sbpf.VM, hashAddr, recoveryIdVal, signatureAddr, resultAddr uint64) (uint64, error) {
+	klog.Infof("SyscallSecp256k1Recover")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUSecP256k1RecoverCost)
 	if err != nil {
@@ -303,6 +311,8 @@ func PoseidonHash(input [][]byte, isBigEndian bool) ([]byte, error) {
 }
 
 func SyscallPoseidonImpl(vm sbpf.VM, parameters, endianness, valsAddr, valsLen, resultAddr uint64) (uint64, error) {
+	klog.Infof("SyscallPoseidon")
+
 	execCtx := executionCtx(vm)
 
 	if parameters != 0 {

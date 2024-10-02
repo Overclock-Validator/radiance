@@ -7,10 +7,13 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
+	"k8s.io/klog/v2"
 )
 
 // SyscallGetStackHeightImpl is an implementation of the sol_get_stack_height syscall
 func SyscallGetStackHeightImpl(vm sbpf.VM) (uint64, error) {
+	klog.Infof("SyscallGetStackHeight")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
@@ -24,6 +27,8 @@ var SyscallGetStackHeight = sbpf.SyscallFunc0(SyscallGetStackHeightImpl)
 
 // SyscallGetReturnDataImpl is an implementation of the sol_get_return_data syscall
 func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr uint64) (uint64, error) {
+	klog.Infof("SyscallGetReturnData")
+
 	execCtx := executionCtx(vm)
 	err := execCtx.ComputeMeter.Consume(CUSyscallBaseCost)
 	if err != nil {
@@ -32,9 +37,7 @@ func SyscallGetReturnDataImpl(vm sbpf.VM, returnDataAddr, length, programIdAddr 
 
 	programId, returnData := transactionCtx(vm).ReturnData()
 
-	if length > uint64(len(returnData)) {
-		length = uint64(len(returnData))
-	}
+	length = min(uint64(len(returnData)), length)
 
 	if length != 0 {
 		result := safemath.SaturatingAddU64(length, solana.PublicKeyLength) / CUCpiBytesPerUnit
@@ -77,6 +80,8 @@ const MaxReturnData = 1024
 
 // SyscallSetReturnDataImpl is an implementation of the sol_set_return_data syscall
 func SyscallSetReturnDataImpl(vm sbpf.VM, addr, length uint64) (uint64, error) {
+	klog.Infof("SyscallSetReturnData")
+
 	execCtx := executionCtx(vm)
 	cost := safemath.SaturatingAddU64(length/CUCpiBytesPerUnit, CUSyscallBaseCost)
 	err := execCtx.ComputeMeter.Consume(cost)
@@ -122,6 +127,8 @@ func castToPtr(obj any) uint64 {
 
 // SyscallGetProcessedSiblingInstructionImpl is an implementation of the sol_get_processed_sibling_instruction syscall
 func SyscallGetProcessedSiblingInstructionImpl(vm sbpf.VM, index, metaAddr, programIdAddr, dataAddr, accountsAddr uint64) (uint64, error) {
+	klog.Infof("SyscallGetProcessedSiblingInstruction")
+
 	execCtx := executionCtx(vm)
 	txCtx := transactionCtx(vm)
 

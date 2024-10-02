@@ -95,21 +95,6 @@ func (sc *SysvarClock) MustMarshal() []byte {
 	return data.Bytes()
 }
 
-const maxAllowableDriftPercentageFast = 25
-const maxAllowableDriftPercentageSlowV2 = 150
-
-func (sc *SysvarClock) Update(epochSchedule *SysvarEpochSchedule) {
-	sc.Slot++
-
-	/*unixTimestamp := sc.UnixTimestamp
-	epoch := sc.Epoch
-
-	firstSlotInEpoch := epochSchedule.FirstSlotInEpoch(epoch)
-	epochStartTimestamp := sc.EpochStartTimestamp
-
-	ancestorTimestamp := sc.UnixTimestamp*/
-}
-
 func ReadClockSysvar(execCtx *ExecutionCtx) (SysvarClock, error) {
 	accts := addrObjectForLookup(execCtx)
 

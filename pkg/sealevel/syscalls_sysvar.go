@@ -11,6 +11,8 @@ import (
 
 // SyscallGetClockSysvarImpl is an implementation of the sol_get_clock_sysvar syscall
 func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
+	klog.Infof("SyscallGetClock")
+
 	execCtx := executionCtx(vm)
 
 	cost := uint64(CUSyscallBaseCost + SysvarClockStructLen)
@@ -76,6 +78,8 @@ var SyscallGetRentSysvar = sbpf.SyscallFunc1(SyscallGetRentSysvarImpl)
 
 // SyscallGetEpochScheduleSysvarImpl is an implementation of the sol_get_epoch_schedule_sysvar syscall
 func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
+	klog.Infof("SyscallGetEpochSchedule")
+
 	execCtx := executionCtx(vm)
 
 	cost := uint64(CUSyscallBaseCost + SysvarEpochScheduleStructLen)
@@ -84,7 +88,7 @@ func SyscallGetEpochScheduleSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) 
 		return syscallCuErr()
 	}
 
-	epochScheduleDst, err := vm.Translate(addr, 33, true)
+	epochScheduleDst, err := vm.Translate(addr, SysvarEpochScheduleStructLen, true)
 	if err != nil {
 		return syscallErr(err)
 	}
@@ -111,6 +115,8 @@ var SyscallGetEpochScheduleSysvar = sbpf.SyscallFunc1(SyscallGetEpochScheduleSys
 
 // SyscallGetEpochRewardsSysvarImpl is an implementation of the sol_get_epoch_rewards_sysvar syscall
 func SyscallGetEpochRewardsSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
+	klog.Infof("SyscallGetEpochRewards")
+
 	execCtx := executionCtx(vm)
 
 	cost := uint64(CUSyscallBaseCost + SysvarEpochRewardsStructLen)
@@ -147,6 +153,8 @@ var SyscallGetEpochRewardsSysvar = sbpf.SyscallFunc1(SyscallGetEpochRewardsSysva
 
 // SyscallGetLastRestartSlotSysvarImpl is an implementation of the sol_get_last_restart_slot_sysvar syscall
 func SyscallGetLastRestartSlotSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
+	klog.Infof("SyscallGetLastRestartSlotSysvar")
+
 	execCtx := executionCtx(vm)
 
 	cost := uint64(CUSyscallBaseCost + SysvarLastRestartSlotStructLen)

@@ -152,8 +152,6 @@ func ComputeBudgetExecuteInstructions(instructions []Instruction) (*ComputeBudge
 		instrData := instr.Data
 		decoder := bin.NewBorshDecoder(instrData)
 
-		klog.Infof("ComputeBudgetExecuteInstructions - processing instr (%d bytes)", len(instrData))
-
 		instrType, err := decoder.ReadUint8()
 		if err != nil {
 			return nil, invalidInstructionDataErr(idx)
