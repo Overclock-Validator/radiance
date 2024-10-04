@@ -52,40 +52,90 @@ func (s SyscallRegistry) ExistsByHash(hash uint32) bool {
 	return exists
 }
 
+func syscallPrologue(vm VM) error {
+	return vm.ComputeMeter().Consume(vm.PrevInstrMeter() - vm.DueInstrCount())
+}
+
+func syscallEpilogue(vm VM) {
+	vm.SetPrevInstrMeter(vm.ComputeMeter().Remaining())
+}
+
 // Convenience Methods
 
 type SyscallFunc0 func(vm VM) (r0 uint64, err error)
 
 func (f SyscallFunc0) Invoke(vm VM, _, _, _, _, _ uint64) (r0 uint64, err error) {
-	return f(vm)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm)
+	syscallEpilogue(vm)
+	return
 }
 
 type SyscallFunc1 func(vm VM, r1 uint64) (r0 uint64, err error)
 
 func (f SyscallFunc1) Invoke(vm VM, r1, _, _, _, _ uint64) (r0 uint64, err error) {
-	return f(vm, r1)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm, r1)
+	syscallEpilogue(vm)
+	return
 }
 
 type SyscallFunc2 func(vm VM, r1, r2 uint64) (r0 uint64, err error)
 
 func (f SyscallFunc2) Invoke(vm VM, r1, r2, _, _, _ uint64) (r0 uint64, err error) {
-	return f(vm, r1, r2)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm, r1, r2)
+	syscallEpilogue(vm)
+	return
 }
 
 type SyscallFunc3 func(vm VM, r1, r2, r3 uint64) (r0 uint64, err error)
 
 func (f SyscallFunc3) Invoke(vm VM, r1, r2, r3, _, _ uint64) (r0 uint64, err error) {
-	return f(vm, r1, r2, r3)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm, r1, r2, r3)
+	syscallEpilogue(vm)
+	return
 }
 
 type SyscallFunc4 func(vm VM, r1, r2, r3, r4 uint64) (r0 uint64, err error)
 
 func (f SyscallFunc4) Invoke(vm VM, r1, r2, r3, r4, _ uint64) (r0 uint64, err error) {
-	return f(vm, r1, r2, r3, r4)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm, r1, r2, r3, r4)
+	syscallEpilogue(vm)
+	return
 }
 
 type SyscallFunc5 func(vm VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error)
 
 func (f SyscallFunc5) Invoke(vm VM, r1, r2, r3, r4, r5 uint64) (r0 uint64, err error) {
-	return f(vm, r1, r2, r3, r4, r5)
+	err = syscallPrologue(vm)
+	if err != nil {
+		return
+	}
+
+	r0, err = f(vm, r1, r2, r3, r4, r5)
+	syscallEpilogue(vm)
+	return
 }

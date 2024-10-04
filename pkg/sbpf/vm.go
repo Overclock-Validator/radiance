@@ -19,6 +19,11 @@ type VM interface {
 
 	Translate(addr uint64, size uint64, write bool) ([]byte, error)
 
+	DueInstrCount() uint64
+	PrevInstrMeter() uint64
+	SetPrevInstrMeter(num uint64)
+	ComputeMeter() *cu.ComputeMeter
+
 	Read(addr uint64, p []byte) error
 	Read8(addr uint64) (uint8, error)
 	Read16(addr uint64) (uint16, error)

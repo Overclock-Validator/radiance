@@ -50,7 +50,7 @@ func TestInterpreter_Noop(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -89,7 +89,7 @@ func TestInterpreter_Memcpy_Strings_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings matched after copy.",
 	})
@@ -128,7 +128,7 @@ func TestInterpreter_Memcpy_Do_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings did not match after copy.",
 	})
@@ -166,7 +166,7 @@ func TestInterpreter_Memmove_Strings_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings matched after copy.",
 	})
@@ -205,7 +205,7 @@ func TestInterpreter_Memmove_Do_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	assert.Equal(t, log.Logs, []string{
 		"Program log: Strings did not match after copy.",
 	})
@@ -242,7 +242,7 @@ func TestInterpreter_Memcpy_Overlapping(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 
 	// expecting an error here because the src and dst are overlapping in the
 	// program being run.
@@ -280,7 +280,7 @@ func TestInterpreter_Memcmp_Matches(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -321,7 +321,7 @@ func TestInterpreter_Memcmp_Does_Not_Match(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -362,7 +362,7 @@ func TestInterpreter_Memset_Check_Correct(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -402,7 +402,7 @@ func TestInterpreter_Sha256(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -443,7 +443,7 @@ func TestInterpreter_Blake3(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -484,7 +484,7 @@ func TestInterpreter_Keccak256(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -526,7 +526,7 @@ func TestInterpreter_CreateProgramAddress(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -571,7 +571,7 @@ func TestInterpreter_TryFindProgramAddress(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 
 	assert.Equal(t, log.Logs, []string{
@@ -609,7 +609,7 @@ func TestInterpreter_TestPanic(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.Error(t, err)
 	assert.Equal(t, err.Error(), "exception at 16: SBF program Panicked in some_file_1234.c at 1337:10")
 }
@@ -638,7 +638,7 @@ func TestInterpreter_Secp256k1_Syscall(t *testing.T) {
 	})
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	require.NoError(t, err)
 }
 
@@ -2062,7 +2062,7 @@ func (e *executeCase) run(t *testing.T) {
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
 	require.NotNil(t, interpreter)
 
-	_, err = interpreter.Run()
+	_, _, err = interpreter.Run()
 	assert.NoError(t, err)
 
 	logs := opts.Context.(*ExecutionCtx).Log.(*LogRecorder).Logs

@@ -150,16 +150,20 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) error
 
 		instructionAccts := sealevel.InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 		err = execCtx.ProcessInstruction(instr.Data, instructionAccts, programIndices(tx, instrIdx))
+		for _, l := range log.Logs {
+			klog.Infof("%s", l)
+		}
 		if err != nil {
 			klog.Infof("%+v", tx)
-			for _, l := range log.Logs {
-				klog.Infof("%s", l)
-			}
-			return err
+			break
 		}
 	}
 
 	klog.Infof("[+] tx %s - compute units consumed: %d", tx.Signatures[0], execCtx.ComputeMeter.Used())
+
+	if err != nil {
+		return err
+	}
 
 	// update account states in slotCtx for all accounts 'touched' during the tx's execution
 	for idx, wasTouched := range execCtx.TransactionContext.Accounts.Touched {

@@ -132,7 +132,6 @@ func (l *Loader) applyReloc(reloc *elf.Rel64) error {
 					addr += sbpf.VaddrProgram
 				}
 			} else {
-				// lol
 				addr = uint64(binary.LittleEndian.Uint32(l.program[rOff+4 : rOff+8]))
 				addr = clampAddUint64(addr, sbpf.VaddrProgram)
 			}

@@ -626,6 +626,7 @@ func translateAndUpdateAccountsC(vm sbpf.VM, instructionAccts []InstructionAccou
 					}
 					accounts = append(accounts, TranslatedAccount{IndexOfAccount: instructionAcct.IndexInCaller, CallerAccount: c})
 					found = true
+					break
 				}
 			}
 			if !found {
@@ -698,6 +699,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 					}
 					accounts = append(accounts, TranslatedAccount{IndexOfAccount: instructionAcct.IndexInCaller, CallerAccount: c})
 					found = true
+					break
 				}
 			}
 			if !found {

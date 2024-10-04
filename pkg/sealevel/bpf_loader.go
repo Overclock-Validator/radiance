@@ -967,9 +967,6 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 
 	heapSize := execCtx.TransactionContext.ComputeBudgetLimits.UpdatedHeapBytes
 	heapCostResult := calculateHeapCost(heapSize, CUHeapCostDefault)
-
-	klog.Infof("heapCost: %d", heapCostResult)
-
 	err = execCtx.ComputeMeter.Consume(heapCostResult)
 	if err != nil {
 		return err
@@ -1002,9 +999,7 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
-	ret, runErr := interpreter.Run()
-
-	computeUnitsConsumed := computeRemainingPrev - execCtx.ComputeMeter.Remaining()
+	ret, computeUnitsConsumed, runErr := interpreter.Run()
 
 	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
 
