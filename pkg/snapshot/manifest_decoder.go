@@ -1,9 +1,12 @@
 package snapshot
 
 import (
+	"fmt"
+
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/sealevel"
+	"k8s.io/klog/v2"
 )
 
 type HashAge struct {
@@ -1079,29 +1082,33 @@ func (bankIncrSnapshotPersistence *BankIncrementalSnapshotPersistence) Unmarshal
 
 	bankIncrSnapshotPersistence.FullSlot, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		return err
+		return fmt.Errorf("FullSlot: %s", err)
 	}
 
 	var pkBytes []byte
 	pkBytes, err = decoder.ReadBytes(32)
 	if err != nil {
-		return err
+		return fmt.Errorf("FullHash: %s", err)
 	}
 	bankIncrSnapshotPersistence.FullHash = solana.PublicKeyFromBytes(pkBytes)
 
 	bankIncrSnapshotPersistence.FullCapitalization, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		return err
+		return fmt.Errorf("FullCapitalization: %s", err)
 	}
 
 	pkBytes, err = decoder.ReadBytes(32)
 	if err != nil {
-		return err
+		return fmt.Errorf("IncrementalHash: %s", err)
 	}
 	bankIncrSnapshotPersistence.IncrementalHash = solana.PublicKeyFromBytes(pkBytes)
 
 	bankIncrSnapshotPersistence.IncrementalCapitalization, err = decoder.ReadUint64(bin.LE)
-	return err
+	if err != nil {
+		return fmt.Errorf("IncrementalCapitalization: %s", err)
+	}
+
+	return nil
 }
 
 func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -1292,7 +1299,7 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 		return err
 	}
 
-	/*if !decoder.HasRemaining() {
+	if !decoder.HasRemaining() {
 		return nil
 	}
 
@@ -1303,10 +1310,14 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 	}
 
 	if hasIncrementalSnapshotPersistence {
+		klog.Infof("hasIncrementalSnapshotPersistence")
 		err = snapshot.BankIncrementalSnapshotPersistence.UnmarshalWithDecoder(decoder)
 		if err != nil {
-			return err
+			klog.Infof("error decoding BankIncrementalSnapshotPersistence: %s", err)
+			return nil
 		}
+	} else {
+		klog.Infof("!hasIncrementalSnapshotPersistence")
 	}
 
 	if !decoder.HasRemaining() {
@@ -1320,12 +1331,15 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 	}
 
 	if hashEpochAcctHash {
+		klog.Infof("hashEpochAcctHash")
 		var pkBytes []byte
 		pkBytes, err = decoder.ReadBytes(32)
 		if err != nil {
 			return err
 		}
 		snapshot.EpochAccountHash = solana.PublicKeyFromBytes(pkBytes)
+	} else {
+		klog.Infof("!hashEpochAcctHash")
 	}
 
 	if !decoder.HasRemaining() {
@@ -1343,7 +1357,7 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 		if err != nil {
 			return err
 		}
-	}*/
+	}
 
 	return nil
 }

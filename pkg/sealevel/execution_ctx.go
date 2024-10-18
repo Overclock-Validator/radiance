@@ -31,9 +31,10 @@ type SlotCtx struct {
 	Accounts             accounts.Accounts
 	AccountsDb           *accountsdb.AccountsDb
 	Slot                 uint64
+	ParentSlot           uint64
 	Epoch                uint64
 	LamportsPerSignature uint64
-	ModifiedAccts        []*accounts.Account
+	ModifiedAccts        map[solana.PublicKey]bool
 	// TODO: use sysvar cache instead of deserializing from accounts each time
 	SysvarCache SysvarCache
 	SlotBank    SlotBank

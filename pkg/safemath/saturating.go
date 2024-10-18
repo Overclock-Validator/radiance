@@ -8,6 +8,8 @@ package safemath
 import (
 	"math"
 	"math/bits"
+
+	"github.com/ryanavella/wide"
 )
 
 // SaturatingAddU8 adds two uint8's together and saturates at the numerical boundary
@@ -106,6 +108,14 @@ func SaturatingSubU32(a, b uint32) uint32 {
 func SaturatingAddU64(a, b uint64) uint64 {
 	result, carry := bits.Add64(a, b, 0)
 	return result | uint64(-int64(carry))
+}
+
+func SaturatingAddU128(a, b wide.Uint128) wide.Uint128 {
+	result := a.Add(b)
+	if result.Cmp(a) == -1 {
+		return wide.NewUint128(math.MaxUint64, math.MaxUint64)
+	}
+	return result
 }
 
 // SaturatingMulU64 multiplies two uint64's together and saturates at the numerical boundary

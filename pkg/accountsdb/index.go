@@ -115,7 +115,8 @@ func BuildIndexEntriesFromAppendVecs(data []byte, fileSize uint64, slot uint64, 
 		}
 
 		if !shouldSkip {
-			offsetAndPubkeys = append(offsetAndPubkeys, &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset})
+			entry := &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset}
+			offsetAndPubkeys = append(offsetAndPubkeys, entry)
 			pubkeys = append(pubkeys, pubkey)
 		}
 

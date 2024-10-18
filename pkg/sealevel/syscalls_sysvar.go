@@ -3,7 +3,6 @@ package sealevel
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
 
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"k8s.io/klog/v2"
@@ -66,10 +65,18 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 		return syscallErr(err)
 	}
 
-	binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
+	buf := new(bytes.Buffer)
+
+	binary.Write(buf, binary.LittleEndian, rent.LamportsPerUint8Year)
+	binary.Write(buf, binary.LittleEndian, rent.ExemptionThreshold)
+	binary.Write(buf, binary.LittleEndian, rent.BurnPercent)
+
+	copy(rentDst, buf.Bytes())
+
+	/*binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
 	exemptionThreshold := math.Float64bits(rent.ExemptionThreshold)
 	binary.LittleEndian.PutUint64(rentDst[8:16], exemptionThreshold)
-	rentDst[16] = rent.BurnPercent
+	rentDst[16] = rent.BurnPercent*/
 
 	return syscallSuccess(0)
 }

@@ -5,9 +5,13 @@ import (
 	"encoding/binary"
 	"sort"
 
+	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/safemath"
+	"go.firedancer.io/radiance/pkg/sealevel"
+	"k8s.io/klog/v2"
 )
 
 type acctHash struct {
@@ -128,7 +132,33 @@ func calculateAcctsDeltaHash(accts []*accounts.Account) []byte {
 	return computeMerkleRootLoop(hashes)
 }
 
-func calculateBankHash(acctsDeltaHash []byte, parentBankHash [32]byte, numSigs uint64, blockHash [32]byte) []byte {
+const maxLockoutHistory = 31
+const calculateIntervalBuffer = 150
+const minimumCalculationInterval = maxLockoutHistory + calculateIntervalBuffer
+
+func isEnabledThisEpoch(epochSchedule *sealevel.SysvarEpochSchedule, epoch uint64) bool {
+	slotsPerEpoch := epochSchedule.SlotsInEpoch(epoch)
+	calculationOffsetStart := slotsPerEpoch / 4
+	calculationOffsetStop := (slotsPerEpoch / 4) * 3
+	calculationInterval := safemath.SaturatingSubU64(calculationOffsetStop, calculationOffsetStart)
+
+	return calculationInterval >= minimumCalculationInterval
+}
+
+func shouldIncludeEah(epochSchedule *sealevel.SysvarEpochSchedule, slotCtx *sealevel.SlotCtx) bool {
+	if !isEnabledThisEpoch(epochSchedule, slotCtx.Epoch) {
+		return false
+	}
+
+	slotsPerEpoch := epochSchedule.SlotsInEpoch(slotCtx.Epoch)
+	calculationOffsetStop := (slotsPerEpoch / 4) * 3
+	firstSlotInEpoch := epochSchedule.FirstSlotInEpoch(slotCtx.Epoch)
+	stopSlot := safemath.SaturatingAddU64(firstSlotInEpoch, calculationOffsetStop)
+
+	return slotCtx.ParentSlot < stopSlot && slotCtx.Slot >= stopSlot
+}
+
+func calculateBankHash(slotCtx *sealevel.SlotCtx, acctsDeltaHash []byte, parentBankHash [32]byte, numSigs uint64, blockHash [32]byte) []byte {
 	hasher := sha256.New()
 	hasher.Write(parentBankHash[:])
 	hasher.Write(acctsDeltaHash[:])
@@ -139,5 +169,28 @@ func calculateBankHash(acctsDeltaHash []byte, parentBankHash [32]byte, numSigs u
 	hasher.Write(numSigsBytes[:])
 	hasher.Write(blockHash[:])
 
-	return hasher.Sum(nil)
+	maybeBankhash := hasher.Sum(nil)
+
+	epochScheduleAcct, err := slotCtx.Accounts.GetAccount(&sealevel.SysvarEpochScheduleAddr)
+	if err != nil {
+		panic("unable to get epochschedule sysvar acct")
+	}
+
+	dec := bin.NewBinDecoder(epochScheduleAcct.Data)
+	var epochSchedule sealevel.SysvarEpochSchedule
+	err = epochSchedule.UnmarshalWithDecoder(dec)
+	if err != nil {
+		panic("unable to deserialize epochschedule sysvar")
+	}
+
+	var bankHash []byte
+	if shouldIncludeEah(&epochSchedule, slotCtx) {
+		klog.Infof("**** EAH required for this bankhash")
+		bankHash = maybeBankhash
+	} else {
+		klog.Infof("**** EAH *NOT* required for this bankhash")
+		bankHash = maybeBankhash
+	}
+
+	return bankHash
 }

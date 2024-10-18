@@ -74,6 +74,14 @@ func (sr *SysvarEpochSchedule) GetEpoch(slot uint64) uint64 {
 	return epoch
 }
 
+func (sr *SysvarEpochSchedule) SlotsInEpoch(epoch uint64) uint64 {
+	if epoch < sr.FirstNormalEpoch {
+		return safemath.SaturatingPow(2, uint32(epoch)+uint32(bits.TrailingZeros64(MinimumSlotsPerEpoch)))
+	} else {
+		return sr.SlotsPerEpoch
+	}
+}
+
 func (sr *SysvarEpochSchedule) Slot0(epoch uint64) uint64 {
 	if epoch < sr.FirstNormalEpoch {
 		var power uint64
@@ -115,6 +123,24 @@ func (sr *SysvarEpochSchedule) FirstSlotInEpoch(epoch uint64) uint64 {
 		return (safemath.SaturatingPow(2, uint32(epoch)) - 1) * MinimumSlotsPerEpoch
 	} else {
 		return safemath.SaturatingAddU64(safemath.SaturatingMulU64(safemath.SaturatingSubU64(epoch, sr.FirstNormalEpoch), sr.SlotsPerEpoch), sr.FirstNormalSlot)
+	}
+}
+
+func (sr *SysvarEpochSchedule) LeaderScheduleEpoch(slot uint64) uint64 {
+	if slot < sr.FirstNormalSlot {
+		e, _ := sr.GetEpochAndSlotIndex(slot)
+		return safemath.SaturatingAddU64(e, 1)
+	} else {
+		newSlotsSinceFirstNormalSlot := safemath.SaturatingSubU64(slot, sr.FirstNormalSlot)
+		newFirstNormalLeaderScheduleSlot := safemath.SaturatingAddU64(newSlotsSinceFirstNormalSlot, sr.LeaderScheduleSlotOffset)
+		var newEpochsSinceFirstNormalLeaderSchedule uint64
+		if sr.SlotsPerEpoch == 0 {
+			newEpochsSinceFirstNormalLeaderSchedule = 0
+		} else {
+			newEpochsSinceFirstNormalLeaderSchedule = newFirstNormalLeaderScheduleSlot / sr.SlotsPerEpoch
+		}
+
+		return safemath.SaturatingAddU64(sr.FirstNormalEpoch, newEpochsSinceFirstNormalLeaderSchedule)
 	}
 }
 

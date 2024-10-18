@@ -6,6 +6,7 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/base58"
@@ -24,6 +25,7 @@ type Block struct {
 	Blockhash        [32]byte
 	ExpectedBankhash [32]byte
 	Manifest         *snapshot.SnapshotManifest
+	TxMetas          []*rpc.TransactionMeta
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -110,10 +112,10 @@ func isNativeProgram(pubkey solana.PublicKey) bool {
 	}
 }
 
-func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block *Block) (accounts.Accounts, error) {
+func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block *Block) (accounts.Accounts, uint64, error) {
 	err := resolveAddrTableLookups(accountsDb, block)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	dedupedAccts := extractAndDedupeBlockAccts(block)
@@ -128,14 +130,14 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 		// or return an error
 		if err == accountsdb.ErrNoAccount {
 			if isNativeProgram(pk) {
-				acct = &accounts.Account{Key: pk, Owner: sealevel.NativeLoaderAddr, Executable: true}
+				acct = &accounts.Account{Key: pk, Owner: sealevel.NativeLoaderAddr, Executable: true, Lamports: 1}
 				klog.Infof("no account: %s, using empty owned by Native Loader\n", pk)
 			} else {
 				acct = &accounts.Account{Key: pk, Owner: sealevel.SystemProgramAddr}
 				klog.Infof("no account: %s, using empty owned by System program\n", pk)
 			}
 		} else if err != nil {
-			return nil, err
+			return nil, 0, err
 		} else {
 			klog.Infof("found account in loadBlockAccounts for: %s\n", acct.Key)
 		}
@@ -145,9 +147,11 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 
 		err = accts.SetAccount(&pkBytes, acct)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
+
+	var epoch uint64
 
 	// load sysvar accounts
 	{
@@ -189,6 +193,7 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 
 				newClockBytes := clock.MustMarshal()
 				copy(sysvarAcct.Data, newClockBytes)
+				epoch = clock.Epoch
 			}
 
 			var sysvarPkBytes [32]byte
@@ -200,7 +205,7 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 		}
 	}
 
-	return accts, nil
+	return accts, epoch, nil
 }
 
 func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *features.Features {
@@ -218,39 +223,55 @@ func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *feature
 func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) error {
 
 	// gather up all accounts used by the block and put them into a SlotCtx object
-	accts, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
+	accts, epoch, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
 	if err != nil {
 		return err
 	}
 
 	f := scanAndEnableFeatures(acctsDb, block.Slot)
 
-	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
+	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Epoch: epoch, ParentSlot: block.Manifest.Bank.ParentSlot, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
+	slotCtx.ModifiedAccts = make(map[solana.PublicKey]bool)
 
 	// process & execute each transaction in turn
 	for idx, tx := range block.Transactions {
 		klog.Infof("[+] executing transaction %d, %s", idx+1, tx.Signatures[0])
-		txErr := ProcessTransaction(slotCtx, tx)
+		txErr := ProcessTransaction(slotCtx, tx, block.TxMetas[idx])
 		if txErr != nil {
 			klog.Infof("tx %d returned error: %s\n", idx+1, txErr)
 		}
+
+		// check for success-failure return value divergences
+		if txErr == nil && block.TxMetas[idx].Err != nil {
+			klog.Infof("tx %s return value divergence: txErr was nil, but onchain err was %+v", tx.Signatures[0], block.TxMetas[idx].Err)
+		} else if txErr != nil && block.TxMetas[idx].Err == nil {
+			klog.Infof("tx %s return value divergence: txErr was %+v, but onchain err was nil", tx.Signatures[0], txErr)
+		}
 	}
 
-	// after execution of all tx's in the block, slotCtx will now contain the new account states
-	// in ModifiedAccounts, hence commit these updated states to accountsdb
-	if updateAcctsDb {
-		klog.Infof("updating accountsdb")
-		if len(slotCtx.ModifiedAccts) > 0 {
-			err = acctsDb.StoreAccounts(slotCtx.ModifiedAccts, slotCtx.Slot)
+	modifiedAccts := make([]*accounts.Account, 0)
+
+	for pk := range slotCtx.ModifiedAccts {
+		acct, err := slotCtx.Accounts.GetAccount((*[32]byte)(pk.Bytes()))
+		if err != nil {
+			panic("unable to get account for state update")
 		}
+		modifiedAccts = append(modifiedAccts, acct)
+	}
+
+	if len(modifiedAccts) > 0 && updateAcctsDb {
+		klog.Infof("updating accountsdb")
+		err = acctsDb.StoreAccounts(modifiedAccts, slotCtx.Slot)
 	} else {
 		klog.Infof("accountsdb not updated")
 	}
 
-	acctDeltaHash := calculateAcctsDeltaHash(slotCtx.ModifiedAccts)
+	klog.Infof("calculating accts delta hash for %d modified accounts", len(modifiedAccts))
+
+	acctDeltaHash := calculateAcctsDeltaHash(modifiedAccts)
 
 	// calculate bankhash
-	bankHash := calculateBankHash(acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.Blockhash)
+	bankHash := calculateBankHash(slotCtx, acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.Blockhash)
 	if bytes.Equal(bankHash, block.ExpectedBankhash[:]) {
 		klog.Infof("calculated bankhash matched expected bankhash.")
 	} else {

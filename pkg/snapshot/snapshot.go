@@ -130,7 +130,7 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 		return err
 	}
 
-	db, err := sniper.Open(sniper.Dir(indexOutputDir))
+	db, err := sniper.Open(sniper.Dir(indexOutputDir), sniper.ChunksCollision(32))
 	if err != nil {
 		fmt.Printf("failed to open database: %s\n", err)
 		return err
@@ -166,7 +166,10 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 				return
 			}
 
-			db.SetIfHigherSlot(task.Pubkeys[idx][:], writer.Bytes(), 0)
+			err = db.SetIfSlotHigher(task.Pubkeys[idx][:], writer.Bytes(), 0)
+			if err != nil {
+				fmt.Printf("error calling SetIfHigherSlot for %s: %s\n", task.Pubkeys[idx], err)
+			}
 			//numEntriesCommitted.Add(1)
 		}
 	})

@@ -23,7 +23,7 @@ func Test_Compute_Bank_Hash(t *testing.T) {
 	// correct bankhash for the above values
 	knownCorrectBankHash := []byte{190, 156, 54, 163, 252, 183, 243, 10, 147, 168, 42, 47, 214, 172, 160, 64, 86, 32, 203, 54, 119, 230, 201, 36, 164, 27, 30, 244, 96, 202, 88, 154}
 
-	bankHash := calculateBankHash(acctsDeltaHash, parentBankHash, numSigs, blockHash)
+	bankHash := calculateBankHash(nil, acctsDeltaHash, parentBankHash, numSigs, blockHash)
 	assert.Equal(t, bankHash, knownCorrectBankHash)
 }
 
@@ -69,7 +69,7 @@ func Test_Accounts_Delta_Hash_And_BankHash(t *testing.T) {
 	blockHash := [32]byte{146, 202, 69, 18, 36, 202, 121, 99, 47, 1, 177, 105, 158, 183, 91, 218, 104, 146, 24, 15, 17, 59, 160, 158, 71, 187, 255, 20, 105, 124, 226, 82}
 	knownCorrectBankHash := []byte{119, 170, 167, 64, 81, 16, 52, 152, 70, 85, 198, 20, 1, 9, 69, 90, 128, 26, 216, 178, 224, 255, 106, 149, 70, 45, 52, 83, 69, 197, 64, 245}
 
-	bankHash := calculateBankHash(acctsDeltaHash, parentBankHash, numSigs, blockHash)
+	bankHash := calculateBankHash(nil, acctsDeltaHash, parentBankHash, numSigs, blockHash)
 
 	fmt.Printf("calculated bankhash: %d\n", bankHash)
 	fmt.Printf("known bankhash: %d\n", knownCorrectBankHash)

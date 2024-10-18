@@ -97,7 +97,7 @@ func WriteInstructionsSysvar(accts *accounts.Accounts, instructions []Instructio
 
 	instructionsAcct := accounts.Account{}
 	instructionsAcct.Key = SysvarInstructionsAddr
-	instructionsAcct.Lamports = 1
+	instructionsAcct.Lamports = 0
 	instructionsAcct.Data = serializedData
 	instructionsAcct.RentEpoch = 0
 	instructionsAcct.Executable = false

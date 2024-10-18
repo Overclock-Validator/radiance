@@ -6,6 +6,7 @@ import (
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sbpf"
 	"go.firedancer.io/radiance/pkg/util"
+	"k8s.io/klog/v2"
 )
 
 func MemOpConsume(execCtx *ExecutionCtx, n uint64) error {
@@ -26,6 +27,8 @@ func memmoveImplInternal(vm sbpf.VM, dst, src, n uint64) (err error) {
 // SyscallMemcpyImpl is the implementation of the memcpy (sol_memcpy_) syscall.
 // Overlapping src and dst for a given n bytes to be copied results in an error being returned.
 func SyscallMemcpyImpl(vm sbpf.VM, dst, src, n uint64) (uint64, error) {
+	klog.Infof("SyscallMemcpy")
+
 	execCtx := executionCtx(vm)
 	err := MemOpConsume(execCtx, n)
 	if err != nil {
@@ -54,6 +57,8 @@ var SyscallMemcpy = sbpf.SyscallFunc3(SyscallMemcpyImpl)
 
 // SyscallMemmoveImpl is the implementation for the memmove (sol_memmove_) syscall.
 func SyscallMemmoveImpl(vm sbpf.VM, dst, src, n uint64) (uint64, error) {
+	klog.Infof("SyscallMemmove")
+
 	execCtx := executionCtx(vm)
 	err := MemOpConsume(execCtx, n)
 	if err != nil {
@@ -72,6 +77,8 @@ var SyscallMemmove = sbpf.SyscallFunc3(SyscallMemmoveImpl)
 
 // SyscallMemcmpImpl is the implementation for the memcmp (sol_memcmp_) syscall.
 func SyscallMemcmpImpl(vm sbpf.VM, addr1, addr2, n, resultAddr uint64) (uint64, error) {
+	klog.Infof("SyscallMemcmp")
+
 	execCtx := executionCtx(vm)
 	err := MemOpConsume(execCtx, n)
 	if err != nil {
@@ -112,6 +119,8 @@ var SyscallMemcmp = sbpf.SyscallFunc4(SyscallMemcmpImpl)
 
 // SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
 func SyscallMemsetImpl(vm sbpf.VM, dst, c, n uint64) (uint64, error) {
+	klog.Infof("SyscallMemset")
+
 	execCtx := executionCtx(vm)
 	err := MemOpConsume(execCtx, n)
 	if err != nil {

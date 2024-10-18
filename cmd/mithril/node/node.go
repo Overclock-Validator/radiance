@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/blockget"
 	"go.firedancer.io/radiance/pkg/replay"
+	"go.firedancer.io/radiance/pkg/rpcclient"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
@@ -48,10 +48,11 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 			return nil, err
 		}
 		block.Transactions = append(block.Transactions, txParsed)
+		block.TxMetas = append(block.TxMetas, tx.Meta)
 	}
 
 	block.Blockhash = blockResult.Blockhash
-	block.ExpectedBankhash = base58.MustDecodeFromString("5jTwSaYKKR1DYAaMDsU8ZDJ1UmxTgms2yCQrg7shfZMh")
+	block.ExpectedBankhash = base58.MustDecodeFromString("GhiSNE2WSRkzEnXB18PTxUAmjp6pMnsaNCXbnZqkXM4R")
 
 	for _, tx := range block.Transactions {
 		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
@@ -120,8 +121,8 @@ func run(c *cobra.Command, args []string) {
 		klog.Fatalf("unable to open manifest file")
 	}
 
-	blockFetcher := blockget.NewBlockFetcher("https://api.mainnet-beta.solana.com")
-	blockResult, err := blockFetcher.GetBlockFinalized(uint64(slot))
+	rpcc := rpcclient.NewRpcClient("https://api.mainnet-beta.solana.com")
+	blockResult, err := rpcc.GetBlockFinalized(uint64(slot))
 	if err != nil {
 		klog.Fatalf("error fetching block: %s\n", err)
 	}
@@ -132,7 +133,7 @@ func run(c *cobra.Command, args []string) {
 	}
 
 	block.Slot = uint64(slot)
-	block.ParentBankhash = accountsDb.BankHash()
+	block.ParentBankhash = manifest.Bank.Hash
 	block.Manifest = manifest
 
 	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)

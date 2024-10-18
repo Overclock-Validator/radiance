@@ -61,6 +61,8 @@ github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed/go.mod h1:rA
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/Overclock-Validator/sniper v0.0.0-20240907202540-3bb6b548c02a h1:xCba6lNbPuFuwmcWGLcaApJsdZRSn3Osj+J5PdRSIL8=
 github.com/Overclock-Validator/sniper v0.0.0-20240907202540-3bb6b548c02a/go.mod h1:4AGf9/k4agCx6M4M8aZmDejSnensT8lLMR6yMaHLHqg=
+github.com/Overclock-Validator/sniper v0.0.0-20241018103730-c71faa5c2f7c h1:K0K/QTcUrjI3lMt45Dbz9wjwecSO7+M8lAjU0yIfOhs=
+github.com/Overclock-Validator/sniper v0.0.0-20241018103730-c71faa5c2f7c/go.mod h1:4AGf9/k4agCx6M4M8aZmDejSnensT8lLMR6yMaHLHqg=
 github.com/VividCortex/ewma v1.2.0 h1:f58SaIzcDXrSy3kWaHNvuJgJ3Nmz59Zji6XoJR/q1ow=
 github.com/VividCortex/ewma v1.2.0/go.mod h1:nz4BbCtbLyFDeC9SUHbtcT5644juEuWfUAUnGx7j5l4=
 github.com/abcum/lcp v0.0.0-20201209214815-7a3f3840be81 h1:uHogIJ9bXH75ZYrXnVShHIyywFiUZ7OOabwd9Sfd8rw=

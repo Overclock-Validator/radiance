@@ -74,7 +74,7 @@ func OpenDb(accountsDbDir string) (*AccountsDb, error) {
 
 	// attempt to open the index kv store
 	indexDir := fmt.Sprintf("%s/index", accountsDbDir)
-	db, err := sniper.Open(sniper.Dir(indexDir))
+	db, err := sniper.Open(sniper.Dir(indexDir), sniper.ChunksCollision(32))
 	if err != nil {
 		fmt.Printf("failed to open database: %s\n", err)
 		return nil, err
@@ -125,6 +125,8 @@ func (accountsDb *AccountsDb) GetAccount(pubkey solana.PublicKey) (*accounts.Acc
 	if acct.Key != pubkey {
 		panic(fmt.Sprintf("account unmarshaled from appendvec file %s has the wrong pubkey", appendVecFileName))
 	}
+
+	acct.Slot = acctIdxEntry.Slot
 
 	return acct, err
 }

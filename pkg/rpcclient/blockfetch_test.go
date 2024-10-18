@@ -1,4 +1,4 @@
-package blockget
+package rpcclient
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestBlockFetch_Confirmed(t *testing.T) {
-	fetcher := NewBlockFetcher("https://api.mainnet-beta.solana.com/")
+	fetcher := NewRpcClient("https://api.mainnet-beta.solana.com/")
 
 	result, err := fetcher.GetBlockConfirmed(1234)
 	assert.NoError(t, err)
@@ -31,7 +31,7 @@ func TestBlockFetch_Confirmed(t *testing.T) {
 }
 
 func TestBlockFetch_Finalized(t *testing.T) {
-	fetcher := NewBlockFetcher("https://api.mainnet-beta.solana.com/")
+	fetcher := NewRpcClient("https://api.mainnet-beta.solana.com/")
 
 	result, err := fetcher.GetBlockFinalized(1234)
 	assert.NoError(t, err)
@@ -52,7 +52,7 @@ func TestBlockFetch_Finalized(t *testing.T) {
 }
 
 func TestBlockFetch_LatestConfirmed(t *testing.T) {
-	fetcher := NewBlockFetcher("https://api.mainnet-beta.solana.com/")
+	fetcher := NewRpcClient("https://api.mainnet-beta.solana.com/")
 
 	result, err := fetcher.GetLatestBlockConfirmed()
 	assert.NoError(t, err)
@@ -75,7 +75,7 @@ func TestBlockFetch_LatestConfirmed(t *testing.T) {
 }
 
 func TestBlockFetch_LatestFinalized(t *testing.T) {
-	fetcher := NewBlockFetcher("https://api.mainnet-beta.solana.com/")
+	fetcher := NewRpcClient("https://api.mainnet-beta.solana.com/")
 
 	result, err := fetcher.GetLatestBlockFinalized()
 	assert.NoError(t, err)

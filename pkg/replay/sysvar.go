@@ -138,15 +138,9 @@ func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.Accou
 			return err
 		}
 
-		if timestampEstimate > ancestorTimestamp {
-			clock.UnixTimestamp = timestampEstimate
-		} else {
-			clock.UnixTimestamp = ancestorTimestamp
-		}
-
+		clock.UnixTimestamp = max(timestampEstimate, ancestorTimestamp)
 		clock.EpochStartTimestamp = clock.UnixTimestamp
-		// TODO
-		//clock.leader_schedule_epoch = fd_slot_to_leader_schedule_epoch( &epoch_bank->epoch_schedule, slot_ctx->slot_bank.slot );
+		clock.LeaderScheduleEpoch = epochSchedule.LeaderScheduleEpoch(clock.Slot)
 	}
 
 	return nil
