@@ -1,10 +1,13 @@
 package fees
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/ryanavella/wide"
+	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/safemath"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"k8s.io/klog/v2"
@@ -87,4 +90,26 @@ func ApplyTxFees(tx *solana.Transaction, instrs []sealevel.Instruction, transact
 	transactionAccts.Touch(feePayerIdx)
 
 	return totalTxFee, feePayerAcct.Lamports, nil
+}
+
+func DistributeTxFees(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx, leader solana.PublicKey, totalFees uint64) {
+	feesToLeader := (totalFees * 50) / 100
+
+	var leaderAcct *accounts.Account
+	var err error
+
+	leaderAcct, err = slotCtx.GetAccount(leader)
+	if err != nil {
+		// if leader didn't appear at all in the block, then its latest state should be retrieveable from accountsdb
+		leaderAcct, err = acctsDb.GetAccount(leader)
+		if err != nil {
+			panic(fmt.Sprintf("unable to get leader acct %s from both slotCtx and accountsdb", leader))
+		}
+	}
+
+	leaderAcct.Lamports += feesToLeader
+	slotCtx.ModifiedAccts[leader] = true
+	slotCtx.SetAccount(leader, leaderAcct)
+
+	klog.Infof("calculated fees for leader: %d, post-balance: %d (%s)", feesToLeader, leaderAcct.Lamports, leader)
 }

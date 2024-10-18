@@ -52,7 +52,7 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 	}
 
 	block.Blockhash = blockResult.Blockhash
-	block.ExpectedBankhash = base58.MustDecodeFromString("GhiSNE2WSRkzEnXB18PTxUAmjp6pMnsaNCXbnZqkXM4R")
+	block.ExpectedBankhash = base58.MustDecodeFromString("CbMK7uc68PPo5pPc5sfDJP6RGcwEcBJcrgZmuEZNEv6T")
 
 	for _, tx := range block.Transactions {
 		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
@@ -132,9 +132,16 @@ func run(c *cobra.Command, args []string) {
 		klog.Fatalf("error creating block from BlockResult: %s\n", err)
 	}
 
+	leader, err := rpcc.GetLeaderForSlot(uint64(slot))
+	if err != nil {
+		klog.Fatalf("error fetching leader for slot: %s\n", err)
+	}
+
 	block.Slot = uint64(slot)
 	block.ParentBankhash = manifest.Bank.Hash
 	block.Manifest = manifest
+	block.Leader = leader
+	block.Reward = replay.BlockRewardsInfo{Leader: blockResult.Rewards[0].Pubkey, Lamports: uint64(blockResult.Rewards[0].Lamports), PostBalance: blockResult.Rewards[0].PostBalance}
 
 	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
 	if err != nil {

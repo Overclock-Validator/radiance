@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/gagliardetto/solana-go"
@@ -24,6 +25,10 @@ func NewTxErrInvalidSignature(msg string) error {
 func (err *TxErrInvalidSignature) Error() string {
 	return err.msg
 }
+
+var (
+	TxErrInsufficientFundsForRent = errors.New("TxErrInsufficientFundsForRent")
+)
 
 func transactionAcctsFromTx(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) (*sealevel.TransactionAccounts, error) {
 	acctsForTx := make([]accounts.Account, 0)
@@ -103,7 +108,7 @@ func fixupInstructionsSysvarAcct(execCtx *sealevel.ExecutionCtx, instrIdx uint16
 	return nil
 }
 
-func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) error {
+func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) (uint64, error) {
 	/*err := tx.VerifySignatures()
 	if err != nil {
 		return NewTxErrInvalidSignature(err.Error())
@@ -111,22 +116,22 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	instrs, err := instrsFromTx(tx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	err = sealevel.WriteInstructionsSysvar(&slotCtx.Accounts, instrs)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	transactionAccts, err := transactionAcctsFromTx(slotCtx, tx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	computeBudgetLimits, err := sealevel.ComputeBudgetExecuteInstructions(instrs)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	var log sealevel.LogRecorder
@@ -147,7 +152,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	totalFee, payerNewLamports, err := fees.ApplyTxFees(tx, instrs, &execCtx.TransactionContext.Accounts, computeBudgetLimits)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// check for fee divergences
@@ -155,17 +160,24 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		klog.Infof("tx %s fee divergence: totalFee was %d, but onchain fee was %d", tx.Signatures[0], totalFee, txMeta.Fee)
 	}
 
+	rent, err := sealevel.ReadRentSysvar(execCtx)
+	if err != nil {
+		panic("failed to get and deserialize rent sysvar")
+	}
+
+	preTxRentStates := fees.NewRentStateInfo(&rent, execCtx.TransactionContext, tx)
+
 	var instrErr error
 
 	for instrIdx, instr := range tx.Message.Instructions {
 		err = fixupInstructionsSysvarAcct(execCtx, uint16(instrIdx))
 		if err != nil {
-			return err
+			return totalFee, err
 		}
 
 		resolvedAccountMetas, err := instr.ResolveInstructionAccounts(&tx.Message)
 		if err != nil {
-			return err
+			return totalFee, err
 		}
 
 		var acctMetas []sealevel.AccountMeta
@@ -194,8 +206,11 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		klog.Infof("tx %s CU divergence: used was %d but onchain CU consumed was %d", tx.Signatures[0], execCtx.ComputeMeter.Used(), *txMeta.ComputeUnitsConsumed)
 	}
 
+	postTxRentStates := fees.NewRentStateInfo(&rent, execCtx.TransactionContext, tx)
+	rentStateErr := fees.VerifyRentStateChanges(preTxRentStates, postTxRentStates, execCtx.TransactionContext)
+
 	// check for post-balances divergences (but only if the tx succeeded)
-	if instrErr == nil {
+	if instrErr == nil && rentStateErr == nil {
 		for count := uint64(0); count < uint64(len(tx.Message.AccountKeys)); count++ {
 			txAcct, err := execCtx.TransactionContext.Accounts.GetAccount(count)
 			if err != nil {
@@ -210,7 +225,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	// if there was an error in the tx, do not update account states, except for deducting the tx fee
 	// from the payer account
-	if instrErr != nil {
+	if instrErr != nil || rentStateErr != nil {
 		payerAcct, err := execCtx.TransactionContext.Accounts.GetAccount(0)
 		if err != nil {
 			panic(fmt.Sprintf("unable to get tx account to update payer acct state after failed tx: %s", err))
@@ -230,7 +245,15 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		slotCtx.ModifiedAccts[payerAcct.Key] = true
 
 		execCtx.TransactionContext.Accounts.Unlock(0)
-		return instrErr
+
+		var txErr error
+		if rentStateErr != nil {
+			txErr = rentStateErr
+		} else {
+			txErr = instrErr
+		}
+
+		return totalFee, fmt.Errorf("tx err: %s", txErr)
 	}
 
 	// update account states in slotCtx for all accounts 'touched' during the tx's execution
@@ -252,5 +275,5 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		}
 	}
 
-	return nil
+	return totalFee, nil
 }

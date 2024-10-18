@@ -59,6 +59,10 @@ var ComputeBudgetProgramAddrStr = "ComputeBudget111111111111111111111111111111"
 
 var ComputeBudgetProgramAddr = base58.MustDecodeFromString(ComputeBudgetProgramAddrStr)
 
+var IncineratorAddrStr = "1nc1nerator11111111111111111111111111111111"
+
+var IncineratorAddr = base58.MustDecodeFromString(IncineratorAddrStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")

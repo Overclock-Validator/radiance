@@ -11,10 +11,17 @@ import (
 	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/features"
+	"go.firedancer.io/radiance/pkg/fees"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
+
+type BlockRewardsInfo struct {
+	Leader      solana.PublicKey
+	Lamports    uint64
+	PostBalance uint64
+}
 
 type Block struct {
 	Slot             uint64
@@ -26,6 +33,8 @@ type Block struct {
 	ExpectedBankhash [32]byte
 	Manifest         *snapshot.SnapshotManifest
 	TxMetas          []*rpc.TransactionMeta
+	Leader           solana.PublicKey
+	Reward           BlockRewardsInfo
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -233,10 +242,12 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Epoch: epoch, ParentSlot: block.Manifest.Bank.ParentSlot, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
 	slotCtx.ModifiedAccts = make(map[solana.PublicKey]bool)
 
+	var totalTxFees uint64
+
 	// process & execute each transaction in turn
 	for idx, tx := range block.Transactions {
 		klog.Infof("[+] executing transaction %d, %s", idx+1, tx.Signatures[0])
-		txErr := ProcessTransaction(slotCtx, tx, block.TxMetas[idx])
+		txFee, txErr := ProcessTransaction(slotCtx, tx, block.TxMetas[idx])
 		if txErr != nil {
 			klog.Infof("tx %d returned error: %s\n", idx+1, txErr)
 		}
@@ -247,9 +258,19 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 		} else if txErr != nil && block.TxMetas[idx].Err == nil {
 			klog.Infof("tx %s return value divergence: txErr was %+v, but onchain err was nil", tx.Signatures[0], txErr)
 		}
+
+		totalTxFees += txFee
 	}
 
+	// apply account state updates to accountsdb and collect the account states for inclusion
+	// into the accounts delta hash and therefore the bankhash
 	modifiedAccts := make([]*accounts.Account, 0)
+
+	// distribute tx fees to the leader by calculating 50% of the tx fees and adding the sum
+	// to the slot leader's lamports balance, subsequently including it in the accounts delta hash.
+	fees.DistributeTxFees(acctsDb, slotCtx, block.Leader, totalTxFees)
+
+	klog.Infof("from RPC fees for leader: %d, post-balance: %d (%s)", block.Reward.Lamports, block.Reward.PostBalance, block.Reward.Leader)
 
 	for pk := range slotCtx.ModifiedAccts {
 		acct, err := slotCtx.Accounts.GetAccount((*[32]byte)(pk.Bytes()))

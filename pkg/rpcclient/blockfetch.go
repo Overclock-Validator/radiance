@@ -31,7 +31,7 @@ func (fetcher *RpcClient) GetBlockConfirmed(slot uint64) (*rpc.GetBlockResult, e
 }
 
 func (fetcher *RpcClient) GetBlockFinalized(slot uint64) (*rpc.GetBlockResult, error) {
-	includeRewards := false
+	includeRewards := true
 	maxSupportedTxVer := uint64(0)
 
 	result, err := fetcher.client.GetBlockWithOpts(
@@ -68,4 +68,12 @@ func (fetcher *RpcClient) GetLatestBlockFinalized() (*rpc.GetBlockResult, error)
 	slot := result.Context.Slot
 
 	return fetcher.GetBlockFinalized(slot)
+}
+
+func (fetcher *RpcClient) GetLeaderForSlot(slot uint64) (solana.PublicKey, error) {
+	leader, err := fetcher.client.GetSlotLeaders(context.TODO(), slot, 1)
+	if err != nil {
+		return solana.PublicKey{}, err
+	}
+	return leader[0], err
 }
