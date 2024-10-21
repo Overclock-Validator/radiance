@@ -109,7 +109,11 @@ func DistributeTxFees(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx,
 
 	leaderAcct.Lamports += feesToLeader
 	slotCtx.ModifiedAccts[leader] = true
-	slotCtx.SetAccount(leader, leaderAcct)
+
+	err = slotCtx.SetAccount(leader, leaderAcct)
+	if err != nil {
+		panic(fmt.Sprintf("failed to SetAccount for leader acct %s when distributing tx fees", leader))
+	}
 
 	klog.Infof("calculated fees for leader: %d, post-balance: %d (%s)", feesToLeader, leaderAcct.Lamports, leader)
 }

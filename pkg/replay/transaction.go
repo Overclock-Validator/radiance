@@ -145,7 +145,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 			panic(fmt.Sprintf("unable to get tx acct %d whilst checking for pre-balances divergences", count))
 		}
 		if txAcct.Lamports != txMeta.PreBalances[count] {
-			klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count])
+			klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d (acct slot %d)", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count], txAcct.Slot)
 		}
 		execCtx.TransactionContext.Accounts.Unlock(count)
 	}
@@ -202,7 +202,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 	klog.Infof("[+] tx %s - compute units consumed: %d", tx.Signatures[0], execCtx.ComputeMeter.Used())
 
 	// check for CU consumed divergences
-	if *txMeta.ComputeUnitsConsumed != execCtx.ComputeMeter.Used() {
+	if instrErr == nil && *txMeta.ComputeUnitsConsumed != execCtx.ComputeMeter.Used() {
 		klog.Infof("tx %s CU divergence: used was %d but onchain CU consumed was %d", tx.Signatures[0], execCtx.ComputeMeter.Used(), *txMeta.ComputeUnitsConsumed)
 	}
 

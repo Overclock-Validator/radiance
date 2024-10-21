@@ -1,12 +1,8 @@
 package accountsdb
 
 import (
-	"encoding/binary"
-	"fmt"
-
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/util"
 )
 
 type AccountIndexEntry struct {
@@ -61,66 +57,22 @@ func unmarshalAcctIdxEntry(data []byte) (*AccountIndexEntry, error) {
 	return acctIdxEntry, nil
 }
 
-func parseAcctAndAdvanceOffset(data []byte) (uint64, solana.PublicKey, bool, error) {
-	var offset uint64
-	offset += 8
-
-	dataLen := binary.LittleEndian.Uint64(data[offset : offset+8])
-	offset += 8
-
-	pubkey := solana.PublicKeyFromBytes(data[offset : offset+solana.PublicKeyLength])
-	offset += 8
-
-	lamports := binary.LittleEndian.Uint64(data[offset : offset+8])
-
-	offset += 112
-
-	if dataLen == 0 {
-		return offset, pubkey, lamports == 0, nil
-	}
-
-	if (uint64(len(data)) - offset) < dataLen {
-		return 0, solana.PublicKey{}, lamports == 0, fmt.Errorf("not enough data for %x byte, acct data len %d", dataLen, uint64(len(data))-offset)
-	}
-
-	offset += dataLen
-	offset = util.AlignUp(offset, 8)
-
-	return offset, pubkey, lamports == 0, nil
-}
-
-type offsetAndPubkey struct {
-	Pubkey solana.PublicKey
-	Offset uint64
-}
-
 func BuildIndexEntriesFromAppendVecs(data []byte, fileSize uint64, slot uint64, fileId uint64) ([]solana.PublicKey, []*AccountIndexEntry, error) {
 	var offsetAndPubkeys []*AccountIndexEntry
 	var pubkeys []solana.PublicKey
 
 	var offset uint64
 
+	parser := &avParser{Buf: data, FileSize: fileSize}
+
 	for {
-		if offset+hdrLen >= fileSize {
-			break
-		}
-
-		if uint64(len(data[offset:])) < hdrLen {
-			break
-		}
-
-		bytesReadAligned, pubkey, shouldSkip, err := parseAcctAndAdvanceOffset(data[offset:])
+		pubkey, entry, err := parser.ParseAccount(offset, slot, fileId)
 		if err != nil {
-			return nil, nil, err
+			break
 		}
 
-		if !shouldSkip {
-			entry := &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: offset}
-			offsetAndPubkeys = append(offsetAndPubkeys, entry)
-			pubkeys = append(pubkeys, pubkey)
-		}
-
-		offset += bytesReadAligned
+		pubkeys = append(pubkeys, pubkey)
+		offsetAndPubkeys = append(offsetAndPubkeys, entry)
 	}
 
 	return pubkeys, offsetAndPubkeys, nil

@@ -213,7 +213,9 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 				return
 			}
 
-			_, err = io.Copy(outFile, bytes.NewBuffer(writer.Bytes()))
+			appendVecBytes := writer.Bytes()
+
+			_, err = io.Copy(outFile, bytes.NewReader(appendVecBytes))
 			if err != nil {
 				fmt.Printf("err copying file out: %s\n", err)
 				return
@@ -242,9 +244,19 @@ func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) e
 			}
 
 			// find the relevant appendvec storage info
-			fileSize := manifest.AccountsDb.Storages[slot].AcctVecs[0].FileSize
+			var fileSize uint64
+			for _, av := range manifest.AccountsDb.Storages[slot].AcctVecs {
+				if av.Id == fileId {
+					fileSize = av.FileSize
+					break
+				}
+			}
 
-			task := indexEntryBuilderTask{Data: writer.Bytes(), FileSize: fileSize, Slot: slot, FileId: fileId}
+			if fileSize == 0 {
+				panic("programming error - fileSize for appendvec was 0")
+			}
+
+			task := indexEntryBuilderTask{Data: appendVecBytes, FileSize: fileSize, Slot: slot, FileId: fileId}
 
 			wg.Add(1)
 			err = indexEntryBuilderPool.Invoke(task)

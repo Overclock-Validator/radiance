@@ -23,7 +23,38 @@ type AppendVecAccount struct {
 	Data         []byte
 }
 
-const hdrLen = 136
+const (
+	hdrLen        = 136
+	dataLenOffset = 8
+	pubkeyOffset  = 16
+)
+
+type avParser struct {
+	Buf      []byte
+	FileSize uint64
+	Offset   uint64
+}
+
+func (parser *avParser) ParseAccount(offset uint64, slot uint64, fileId uint64) (solana.PublicKey, *AccountIndexEntry, error) {
+	if parser.Offset+hdrLen > parser.FileSize {
+		return solana.PublicKey{}, nil, fmt.Errorf("overflow")
+	}
+
+	dataLen := binary.LittleEndian.Uint64(parser.Buf[parser.Offset+dataLenOffset : parser.Offset+dataLenOffset+8])
+	pubkey := solana.PublicKeyFromBytes(parser.Buf[parser.Offset+pubkeyOffset : parser.Offset+pubkeyOffset+32])
+
+	entry := &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: parser.Offset}
+
+	parser.Offset += hdrLen
+
+	if parser.Offset+dataLen > parser.FileSize {
+		return solana.PublicKey{}, nil, fmt.Errorf("overflow")
+	}
+
+	parser.Offset += util.AlignUp(dataLen, 8)
+
+	return pubkey, entry, nil
+}
 
 // TODO: optimise by rewriting without binary.Read(), which uses fairly expensive reflection
 func (acct *AppendVecAccount) Unmarshal(buf io.Reader) error {
