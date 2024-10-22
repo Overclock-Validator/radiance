@@ -29,13 +29,16 @@ const (
 	pubkeyOffset  = 16
 )
 
-type avParser struct {
+type appendVecParser struct {
 	Buf      []byte
 	FileSize uint64
 	Offset   uint64
+
+	FileId uint64
+	Slot   uint64
 }
 
-func (parser *avParser) ParseAccount(offset uint64, slot uint64, fileId uint64) (solana.PublicKey, *AccountIndexEntry, error) {
+func (parser *appendVecParser) ParseNextAcct() (solana.PublicKey, *AccountIndexEntry, error) {
 	if parser.Offset+hdrLen > parser.FileSize {
 		return solana.PublicKey{}, nil, fmt.Errorf("overflow")
 	}
@@ -43,7 +46,7 @@ func (parser *avParser) ParseAccount(offset uint64, slot uint64, fileId uint64) 
 	dataLen := binary.LittleEndian.Uint64(parser.Buf[parser.Offset+dataLenOffset : parser.Offset+dataLenOffset+8])
 	pubkey := solana.PublicKeyFromBytes(parser.Buf[parser.Offset+pubkeyOffset : parser.Offset+pubkeyOffset+32])
 
-	entry := &AccountIndexEntry{Slot: slot, FileId: fileId, Offset: parser.Offset}
+	entry := &AccountIndexEntry{Slot: parser.Slot, FileId: parser.FileId, Offset: parser.Offset}
 
 	parser.Offset += hdrLen
 

@@ -61,12 +61,10 @@ func BuildIndexEntriesFromAppendVecs(data []byte, fileSize uint64, slot uint64, 
 	var offsetAndPubkeys []*AccountIndexEntry
 	var pubkeys []solana.PublicKey
 
-	var offset uint64
-
-	parser := &avParser{Buf: data, FileSize: fileSize}
+	parser := &appendVecParser{Buf: data, FileSize: fileSize, FileId: fileId, Slot: slot}
 
 	for {
-		pubkey, entry, err := parser.ParseAccount(offset, slot, fileId)
+		pubkey, entry, err := parser.ParseNextAcct()
 		if err != nil {
 			break
 		}
