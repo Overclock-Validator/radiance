@@ -32,6 +32,7 @@ type TransactionCtx struct {
 	HeapSize                 uint32
 	AllInstructions          []Instruction
 	ComputeBudgetLimits      *ComputeBudgetLimits
+	Signature                solana.Signature
 }
 
 func NewTransactionAccounts(accts []accounts.Account) *TransactionAccounts {

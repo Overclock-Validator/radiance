@@ -660,6 +660,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 		if uint64(instructionAcctIdx) != instructionAcct.IndexInCallee {
 			continue
 		}
+
 		calleeAcct, err := ixCtx.BorrowInstructionAccount(txCtx, instructionAcct.IndexInCaller)
 		if err != nil {
 			return nil, err
@@ -677,6 +678,7 @@ func translateAndUpdateAccountsRust(vm sbpf.VM, instructionAccts []InstructionAc
 			if err != nil {
 				return nil, InstrErrComputationalBudgetExceeded
 			}
+			accounts = append(accounts, TranslatedAccount{IndexOfAccount: instructionAcct.IndexInCaller, CallerAccount: nil})
 		} else {
 			var found bool
 			for index, accountInfoKey := range accountInfoKeys {

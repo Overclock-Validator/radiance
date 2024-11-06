@@ -950,6 +950,8 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 		return err
 	}
 
+	klog.Infof("******** v3: length of program bytes: %d ********", len(program.Text))
+
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
 	if err != nil {
@@ -999,9 +1001,9 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	}
 
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
-	ret, computeUnitsConsumed, runErr := interpreter.Run()
+	ret, _, runErr := interpreter.Run()
 
-	klog.Infof("Program %s consumed %d of %d compute units", programId, computeUnitsConsumed, computeRemainingPrev)
+	klog.Infof("Program %s consumed %d of %d compute units", programId, computeRemainingPrev-execCtx.ComputeMeter.Remaining(), computeRemainingPrev)
 
 	if runErr != nil {
 		klog.Infof("program execution result: %s", runErr)

@@ -3,6 +3,7 @@ package replay
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
@@ -121,6 +122,19 @@ func isNativeProgram(pubkey solana.PublicKey) bool {
 	}
 }
 
+func isSysvar(pubkey solana.PublicKey) bool {
+	if pubkey == sealevel.SysvarClockAddr || pubkey == sealevel.SysvarEpochRewardsAddr ||
+		pubkey == sealevel.SysvarEpochScheduleAddr || pubkey == sealevel.SysvarFeesAddr ||
+		pubkey == sealevel.SysvarInstructionsAddr || pubkey == sealevel.SysvarLastRestartSlotAddr ||
+		pubkey == sealevel.SysvarRecentBlockHashesAddr || pubkey == sealevel.SysvarRentAddr ||
+		pubkey == sealevel.SysvarSlotHashesAddr || pubkey == sealevel.SysvarSlotHistoryAddr ||
+		pubkey == sealevel.SysvarStakeHistoryAddr {
+		return true
+	} else {
+		return false
+	}
+}
+
 func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block *Block) (accounts.Accounts, uint64, error) {
 	err := resolveAddrTableLookups(accountsDb, block)
 	if err != nil {
@@ -142,7 +156,7 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 				acct = &accounts.Account{Key: pk, Owner: sealevel.NativeLoaderAddr, Executable: true, Lamports: 1}
 				klog.Infof("no account: %s, using empty owned by Native Loader\n", pk)
 			} else {
-				acct = &accounts.Account{Key: pk, Owner: sealevel.SystemProgramAddr}
+				acct = &accounts.Account{Key: pk, Owner: sealevel.SystemProgramAddr, RentEpoch: math.MaxUint64}
 				klog.Infof("no account: %s, using empty owned by System program\n", pk)
 			}
 		} else if err != nil {

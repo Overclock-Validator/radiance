@@ -109,7 +109,7 @@ func disassemble(slot Slot, slot2 Slot) string {
 	mnemonic := GetOpcodeName(opc)
 	switch opc {
 	case OpLddw:
-		return fmt.Sprintf("lddw r%d, %#x", slot.Dst(), uint64(slot.Uimm())|(uint64(slot2.Uimm())<<32))
+		return fmt.Sprintf("lddw r%d", slot.Dst())
 	case OpLdxb, OpLdxh, OpLdxw, OpLdxdw:
 		return fmt.Sprintf("%s r%d, [r%d%#+x]", mnemonic, slot.Dst(), slot.Src(), slot.Off())
 	case OpStb:
@@ -121,18 +121,18 @@ func disassemble(slot Slot, slot2 Slot) string {
 	case OpStdw:
 		return fmt.Sprintf("stdw [r%d%#+x], %#x", slot.Src(), slot.Off(), int64(slot.Imm()))
 	case OpStxb, OpStxh, OpStxw, OpStxdw:
-		return fmt.Sprintf("%s [r%d%#+x], r%d", mnemonic, slot.Src(), slot.Off(), slot.Dst())
+		return fmt.Sprintf("%s [r%d%#+x], r%d", mnemonic, slot.Dst(), slot.Off(), slot.Src())
 	case OpAdd32Imm, OpSub32Imm, OpAdd64Imm, OpSub64Imm:
-		return fmt.Sprintf("%s r%d, %#x", mnemonic, slot.Dst(), slot.Imm())
+		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), slot.Imm())
 	case OpOr32Imm, OpAnd32Imm, OpXor32Imm, OpMov32Imm:
-		return fmt.Sprintf("%s r%d, %#x", mnemonic, slot.Dst(), slot.Uimm())
+		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), slot.Uimm())
 	case OpDiv32Imm, OpMod32Imm, OpLsh32Imm, OpRsh32Imm, OpArsh32Imm,
 		OpDiv64Imm, OpMod64Imm, OpLsh64Imm, OpRsh64Imm, OpArsh64Imm:
 		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), slot.Uimm())
 	case OpMul32Imm, OpSdiv32Imm, OpMul64Imm, OpSdiv64Imm:
 		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), slot.Imm())
 	case OpOr64Imm, OpAnd64Imm, OpXor64Imm, OpMov64Imm:
-		return fmt.Sprintf("%s r%d, %#x", mnemonic, slot.Dst(), uint64(slot.Imm()))
+		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), slot.Imm())
 	case OpAdd32Reg, OpSub32Reg, OpMul32Reg, OpDiv32Reg, OpOr32Reg, OpAnd32Reg, OpLsh32Reg, OpRsh32Reg, OpMod32Reg, OpXor32Reg, OpMov32Reg, OpArsh32Reg, OpSdiv32Reg,
 		OpAdd64Reg, OpSub64Reg, OpMul64Reg, OpDiv64Reg, OpOr64Reg, OpAnd64Reg, OpLsh64Reg, OpRsh64Reg, OpMod64Reg, OpXor64Reg, OpMov64Reg, OpArsh64Reg, OpSdiv64Reg:
 		return fmt.Sprintf("%s r%d, r%d", mnemonic, slot.Dst(), slot.Src())
@@ -141,15 +141,15 @@ func disassemble(slot Slot, slot2 Slot) string {
 	case OpLe, OpBe:
 		return fmt.Sprintf("%s%d r%d", mnemonic, slot.Uimm(), slot.Dst())
 	case OpJa:
-		return fmt.Sprintf("ja %+d", slot.Off())
+		return fmt.Sprintf("ja")
 	case OpJeqImm, OpJgtImm, OpJgeImm, OpJltImm, OpJleImm, OpJsetImm, OpJneImm, OpJsgtImm, OpJsgeImm, OpJsltImm, OpJsleImm:
-		return fmt.Sprintf("%s r%d, %#x, %+d", mnemonic, slot.Dst(), int64(slot.Imm()), slot.Off())
+		return fmt.Sprintf("%s r%d, %d", mnemonic, slot.Dst(), int64(slot.Imm()))
 	case OpJeqReg, OpJgtReg, OpJgeReg, OpJltReg, OpJleReg, OpJsetReg, OpJneReg, OpJsgtReg, OpJsgeReg, OpJsltReg, OpJsleReg:
-		return fmt.Sprintf("%s r%d, r%d, %+d", mnemonic, slot.Dst(), slot.Src(), slot.Off())
+		return fmt.Sprintf("%s r%d, r%d", mnemonic, slot.Dst(), slot.Src())
 	case OpCall:
-		return fmt.Sprintf("call %#x", slot.Uimm())
+		return fmt.Sprintf("call")
 	case OpCallx:
-		return fmt.Sprintf("call r%d", slot.Dst())
+		return fmt.Sprintf("call")
 	case OpExit:
 		return "exit"
 	default:

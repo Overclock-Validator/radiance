@@ -82,7 +82,7 @@ func instrsFromTx(tx *solana.Transaction) ([]sealevel.Instruction, error) {
 
 		var acctMetas []sealevel.AccountMeta
 		for _, am := range ams {
-			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: am.IsWritable}
+			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(am)}
 			acctMetas = append(acctMetas, acctMeta)
 		}
 
@@ -106,6 +106,10 @@ func fixupInstructionsSysvarAcct(execCtx *sealevel.ExecutionCtx, instrIdx uint16
 		klog.Infof("found instructions sysvar pubkey at instr idx %d", instrIdx)
 	}
 	return nil
+}
+
+func isWritable(am *solana.AccountMeta) bool {
+	return am.IsWritable && !isNativeProgram(am.PublicKey) && !isSysvar(am.PublicKey)
 }
 
 func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) (uint64, error) {
@@ -137,6 +141,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 	var log sealevel.LogRecorder
 	execCtx := newExecCtx(slotCtx, transactionAccts, computeBudgetLimits, &log)
 	execCtx.TransactionContext.AllInstructions = instrs
+	execCtx.TransactionContext.Signature = tx.Signatures[0]
 
 	// check for pre-balance divergences
 	for count := uint64(0); count < uint64(len(tx.Message.AccountKeys)); count++ {
@@ -165,6 +170,8 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		panic("failed to get and deserialize rent sysvar")
 	}
 
+	fees.MaybeSetRentExemptRentEpochMax(slotCtx, &rent, &execCtx.GlobalCtx.Features, &execCtx.TransactionContext.Accounts)
+
 	preTxRentStates := fees.NewRentStateInfo(&rent, execCtx.TransactionContext, tx)
 
 	var instrErr error
@@ -182,7 +189,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 		var acctMetas []sealevel.AccountMeta
 		for _, am := range resolvedAccountMetas {
-			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: am.IsWritable}
+			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(am)}
 			acctMetas = append(acctMetas, acctMeta)
 		}
 

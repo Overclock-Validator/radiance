@@ -100,7 +100,7 @@ func DistributeTxFees(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx,
 
 	leaderAcct, err = slotCtx.GetAccount(leader)
 	if err != nil {
-		// if leader didn't appear at all in the block, then its latest state should be retrieveable from accountsdb
+		// if leader didn't appear at all in the block, then retrieve its latest state from accountsdb instead
 		leaderAcct, err = acctsDb.GetAccount(leader)
 		if err != nil {
 			panic(fmt.Sprintf("unable to get leader acct %s from both slotCtx and accountsdb", leader))

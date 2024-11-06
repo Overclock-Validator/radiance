@@ -40,9 +40,10 @@ type VM interface {
 // VMOpts specifies virtual machine parameters.
 type VMOpts struct {
 	// Machine parameters
-	HeapMax  int
-	Syscalls SyscallRegistry
-	Tracer   TraceSink
+	HeapMax       int
+	Syscalls      SyscallRegistry
+	Tracer        TraceSink
+	EnableTracing bool
 
 	// Execution parameters
 	Context      any // passed to syscalls

@@ -2,9 +2,11 @@ package fees
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
 )
 
@@ -105,4 +107,36 @@ func VerifyRentStateChanges(preStates []*RentStateInfo, postStates []*RentStateI
 	}
 
 	return nil
+}
+
+func MaybeSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, f *features.Features, txAccts *sealevel.TransactionAccounts) {
+	for idx := range txAccts.Accounts {
+		if ShouldSetRentExemptRentEpochMax(slotCtx, rent, f, txAccts.Accounts[idx]) {
+			txAccts.Accounts[idx].RentEpoch = math.MaxUint64
+			txAccts.Touch(uint64(idx))
+		}
+	}
+}
+
+func ShouldSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, f *features.Features, acct *accounts.Account) bool {
+	if f.IsActive(features.DisableRentFeesCollection) {
+		if acct.RentEpoch != math.MaxUint64 && acct.Lamports >= rent.MinimumBalance(uint64(len(acct.Data))) {
+			return true
+		}
+		return false
+	}
+
+	if acct.RentEpoch == math.MaxUint64 || acct.RentEpoch > slotCtx.Epoch {
+		return false
+	}
+
+	if acct.IsExecutable() || acct.Key == sealevel.IncineratorAddr {
+		return true
+	}
+
+	if acct.Lamports != 0 && acct.Lamports < rent.MinimumBalance(uint64(len(acct.Data))) {
+		return false
+	}
+
+	return true
 }
