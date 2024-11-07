@@ -529,7 +529,6 @@ mainLoop:
 				ret = r[0]
 				break mainLoop
 			}
-			//pc--
 		default:
 			panic(fmt.Sprintf("unimplemented opcode %#02x", ins.Op()))
 		}

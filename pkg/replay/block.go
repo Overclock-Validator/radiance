@@ -282,7 +282,7 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 
 	// distribute tx fees to the leader by calculating 50% of the tx fees and adding the sum
 	// to the slot leader's lamports balance, subsequently including it in the accounts delta hash.
-	fees.DistributeTxFees(acctsDb, slotCtx, block.Leader, totalTxFees)
+	fees.DistributeTxFeesToSlotLeader(acctsDb, slotCtx, block.Leader, totalTxFees)
 
 	klog.Infof("from RPC fees for leader: %d, post-balance: %d (%s)", block.Reward.Lamports, block.Reward.PostBalance, block.Reward.Leader)
 

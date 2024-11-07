@@ -157,7 +157,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	totalFee, payerNewLamports, err := fees.ApplyTxFees(tx, instrs, &execCtx.TransactionContext.Accounts, computeBudgetLimits)
 	if err != nil {
-		return 0, err
+		panic(err)
 	}
 
 	// check for fee divergences

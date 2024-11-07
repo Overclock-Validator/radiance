@@ -92,8 +92,9 @@ func ApplyTxFees(tx *solana.Transaction, instrs []sealevel.Instruction, transact
 	return totalTxFee, feePayerAcct.Lamports, nil
 }
 
-func DistributeTxFees(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx, leader solana.PublicKey, totalFees uint64) {
-	feesToLeader := (totalFees * 50) / 100
+func DistributeTxFeesToSlotLeader(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx, leader solana.PublicKey, totalFees uint64) {
+	feesToBurn := totalFees / 2
+	feesToLeader := totalFees - feesToBurn
 
 	var leaderAcct *accounts.Account
 	var err error
@@ -107,7 +108,10 @@ func DistributeTxFees(acctsDb *accountsdb.AccountsDb, slotCtx *sealevel.SlotCtx,
 		}
 	}
 
-	leaderAcct.Lamports += feesToLeader
+	leaderAcct.Lamports, err = safemath.CheckedAddU64(leaderAcct.Lamports, feesToLeader)
+	if err != nil {
+		panic("overflow when adding reward to slot leader balance")
+	}
 	slotCtx.ModifiedAccts[leader] = true
 
 	err = slotCtx.SetAccount(leader, leaderAcct)
