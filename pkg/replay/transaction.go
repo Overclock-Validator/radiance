@@ -82,7 +82,7 @@ func instrsFromTx(tx *solana.Transaction) ([]sealevel.Instruction, error) {
 
 		var acctMetas []sealevel.AccountMeta
 		for _, am := range ams {
-			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(am)}
+			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(tx, am)}
 			acctMetas = append(acctMetas, acctMeta)
 		}
 
@@ -108,8 +108,27 @@ func fixupInstructionsSysvarAcct(execCtx *sealevel.ExecutionCtx, instrIdx uint16
 	return nil
 }
 
-func isWritable(am *solana.AccountMeta) bool {
-	return am.IsWritable && !isNativeProgram(am.PublicKey) && !isSysvar(am.PublicKey)
+func isWritable(tx *solana.Transaction, am *solana.AccountMeta) bool {
+	if !am.IsWritable {
+		return false
+	}
+
+	if isNativeProgram(am.PublicKey) || isSysvar(am.PublicKey) {
+		return false
+	}
+
+	programIds, err := tx.GetProgramIDs()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, programId := range programIds {
+		if am.PublicKey == programId {
+			return false
+		}
+	}
+
+	return true
 }
 
 func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) (uint64, error) {
@@ -189,8 +208,9 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 		var acctMetas []sealevel.AccountMeta
 		for _, am := range resolvedAccountMetas {
-			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(am)}
+			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(tx, am)}
 			acctMetas = append(acctMetas, acctMeta)
+			fmt.Printf("acct: pubkey: %s, isWritable: %t, isSigner: %t\n", acctMeta.Pubkey, acctMeta.IsWritable, acctMeta.IsSigner)
 		}
 
 		instructionAccts := sealevel.InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
