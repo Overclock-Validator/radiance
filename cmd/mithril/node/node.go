@@ -8,7 +8,6 @@ import (
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/pkg/accountsdb"
-	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/replay"
 	"go.firedancer.io/radiance/pkg/rpcclient"
 	"go.firedancer.io/radiance/pkg/snapshot"
@@ -52,7 +51,7 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, er
 	}
 
 	block.Blockhash = blockResult.Blockhash
-	block.ExpectedBankhash = base58.MustDecodeFromString("CbMK7uc68PPo5pPc5sfDJP6RGcwEcBJcrgZmuEZNEv6T")
+	block.RecentBlockhash = blockResult.PreviousBlockhash
 
 	for _, tx := range block.Transactions {
 		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)

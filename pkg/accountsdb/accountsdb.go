@@ -188,6 +188,18 @@ func (accountsDb *AccountsDb) StoreAccounts(accts []*accounts.Account, slot uint
 	return nil
 }
 
+func (accountsDb *AccountsDb) KeysBetweenPrefixes(startPrefix uint64, endPrefix uint64) []solana.PublicKey {
+	keys := accountsDb.indexDb.KeysBetweenPrefixes(startPrefix, endPrefix)
+
+	keyObjs := make([]solana.PublicKey, 0)
+	for _, key := range keys {
+		keyObject := solana.PublicKeyFromBytes(key)
+		keyObjs = append(keyObjs, keyObject)
+	}
+
+	return keyObjs
+}
+
 func (accountsDb *AccountsDb) BankHash() [32]byte {
 	return accountsDb.bankHash
 }

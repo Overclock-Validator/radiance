@@ -1,6 +1,9 @@
 package sealevel
 
 import (
+	"bytes"
+	"fmt"
+
 	bin "github.com/gagliardetto/binary"
 	"go.firedancer.io/radiance/pkg/base58"
 )
@@ -15,6 +18,8 @@ type RecentBlockHashesEntry struct {
 }
 
 type SysvarRecentBlockhashes []RecentBlockHashesEntry
+
+const recentBlockhashesMaxEntries = 150
 
 func (recentBlockhashes *SysvarRecentBlockhashes) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	numBlockhashes, err := decoder.ReadUint64(bin.LE)
@@ -65,6 +70,18 @@ func (recentBlockhashes *SysvarRecentBlockhashes) MarshalWithEncoder(encoder *bi
 	return nil
 }
 
+func (recentBlockhashes *SysvarRecentBlockhashes) MustMarshal() []byte {
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	err := recentBlockhashes.MarshalWithEncoder(enc)
+	if err != nil {
+		panic(fmt.Sprintf("unable to marshal RecentBlockhashes: %s", err))
+	}
+
+	return data.Bytes()
+}
+
 func CheckAcctForRecentBlockHashesSysvar(txCtx *TransactionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) error {
 	idxInTx, err := instrCtx.IndexOfInstructionAccountInTransaction(instrAcctIdx)
 	if err != nil {
@@ -90,7 +107,22 @@ func (recentBlockhashes *SysvarRecentBlockhashes) MustUnmarshalWithDecoder(decod
 
 func (recentBlockhashes *SysvarRecentBlockhashes) GetLatest() RecentBlockHashesEntry {
 	rbh := *recentBlockhashes
-	return rbh[len(rbh)-1]
+	return rbh[0]
+}
+
+func (recentBlockhashes *SysvarRecentBlockhashes) PushLatest(latest [32]byte) {
+	rbh := *recentBlockhashes
+
+	newEntry := RecentBlockHashesEntry{Blockhash: latest, FeeCalculator: FeeCalculator{LamportsPerSignature: 5000}}
+
+	if len(rbh) >= recentBlockhashesMaxEntries {
+		rbh = rbh[:len(rbh)-1]
+		rbh = append([]RecentBlockHashesEntry{newEntry}, rbh...)
+	} else {
+		rbh = append([]RecentBlockHashesEntry{newEntry}, rbh...)
+	}
+
+	*recentBlockhashes = rbh
 }
 
 func ReadRecentBlockHashesSysvar(execCtx *ExecutionCtx) (SysvarRecentBlockhashes, error) {
@@ -114,12 +146,4 @@ func ReadRecentBlockHashesSysvar(execCtx *ExecutionCtx) (SysvarRecentBlockhashes
 	}
 
 	return recentBlockhashes, nil
-}
-
-func ReadRecentBlockHashesSysvarFromCache(execCtx *ExecutionCtx, instrCtx *InstructionCtx, instrAcctIdx uint64) (*SysvarRecentBlockhashes, error) {
-	err := CheckAcctForRecentBlockHashesSysvar(execCtx.TransactionContext, instrCtx, instrAcctIdx)
-	if err != nil {
-		return nil, err
-	}
-	return execCtx.SlotCtx.SysvarCache.GetRecentBlockHashes(), nil
 }

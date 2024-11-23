@@ -63,6 +63,10 @@ var IncineratorAddrStr = "1nc1nerator11111111111111111111111111111111"
 
 var IncineratorAddr = base58.MustDecodeFromString(IncineratorAddrStr)
 
+const SysvarOwnerStr = "Sysvar1111111111111111111111111111111111111"
+
+var SysvarOwnerAddr = base58.MustDecodeFromString(SysvarOwnerStr)
+
 var IsPrecompile = errors.New("IsPrecompile")
 
 var invalidEnumValue = errors.New("invalid enum value")

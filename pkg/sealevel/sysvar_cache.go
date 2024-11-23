@@ -2,13 +2,7 @@ package sealevel
 
 import (
 	"crypto/rand"
-
-	"go.firedancer.io/radiance/pkg/base58"
 )
-
-const SysvarOwnerStr = "Sysvar1111111111111111111111111111111111111"
-
-var SysvarOwnerAddr = base58.MustDecodeFromString(SysvarOwnerStr)
 
 type SysvarCache struct {
 	RecentBlockHashes *SysvarRecentBlockhashes

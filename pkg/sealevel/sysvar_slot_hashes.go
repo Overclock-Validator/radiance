@@ -123,8 +123,6 @@ func (sh *SysvarSlotHashes) UpdateWithSlotCtx(slotCtx *SlotCtx) {
 }
 
 func (sh *SysvarSlotHashes) Update(slot uint64, hash [32]byte) {
-	fmt.Printf("slothashes was %d entries long in Update()\n", len(*sh))
-
 	var found bool
 
 	for count := 0; count < len(*sh); count++ {

@@ -28,6 +28,11 @@ type SysvarSlotHistory struct {
 	NextSlot uint64
 }
 
+const (
+	slotHistoryMaxEntries = 1024 * 1024
+	bitsPerBlock          = 64
+)
+
 func (sh *SysvarSlotHistory) UnmarshalWithDecoder(decoder *bin.Decoder) (err error) {
 
 	opt, err := decoder.ReadByte()
@@ -65,6 +70,92 @@ func (sr *SysvarSlotHistory) MustUnmarshalWithDecoder(decoder *bin.Decoder) {
 	if err != nil {
 		panic(err.Error())
 	}
+}
+
+func (sr *SysvarSlotHistory) MustMarshal() []byte {
+	data := new(bytes.Buffer)
+	enc := bin.NewBinEncoder(data)
+
+	var err error
+
+	if sr.Bits.Bits.BlocksLen != 0 {
+		err = enc.WriteByte(1)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize opt byte for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		err = enc.WriteUint64(sr.Bits.Bits.BlocksLen, bin.LE)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize BlocksLen for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+
+		for count := 0; count < int(sr.Bits.Bits.BlocksLen); count++ {
+			err = enc.WriteUint64(sr.Bits.Bits.Blocks[count], bin.LE)
+			if err != nil {
+				err = fmt.Errorf("failed to serialize a Block for SlotHistory sysvar: %w", err)
+				panic(err)
+			}
+		}
+	} else {
+		err = enc.WriteByte(0)
+		if err != nil {
+			err = fmt.Errorf("failed to serialize opt byte for SlotHistory sysvar: %w", err)
+			panic(err)
+		}
+	}
+
+	err = enc.WriteUint64(sr.Bits.Len, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize Bits.Len for SlotHistory sysvar: %w", err)
+		panic(err)
+	}
+
+	err = enc.WriteUint64(sr.NextSlot, bin.LE)
+	if err != nil {
+		err = fmt.Errorf("failed to serialize NextSlot for SlotHistory sysvar: %w", err)
+		panic(err)
+	}
+
+	return data.Bytes()
+}
+
+/*  // Corrupt history, zero everything out
+if ( i > history->next_slot && i - history->next_slot >= slot_history_max_entries ) {
+  for ( ulong j = 0; j < history->bits.bits->blocks_len; j++) {
+    history->bits.bits->blocks[ j ] = 0;
+  }
+} else {
+  // Skipped slots, delete them from history
+  for (ulong j = history->next_slot; j < i; j++) {
+    ulong block_idx = (j / bits_per_block) % (history->bits.bits->blocks_len);
+    history->bits.bits->blocks[ block_idx ] &= ~( 1UL << ( j % bits_per_block ) );
+  }
+}
+ulong block_idx = (i / bits_per_block) % (history->bits.bits->blocks_len);
+history->bits.bits->blocks[ block_idx ] |= ( 1UL << ( i % bits_per_block ) );*/
+
+func (sr *SysvarSlotHistory) Add(slot uint64) {
+	slotHistory := *sr
+
+	if slot > slotHistory.NextSlot && (slot-slotHistory.NextSlot) >= slotHistoryMaxEntries {
+		for idx := uint64(0); idx < slotHistory.Bits.Bits.BlocksLen; idx++ {
+			slotHistory.Bits.Bits.Blocks[idx] = 0
+		}
+	} else {
+		for j := slotHistory.NextSlot; j < slot; j++ {
+			blockIdx := (j / bitsPerBlock) % slotHistory.Bits.Bits.BlocksLen
+			slotHistory.Bits.Bits.Blocks[blockIdx] &= ^(uint64(1) << (j % bitsPerBlock))
+		}
+	}
+
+	blockIdx := (slot / bitsPerBlock) % slotHistory.Bits.Bits.BlocksLen
+	slotHistory.Bits.Bits.Blocks[blockIdx] |= (uint64(1) << (slot % bitsPerBlock))
+}
+
+func (sr *SysvarSlotHistory) SetNextSlot(nextSlot uint64) {
+	sr.NextSlot = nextSlot
 }
 
 func ReadSlotHistorySysvar(execCtx *ExecutionCtx) SysvarSlotHistory {

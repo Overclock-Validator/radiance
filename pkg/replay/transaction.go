@@ -1,15 +1,18 @@
 package replay
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 
+	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/cu"
 	"go.firedancer.io/radiance/pkg/fees"
+	"go.firedancer.io/radiance/pkg/rent"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"k8s.io/klog/v2"
 )
@@ -131,7 +134,66 @@ func isWritable(tx *solana.Transaction, am *solana.AccountMeta) bool {
 	return true
 }
 
-func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) (uint64, error) {
+func acctsEqual(acct1 *accounts.Account, acct2 *accounts.Account) bool {
+	return acct1.Lamports == acct2.Lamports &&
+		acct1.Owner == acct2.Owner &&
+		acct1.RentEpoch == acct2.RentEpoch &&
+		acct1.Executable == acct2.Executable &&
+		bytes.Equal(acct1.Data, acct2.Data)
+}
+
+func recordModifiedAccounts(slotCtx *sealevel.SlotCtx, execCtx *sealevel.ExecutionCtx) {
+	// update account states in slotCtx for all accounts 'touched' during the tx's execution
+	for idx, newAcctState := range execCtx.TransactionContext.Accounts.Accounts {
+		if execCtx.TransactionContext.Accounts.Touched[idx] {
+			err := slotCtx.SetAccount(newAcctState.Key, newAcctState)
+			if err != nil {
+				panic(fmt.Sprintf("unable to set slot account for %s to update state: %s", newAcctState.Key, err))
+			}
+			slotCtx.ModifiedAccts[newAcctState.Key] = true
+			klog.Infof("modified account %s after tx", newAcctState.Key)
+		}
+	}
+}
+
+func handleFailedTxIfDurableTx(instrs []sealevel.Instruction, execCtx *sealevel.ExecutionCtx, slotCtx *sealevel.SlotCtx) (solana.PublicKey, bool) {
+	instr := instrs[0]
+
+	if instr.ProgramId == sealevel.SystemProgramAddr && len(instr.Data) >= 4 {
+		decoder := bin.NewBinDecoder(instr.Data)
+
+		instructionType, err := decoder.ReadUint32(bin.LE)
+		if err != nil {
+			return solana.PublicKey{}, false
+		}
+
+		if instructionType == sealevel.SystemProgramInstrTypeAdvanceNonceAccount {
+			nonceAcctPk := instr.Accounts[0].Pubkey
+			var nonceAcct *accounts.Account
+			for _, acct := range execCtx.TransactionContext.Accounts.Accounts {
+				if acct.Key == nonceAcctPk {
+					nonceAcct = acct
+					break
+				}
+			}
+
+			if nonceAcct == nil {
+				panic("nonce account not found in transaction accounts")
+			}
+
+			err = slotCtx.SetAccount(nonceAcctPk, nonceAcct)
+			if err != nil {
+				panic(fmt.Sprintf("error setting nonce account state after failed tx: %s\n", err))
+			}
+
+			return instr.Accounts[0].Pubkey, true
+		}
+	}
+
+	return solana.PublicKey{}, false
+}
+
+func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMeta *rpc.TransactionMeta) (uint64, []solana.PublicKey, error) {
 	/*err := tx.VerifySignatures()
 	if err != nil {
 		return NewTxErrInvalidSignature(err.Error())
@@ -139,22 +201,22 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	instrs, err := instrsFromTx(tx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	err = sealevel.WriteInstructionsSysvar(&slotCtx.Accounts, instrs)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	transactionAccts, err := transactionAcctsFromTx(slotCtx, tx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	computeBudgetLimits, err := sealevel.ComputeBudgetExecuteInstructions(instrs)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	var log sealevel.LogRecorder
@@ -184,33 +246,32 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		klog.Infof("tx %s fee divergence: totalFee was %d, but onchain fee was %d", tx.Signatures[0], totalFee, txMeta.Fee)
 	}
 
-	rent, err := sealevel.ReadRentSysvar(execCtx)
+	rentSysvar, err := sealevel.ReadRentSysvar(execCtx)
 	if err != nil {
 		panic("failed to get and deserialize rent sysvar")
 	}
 
-	fees.MaybeSetRentExemptRentEpochMax(slotCtx, &rent, &execCtx.GlobalCtx.Features, &execCtx.TransactionContext.Accounts)
-
-	preTxRentStates := fees.NewRentStateInfo(&rent, execCtx.TransactionContext, tx)
+	rent.MaybeSetRentExemptRentEpochMax(slotCtx, &rentSysvar, &execCtx.GlobalCtx.Features, &execCtx.TransactionContext.Accounts)
+	preTxRentStates := rent.NewRentStateInfo(&rentSysvar, execCtx.TransactionContext, tx)
 
 	var instrErr error
+	writablePubkeys := make([]solana.PublicKey, 0)
 
 	for instrIdx, instr := range tx.Message.Instructions {
 		err = fixupInstructionsSysvarAcct(execCtx, uint16(instrIdx))
 		if err != nil {
-			return totalFee, err
+			return totalFee, nil, err
 		}
 
 		resolvedAccountMetas, err := instr.ResolveInstructionAccounts(&tx.Message)
 		if err != nil {
-			return totalFee, err
+			return totalFee, nil, err
 		}
 
 		var acctMetas []sealevel.AccountMeta
 		for _, am := range resolvedAccountMetas {
 			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(tx, am)}
 			acctMetas = append(acctMetas, acctMeta)
-			fmt.Printf("acct: pubkey: %s, isWritable: %t, isSigner: %t\n", acctMeta.Pubkey, acctMeta.IsWritable, acctMeta.IsSigner)
 		}
 
 		instructionAccts := sealevel.InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
@@ -219,7 +280,14 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		for _, l := range log.Logs {
 			klog.Infof("%s", l)
 		}
-		if err != nil {
+
+		if err == nil {
+			for _, am := range acctMetas {
+				if am.IsWritable {
+					writablePubkeys = append(writablePubkeys, am.Pubkey)
+				}
+			}
+		} else {
 			klog.Infof("%+v", tx)
 			instrErr = err
 			break
@@ -233,8 +301,8 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		klog.Infof("tx %s CU divergence: used was %d but onchain CU consumed was %d", tx.Signatures[0], execCtx.ComputeMeter.Used(), *txMeta.ComputeUnitsConsumed)
 	}
 
-	postTxRentStates := fees.NewRentStateInfo(&rent, execCtx.TransactionContext, tx)
-	rentStateErr := fees.VerifyRentStateChanges(preTxRentStates, postTxRentStates, execCtx.TransactionContext)
+	postTxRentStates := rent.NewRentStateInfo(&rentSysvar, execCtx.TransactionContext, tx)
+	rentStateErr := rent.VerifyRentStateChanges(preTxRentStates, postTxRentStates, execCtx.TransactionContext)
 
 	// check for post-balances divergences (but only if the tx succeeded)
 	if instrErr == nil && rentStateErr == nil {
@@ -250,14 +318,14 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		}
 	}
 
+	payerAcct, err := execCtx.TransactionContext.Accounts.GetAccount(0)
+	if err != nil {
+		panic(fmt.Sprintf("unable to get tx account to update payer acct state after failed tx: %s", err))
+	}
+
 	// if there was an error in the tx, do not update account states, except for deducting the tx fee
 	// from the payer account
 	if instrErr != nil || rentStateErr != nil {
-		payerAcct, err := execCtx.TransactionContext.Accounts.GetAccount(0)
-		if err != nil {
-			panic(fmt.Sprintf("unable to get tx account to update payer acct state after failed tx: %s", err))
-		}
-
 		p, err := slotCtx.GetAccount(payerAcct.Key)
 		if err != nil {
 			panic(fmt.Sprintf("unable to get slot account to update payer acct state after failed tx: %s", err))
@@ -270,8 +338,15 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		}
 
 		slotCtx.ModifiedAccts[payerAcct.Key] = true
-
 		execCtx.TransactionContext.Accounts.Unlock(0)
+
+		writableAcctsForFailedTx := make([]solana.PublicKey, 0)
+		writableAcctsForFailedTx = append(writableAcctsForFailedTx, payerAcct.Key)
+
+		noncePubkey, isDurableTx := handleFailedTxIfDurableTx(instrs, execCtx, slotCtx)
+		if isDurableTx {
+			writableAcctsForFailedTx = append(writableAcctsForFailedTx, noncePubkey)
+		}
 
 		var txErr error
 		if rentStateErr != nil {
@@ -280,27 +355,11 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 			txErr = instrErr
 		}
 
-		return totalFee, fmt.Errorf("tx err: %s", txErr)
+		return totalFee, writableAcctsForFailedTx, fmt.Errorf("tx err: %s", txErr)
 	}
 
-	// update account states in slotCtx for all accounts 'touched' during the tx's execution
-	for idx, wasTouched := range execCtx.TransactionContext.Accounts.Touched {
-		if wasTouched {
-			newAcctState, err := execCtx.TransactionContext.Accounts.GetAccount(uint64(idx))
-			if err != nil {
-				panic(fmt.Sprintf("unable to get tx account to update state: %s", err))
-			}
+	recordModifiedAccounts(slotCtx, execCtx)
+	writablePubkeys = append(writablePubkeys, payerAcct.Key)
 
-			err = slotCtx.SetAccount(newAcctState.Key, newAcctState)
-			if err != nil {
-				panic(fmt.Sprintf("unable to set slot account for %s to update state: %s", newAcctState.Key, err))
-			}
-
-			slotCtx.ModifiedAccts[newAcctState.Key] = true
-			klog.Infof("modified account %s after tx", newAcctState.Key)
-			execCtx.TransactionContext.Accounts.Unlock(uint64(idx))
-		}
-	}
-
-	return totalFee, nil
+	return totalFee, writablePubkeys, nil
 }

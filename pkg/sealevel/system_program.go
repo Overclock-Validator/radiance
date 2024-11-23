@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"unicode/utf8"
 
 	bin "github.com/gagliardetto/binary"
@@ -1245,7 +1244,7 @@ func transferInternal(execCtx *ExecutionCtx, fromAcctIdx uint64, toAcctIdx uint6
 		return InstrErrInvalidArgument
 	}
 
-	fmt.Printf("transfer from %s\n", from.Key())
+	klog.Infof("transfer from %s\n", from.Key())
 
 	if lamports > from.Lamports() {
 		klog.Errorf("Transfer: insufficient lamports %d, need %d", from.Lamports(), lamports)
@@ -1305,14 +1304,14 @@ func SystemProgramInitializeNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAc
 		return InstrErrInsufficientFunds
 	}
 
-	rbh := recentBlockhashes.GetLatest()
-	durableNonce := durableNonce(rbh.Blockhash)
+	rbh := execCtx.SlotCtx.RecentBlockhash
+	durableNonce := durableNonce(rbh)
 
 	newNonceStateVersions := NonceStateVersions{Type: NonceVersionCurrent, Current: NonceData{
 		IsInitialized: true,
 		Authority:     nonceAuthority,
 		DurableNonce:  durableNonce,
-		FeeCalculator: FeeCalculator{LamportsPerSignature: rbh.FeeCalculator.LamportsPerSignature},
+		FeeCalculator: FeeCalculator{LamportsPerSignature: 5000},
 	}}
 
 	newStateBytes, err := newNonceStateVersions.Marshal()
@@ -1408,7 +1407,7 @@ func SystemProgramWithdrawNonceAccount(execCtx *ExecutionCtx, instrCtx *Instruct
 	if state.IsInitialized {
 		signer = state.Authority
 		if lamports == from.Lamports() {
-			durableNonce := durableNonce(recentBlockhashes.GetLatest().Blockhash)
+			durableNonce := durableNonce(execCtx.SlotCtx.RecentBlockhash)
 			if durableNonce == state.DurableNonce {
 				klog.Infof("Withdraw nonce account: nonce can only advance once per slot")
 				return SystemProgErrNonceBlockhashNotExpired
@@ -1501,8 +1500,8 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 		return InstrErrMissingRequiredSignature
 	}
 
-	rbh := recentBlockhashes.GetLatest()
-	nextDurableNonce := durableNonce(rbh.Blockhash)
+	rbh := execCtx.SlotCtx.RecentBlockhash
+	nextDurableNonce := durableNonce(rbh)
 	if state.DurableNonce == nextDurableNonce {
 		klog.Errorf("Advance nonce account: nonce can only advance once per slot")
 		return SystemProgErrNonceBlockhashNotExpired
@@ -1510,12 +1509,12 @@ func SystemProgramAdvanceNonceAccount(execCtx *ExecutionCtx, acct *BorrowedAccou
 
 	if nonceStateVersions.Type == NonceVersionCurrent {
 		state.DurableNonce = nextDurableNonce
-		state.FeeCalculator.LamportsPerSignature = rbh.FeeCalculator.LamportsPerSignature
+		state.FeeCalculator.LamportsPerSignature = 5000 //rbh.FeeCalculator.LamportsPerSignature
 	} else {
 		nonceStateVersions.Upgrade()
 		upgradedState := nonceStateVersions.State()
 		upgradedState.DurableNonce = nextDurableNonce
-		upgradedState.FeeCalculator.LamportsPerSignature = rbh.FeeCalculator.LamportsPerSignature
+		upgradedState.FeeCalculator.LamportsPerSignature = 5000 /* rbh.FeeCalculator.LamportsPerSignature*/
 	}
 
 	newData, err := nonceStateVersions.Marshal()

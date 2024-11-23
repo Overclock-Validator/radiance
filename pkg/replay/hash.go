@@ -3,6 +3,7 @@ package replay
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"sort"
 
 	bin "github.com/gagliardetto/binary"
@@ -47,18 +48,25 @@ func calculateSingleAcctHash(acct accounts.Account) acctHash {
 	_, _ = hasher.Write(acct.Owner[:])
 	_, _ = hasher.Write(acct.Key[:])
 
+	h := sha256.New()
+	h.Write(acct.Data)
+
+	//fmt.Printf("acct: pubkey %s, lamports %d, owner %s, rent_epoch %d, data hash: %s\n", acct.Key, acct.Lamports, solana.PublicKeyFromBytes(acct.Owner[:]), acct.RentEpoch, solana.HashFromBytes(h.Sum(nil)))
+
 	return newAcctHash(acct.Key, hasher.Sum(nil))
 }
 
 func calculateAccountHashes(accts []*accounts.Account) []acctHash {
-	pairs := make([]acctHash, len(accts))
-	for idx, acct := range accts {
+	pairs := make([]acctHash, 0)
+	for _, acct := range accts {
 		if acct.Lamports == 0 {
-			continue
+			pairs = append(pairs, newAcctHash(acct.Key, nil))
+		} else {
+			pair := calculateSingleAcctHash(*acct)
+			pairs = append(pairs, pair)
 		}
-		pair := calculateSingleAcctHash(*acct)
-		pairs[idx] = pair
 	}
+
 	return pairs
 }
 
@@ -122,6 +130,11 @@ func calculateAcctsDeltaHash(accts []*accounts.Account) []byte {
 	sort.SliceStable(acctHashes, func(i, j int) bool {
 		return pubkeyCmp(acctHashes[i].Pubkey, acctHashes[j].Pubkey)
 	})
+
+	fmt.Printf("accounts modified, sorted by pubkey:\n")
+	for _, ah := range acctHashes {
+		fmt.Printf("pubkey: %s, hash: %s\n", ah.Pubkey, solana.PublicKeyFromBytes(ah.Hash[:]))
+	}
 
 	hashes := make([][]byte, len(acctHashes))
 	for idx, ah := range acctHashes {

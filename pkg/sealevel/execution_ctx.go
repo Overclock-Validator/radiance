@@ -16,7 +16,6 @@ type ExecutionCtx struct {
 	TransactionContext   *TransactionCtx
 	GlobalCtx            global.GlobalCtx
 	ComputeMeter         cu.ComputeMeter
-	SysvarCache          SysvarCache
 	Blockhash            [32]byte
 	LamportsPerSignature uint64
 	SlotCtx              *SlotCtx
@@ -35,11 +34,11 @@ type SlotCtx struct {
 	Epoch                uint64
 	LamportsPerSignature uint64
 	ModifiedAccts        map[solana.PublicKey]bool
-	// TODO: use sysvar cache instead of deserializing from accounts each time
-	SysvarCache SysvarCache
-	SlotBank    SlotBank
-	Features    *features.Features
-	Replay      bool
+	Blockhash            [32]byte
+	RecentBlockhash      [32]byte
+	SlotBank             SlotBank
+	Features             *features.Features
+	Replay               bool
 }
 
 func (execCtx *ExecutionCtx) PrepareInstruction(ix Instruction, signers []solana.PublicKey) ([]InstructionAccount, []uint64, error) {

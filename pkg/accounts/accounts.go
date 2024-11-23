@@ -11,6 +11,7 @@ import (
 type Accounts interface {
 	GetAccount(pubkey *[32]byte) (*Account, error)
 	SetAccount(pubkey *[32]byte, acc *Account) error
+	AllAccounts() []*Account
 }
 
 type Account struct {

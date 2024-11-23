@@ -45,7 +45,7 @@ const feePayerIdx = 0
 func ApplyTxFees(tx *solana.Transaction, instrs []sealevel.Instruction, transactionAccts *sealevel.TransactionAccounts, computeBudgetLimits *sealevel.ComputeBudgetLimits) (uint64, uint64, error) {
 	feePayerAcct, err := transactionAccts.GetAccount(feePayerIdx)
 	if err != nil {
-		return 0, 0, err
+		panic("no fee payer")
 	}
 	defer transactionAccts.Unlock(feePayerIdx)
 
@@ -76,8 +76,7 @@ func ApplyTxFees(tx *solana.Transaction, instrs []sealevel.Instruction, transact
 
 	totalTxFee, err := safemath.CheckedAddU64(baseTxFee, priorityFee)
 	if err != nil {
-		klog.Infof("overflow in calculating total tx fee")
-		return 0, 0, err
+		panic("overflow in calculating total tx fee")
 	}
 
 	if feePayerAcct.Lamports < totalTxFee {
@@ -112,7 +111,6 @@ func DistributeTxFeesToSlotLeader(acctsDb *accountsdb.AccountsDb, slotCtx *seale
 	if err != nil {
 		panic("overflow when adding reward to slot leader balance")
 	}
-	slotCtx.ModifiedAccts[leader] = true
 
 	err = slotCtx.SetAccount(leader, leaderAcct)
 	if err != nil {

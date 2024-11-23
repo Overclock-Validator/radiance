@@ -28,3 +28,13 @@ func (m MemAccounts) SetAccount(pubkey *[32]byte, acct *Account) error {
 	m.Map[*pubkey] = acct
 	return nil
 }
+
+func (m MemAccounts) AllAccounts() []*Account {
+	accts := make([]*Account, 0)
+
+	for _, acct := range m.Map {
+		accts = append(accts, acct)
+	}
+
+	return accts
+}

@@ -1,7 +1,6 @@
 package replay
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 
@@ -13,8 +12,10 @@ import (
 	"go.firedancer.io/radiance/pkg/base58"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/fees"
+	"go.firedancer.io/radiance/pkg/rent"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"go.firedancer.io/radiance/pkg/snapshot"
+	"go.firedancer.io/radiance/pkg/util"
 	"k8s.io/klog/v2"
 )
 
@@ -36,6 +37,7 @@ type Block struct {
 	TxMetas          []*rpc.TransactionMeta
 	Leader           solana.PublicKey
 	Reward           BlockRewardsInfo
+	RecentBlockhash  [32]byte
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -92,22 +94,17 @@ func resolveAddrTableLookups(accountsDb *accountsdb.AccountsDb, block *Block) er
 }
 
 func extractAndDedupeBlockAccts(block *Block) []solana.PublicKey {
-	seen := make(map[solana.PublicKey]bool)
-	pubkeys := make([]solana.PublicKey, numBlockAccts(block))
-	var pkCount uint64
+	pubkeys := make([]solana.PublicKey, 0)
 
 	for _, tx := range block.Transactions {
 		for _, pubkey := range tx.Message.AccountKeys {
-			_, alreadySeen := seen[pubkey]
-			if !alreadySeen {
-				seen[pubkey] = true
-				pubkeys[pkCount] = pubkey
-				pkCount++
-			}
+			pubkeys = append(pubkeys, pubkey)
 		}
 	}
 
-	return pubkeys[:pkCount]
+	pubkeys = util.DedupePubkeys(pubkeys)
+
+	return pubkeys
 }
 
 func isNativeProgram(pubkey solana.PublicKey) bool {
@@ -245,23 +242,29 @@ func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *feature
 
 func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) error {
 
-	// gather up all accounts used by the block and put them into a SlotCtx object
+	// gather up all accounts referenced in the block
 	accts, epoch, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
 	if err != nil {
 		return err
 	}
 
+	oldAccts := make([]accounts.Account, 0)
+	for _, a := range accts.AllAccounts() {
+		oldAccts = append(oldAccts, *a)
+	}
+
 	f := scanAndEnableFeatures(acctsDb, block.Slot)
 
-	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Epoch: epoch, ParentSlot: block.Manifest.Bank.ParentSlot, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
+	slotCtx := &sealevel.SlotCtx{Slot: block.Slot, Epoch: epoch, ParentSlot: block.Slot - 1, Blockhash: block.Blockhash, RecentBlockhash: block.RecentBlockhash, Accounts: accts, AccountsDb: acctsDb, Replay: true, Features: f}
 	slotCtx.ModifiedAccts = make(map[solana.PublicKey]bool)
 
 	var totalTxFees uint64
+	acctIsWritable := make(map[solana.PublicKey]bool)
 
 	// process & execute each transaction in turn
 	for idx, tx := range block.Transactions {
 		klog.Infof("[+] executing transaction %d, %s", idx+1, tx.Signatures[0])
-		txFee, txErr := ProcessTransaction(slotCtx, tx, block.TxMetas[idx])
+		txFee, wpks, txErr := ProcessTransaction(slotCtx, tx, block.TxMetas[idx])
 		if txErr != nil {
 			klog.Infof("tx %d returned error: %s\n", idx+1, txErr)
 		}
@@ -273,12 +276,12 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 			klog.Infof("tx %s return value divergence: txErr was %+v, but onchain err was nil", tx.Signatures[0], txErr)
 		}
 
+		for _, pk := range wpks {
+			acctIsWritable[pk] = true
+		}
+
 		totalTxFees += txFee
 	}
-
-	// apply account state updates to accountsdb and collect the account states for inclusion
-	// into the accounts delta hash and therefore the bankhash
-	modifiedAccts := make([]*accounts.Account, 0)
 
 	// distribute tx fees to the leader by calculating 50% of the tx fees and adding the sum
 	// to the slot leader's lamports balance, subsequently including it in the accounts delta hash.
@@ -286,32 +289,58 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 
 	klog.Infof("from RPC fees for leader: %d, post-balance: %d (%s)", block.Reward.Lamports, block.Reward.PostBalance, block.Reward.Leader)
 
-	for pk := range slotCtx.ModifiedAccts {
-		acct, err := slotCtx.Accounts.GetAccount((*[32]byte)(pk.Bytes()))
-		if err != nil {
-			panic("unable to get account for state update")
-		}
-		modifiedAccts = append(modifiedAccts, acct)
+	epochScheduleAcct, err := slotCtx.Accounts.GetAccount(&sealevel.SysvarEpochScheduleAddr)
+	if err != nil {
+		panic("unable to fetch EpochSchedule sysvar account")
 	}
 
-	if len(modifiedAccts) > 0 && updateAcctsDb {
+	dec := bin.NewBinDecoder(epochScheduleAcct.Data)
+	var epochSchedule sealevel.SysvarEpochSchedule
+	err = epochSchedule.UnmarshalWithDecoder(dec)
+	if err != nil {
+		panic("unable to deserialize EpochSchedule sysvar")
+	}
+
+	rentSysvarAcct, err := slotCtx.Accounts.GetAccount(&sealevel.SysvarRentAddr)
+	if err != nil {
+		panic("unable to fetch EpochSchedule sysvar account")
+	}
+
+	dec = bin.NewBinDecoder(rentSysvarAcct.Data)
+	var rentSysvar sealevel.SysvarRent
+	err = rentSysvar.UnmarshalWithDecoder(dec)
+	if err != nil {
+		panic("unable to deserialize Rent sysvar")
+	}
+
+	rentAccts := rent.CollectRentEagerly(slotCtx, &rentSysvar, &epochSchedule)
+
+	acctIsWritable[block.Leader] = true
+
+	eligibleAccts := make([]*accounts.Account, 0)
+	for pk := range acctIsWritable {
+		acct, _ := slotCtx.GetAccount(pk)
+		eligibleAccts = append(eligibleAccts, acct)
+	}
+
+	eligibleAccts = append(eligibleAccts, rentAccts...)
+	sysvarAccts := collectAndUpdateSysvarAcctsForAdh(slotCtx)
+	eligibleAccts = append(eligibleAccts, sysvarAccts...)
+
+	if len(eligibleAccts) > 0 && updateAcctsDb {
 		klog.Infof("updating accountsdb")
-		err = acctsDb.StoreAccounts(modifiedAccts, slotCtx.Slot)
+		err = acctsDb.StoreAccounts(eligibleAccts, slotCtx.Slot)
 	} else {
 		klog.Infof("accountsdb not updated")
 	}
 
-	klog.Infof("calculating accts delta hash for %d modified accounts", len(modifiedAccts))
+	klog.Infof("calculating accts delta hash for %d eligible accounts. len of rentAccts = %d", len(eligibleAccts), len(rentAccts))
 
-	acctDeltaHash := calculateAcctsDeltaHash(modifiedAccts)
+	acctDeltaHash := calculateAcctsDeltaHash(eligibleAccts)
 
 	// calculate bankhash
 	bankHash := calculateBankHash(slotCtx, acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.Blockhash)
-	if bytes.Equal(bankHash, block.ExpectedBankhash[:]) {
-		klog.Infof("calculated bankhash matched expected bankhash.")
-	} else {
-		klog.Infof("calculated bankhash (%s) mismatch (%s)", base58.Encode(bankHash), base58.Encode(block.ExpectedBankhash[:]))
-	}
+	klog.Infof("calculated bankhash was %s", base58.Encode(bankHash))
 
 	return err
 }

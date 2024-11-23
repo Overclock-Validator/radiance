@@ -1,6 +1,7 @@
-package fees
+package rent
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math"
 
@@ -8,6 +9,7 @@ import (
 	"go.firedancer.io/radiance/pkg/accounts"
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/sealevel"
+	"go.firedancer.io/radiance/pkg/util"
 )
 
 const (
@@ -139,4 +141,94 @@ func ShouldSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.S
 	}
 
 	return true
+}
+
+const (
+	RentExempt = iota
+	RentNoCollectionNow
+	RentCollectRent
+)
+
+func calculateRentResult(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, acct *accounts.Account) int {
+	if acct.RentEpoch == math.MaxUint64 || acct.RentEpoch > slotCtx.Epoch {
+		return RentNoCollectionNow
+	}
+
+	if acct.Executable || acct.Key == sealevel.IncineratorAddr {
+		return RentExempt
+	}
+
+	if acct.Lamports >= rent.MinimumBalance(uint64(len(acct.Data))) {
+		return RentExempt
+	}
+
+	// TODO: implement collection logic (testnet/devnet still have rent paying accounts)
+	return RentExempt
+}
+
+// TODO: implement actual rent collection logic for networks other than mainnet-beta, since clusters like testnet and
+// devnet still have rent paying accounts.
+func collectRentFromAcct(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, acct *accounts.Account) (*accounts.Account, bool) {
+
+	if !slotCtx.Features.IsActive(features.DisableRentFeesCollection) {
+		result := calculateRentResult(slotCtx, rent, acct)
+
+		if result == RentExempt {
+			acct.RentEpoch = math.MaxUint64
+			return acct, true
+		} else if result == RentNoCollectionNow {
+			return acct, false
+		} else /*result == RentCollectRent*/ {
+			panic("mainnet-beta shouldn't have any rent paying accounts")
+		}
+	} else {
+		if acct.RentEpoch != math.MaxUint64 && acct.Lamports >= rent.MinimumBalance(uint64(len(acct.Data))) {
+			acct.RentEpoch = math.MaxUint64
+			return acct, true
+		} else {
+			return acct, false
+		}
+	}
+}
+
+func collectRent(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, pubkey solana.PublicKey) (*accounts.Account, bool) {
+	acct, err := slotCtx.GetAccount(pubkey)
+	if err != nil {
+		acct, err = slotCtx.AccountsDb.GetAccount(pubkey)
+		if err != nil {
+			panic("unable to find account for rent collection")
+		}
+	}
+
+	if acct.Lamports == 0 {
+		return nil, false
+	}
+
+	h := sha256.New()
+	h.Write(acct.Data)
+	fmt.Printf("collectRent acct: pubkey %s, lamports %d, owner %s, rent_epoch %d, data hash: %s\n", acct.Key, acct.Lamports, solana.PublicKeyFromBytes(acct.Owner[:]), acct.RentEpoch, solana.HashFromBytes(h.Sum(nil)))
+
+	return collectRentFromAcct(slotCtx, rent, acct)
+}
+
+func CollectRentEagerly(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, epochSchedule *sealevel.SysvarEpochSchedule) []*accounts.Account {
+	fmt.Printf("CollectRentEagerly ParentSlot = %d\n", slotCtx.ParentSlot)
+	partitions := RentCollectionPartitions(slotCtx.ParentSlot, slotCtx.Slot, epochSchedule)
+	pkRange := pubkeyRangeFromPartition(partitions[0])
+
+	rentPubkeys := slotCtx.AccountsDb.KeysBetweenPrefixes(pkRange.StartPrefix, pkRange.EndPrefix)
+	rentPubkeys = util.DedupePubkeys(rentPubkeys)
+
+	accts := make([]*accounts.Account, 0)
+
+	for _, pk := range rentPubkeys {
+		acct, _ := collectRent(slotCtx, rent, pk)
+
+		// TODO: logic for skip_rent_rewrites feature gate
+		if acct != nil {
+			accts = append(accts, acct)
+		}
+	}
+
+	return accts
 }
