@@ -15,7 +15,7 @@ var IncreaseTxAccountLockLimit = FeatureGate{Name: "IncreaseTxAccountLockLimit",
 var VoteStateAddVoteLatency = FeatureGate{Name: "VoteStateAddVoteLatency", Address: base58.MustDecodeFromString("7axKe5BTYBDD87ftzWbk5DfzWMGyRvqmWTduuo22Yaqy")}
 var AllowCommissionDecreaseAtAnyTime = FeatureGate{Name: "AllowCommissionDecreaseAtAnyTime", Address: base58.MustDecodeFromString("decoMktMcnmiq6t3u7g5BfgcQu91nKZr6RvMYf9z1Jb")}
 var CommissionUpdatesOnlyAllowedInFirstHalfOfEpoch = FeatureGate{Name: "CommissionUpdatesOnlyAllowedInFirstHalfOfEpoch", Address: base58.MustDecodeFromString("noRuG2kzACwgaY7TVmLRnUNPLKNVQE1fb7X55YWBehp")}
-var TimelyVoteCredits = FeatureGate{Name: "TimelyVoteCredits", Address: base58.MustDecodeFromString("2oXpeh141pPZCTCFHBsvCwG2BtaHZZAtrVhwaxSy6brS")}
+var TimelyVoteCredits = FeatureGate{Name: "TimelyVoteCredits", Address: base58.MustDecodeFromString("tvcF6b1TRz353zKuhBjinZkKzjmihXmBAHJdjNYw1sQ")}
 var ReduceStakeWarmupCooldown = FeatureGate{Name: "ReduceStakeWarmupCooldown", Address: base58.MustDecodeFromString("GwtDQBghCTBgmX2cpEGNPxTEBUTQRaDMGTr5qychdGMj")}
 var StakeRaiseMinimumDelegationTo1Sol = FeatureGate{Name: "StakeRaiseMinimumDelegationTo1Sol", Address: base58.MustDecodeFromString("9onWzzvCzNC2jfhxxeqRgs5q7nFAAKpCUvkj6T6GJK9i")}
 var StakeRedelegateInstruction = FeatureGate{Name: "StakeRedelegateInstruction", Address: base58.MustDecodeFromString("2KKG3C6RBnxQo9jVVrbzsoSh41TDXLK7gBc9gduyxSzW")}
@@ -30,6 +30,7 @@ var SimplifyAltBn128SyscallErrorCodes = FeatureGate{Name: "SimplityAltBn128Sysca
 var EnableAltbn128CompressionSyscall = FeatureGate{Name: "EnableAltbn128CompressionSyscall", Address: base58.MustDecodeFromString("EJJewYSddEEtSZHiqugnvhQHiWyZKjkFDQASd7oKSagn")}
 var EnableAltBn128Syscall = FeatureGate{Name: "EnableAltBn128Syscall", Address: base58.MustDecodeFromString("A16q37opZdQMCbe5qJ6xpBB9usykfv8jZaMkxvZQi4GJ")}
 var DisableRentFeesCollection = FeatureGate{Name: "DisableRentFeesCollection", Address: base58.MustDecodeFromString("CJzY83ggJHqPGDq8VisV3U91jDJLuEaALZooBrXtnnLU")}
+var DeprecateUnusedLegacyVotePlumbing = FeatureGate{Name: "DeprecateUnusedLegacyVotePlumbing", Address: base58.MustDecodeFromString("6Uf8S75PVh91MYgPQSHnjRAPQq6an5BDv9vomrCwDqLe")}
 
 var AllFeatureGates = []FeatureGate{StopTruncatingStringsInSyscalls, EnablePartitionedEpochReward, LastRestartSlotSysvar,
 	Libsecp256k1FailOnBadCount, Libsecp256k1FailOnBadCount2, EnableBpfLoaderSetAuthorityCheckedIx,
@@ -38,4 +39,4 @@ var AllFeatureGates = []FeatureGate{StopTruncatingStringsInSyscalls, EnableParti
 	StakeRaiseMinimumDelegationTo1Sol, StakeRedelegateInstruction, RequireRentExemptSplitDestination,
 	DeprecateExecutableMetaUpdateInBpfLoader, RelaxAuthoritySignerCheckForLookupTableCreation, DedupeConfigProgramSigners,
 	Ed25519PrecompileVerifyStrict, AbortOnInvalidCurve, Curve25519SyscallEnabled, SimplifyAltBn128SyscallErrorCodes,
-	EnableAltbn128CompressionSyscall, EnableAltBn128Syscall, DisableRentFeesCollection}
+	EnableAltbn128CompressionSyscall, EnableAltBn128Syscall, DisableRentFeesCollection, DeprecateUnusedLegacyVotePlumbing}

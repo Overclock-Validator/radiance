@@ -182,7 +182,7 @@ func calculateBankHash(slotCtx *sealevel.SlotCtx, acctsDeltaHash []byte, parentB
 	hasher.Write(numSigsBytes[:])
 	hasher.Write(blockHash[:])
 
-	maybeBankhash := hasher.Sum(nil)
+	bankHash := hasher.Sum(nil)
 
 	epochScheduleAcct, err := slotCtx.Accounts.GetAccount(&sealevel.SysvarEpochScheduleAddr)
 	if err != nil {
@@ -196,13 +196,8 @@ func calculateBankHash(slotCtx *sealevel.SlotCtx, acctsDeltaHash []byte, parentB
 		panic("unable to deserialize epochschedule sysvar")
 	}
 
-	var bankHash []byte
 	if shouldIncludeEah(&epochSchedule, slotCtx) {
 		klog.Infof("**** EAH required for this bankhash")
-		bankHash = maybeBankhash
-	} else {
-		klog.Infof("**** EAH *NOT* required for this bankhash")
-		bankHash = maybeBankhash
 	}
 
 	return bankHash

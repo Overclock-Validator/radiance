@@ -84,6 +84,7 @@ func (acct *BorrowedAccount) DataMutable(f features.Features) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	err = acct.Touch()
 	if err != nil {
 		return nil, err

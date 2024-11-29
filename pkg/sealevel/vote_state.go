@@ -1144,24 +1144,32 @@ func (voteState *VoteState) ContainsSlot(candidateSlot uint64) bool {
 }
 
 const (
-	MaxLockoutHistory         = 31
-	VoteCreditsGraceSlots     = 2
-	VoteCreditsMaximumPerSlot = 8
-	MaxEpochCreditsHistory    = 64
+	MaxLockoutHistory            = 31
+	VoteCreditsGraceSlots        = 2
+	VoteCreditsMaximumPerSlot    = 16
+	VoteCreditsMaximumPerSlotOld = 8
+	MaxEpochCreditsHistory       = 64
 )
 
-func (voteState *VoteState) CreditsForVoteAtIndex(index uint64) uint64 {
+func (voteState *VoteState) CreditsForVoteAtIndex(index uint64, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing bool) uint64 {
 	landedVote := voteState.Votes.Peek(int(index))
 	latency := landedVote.Latency
 
-	if latency == 0 {
+	var maxCredits byte
+	if deprecateUnusedLegacyVotePlumbing {
+		maxCredits = VoteCreditsMaximumPerSlot
+	} else {
+		maxCredits = VoteCreditsMaximumPerSlotOld
+	}
+
+	if latency == 0 || (deprecateUnusedLegacyVotePlumbing && !timelyVoteCredits) {
 		return 1
 	} else {
 		diff, err := safemath.CheckedSubU8(latency, VoteCreditsGraceSlots)
 		if err != nil || diff == 0 {
-			return VoteCreditsMaximumPerSlot
+			return uint64(maxCredits)
 		} else {
-			credits, err := safemath.CheckedSubU8(VoteCreditsMaximumPerSlot, diff)
+			credits, err := safemath.CheckedSubU8(maxCredits, diff)
 			if err != nil || credits == 0 {
 				return 1
 			} else {
@@ -1187,14 +1195,15 @@ func (voteState *VoteState) IncrementCredits(epoch uint64, credits uint64) {
 		}
 	}
 
-	currentCredits := voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits
-	voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits = safemath.SaturatingAddU64(currentCredits, credits)
+	newCredits := safemath.SaturatingAddU64(voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits, credits)
+	voteState.EpochCredits[len(voteState.EpochCredits)-1].Credits = newCredits
 }
 
 func computeVoteLatency(votedForSlot uint64, currentSlot uint64) byte {
-	return byte(math.Min(float64(safemath.SaturatingSubU64(currentSlot, votedForSlot)), math.MaxUint8))
+	return byte(min(safemath.SaturatingSubU64(currentSlot, votedForSlot), math.MaxUint8))
 }
-func (voteState *VoteState) ProcessNextVoteSlot(nextVoteSlot uint64, epoch uint64, currentSlot uint64) {
+
+func (voteState *VoteState) ProcessNextVoteSlot(nextVoteSlot uint64, epoch uint64, currentSlot uint64, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing bool) {
 	lastVotedSlot, ok := voteState.LastVotedSlot()
 	if ok && nextVoteSlot <= lastVotedSlot {
 		return
@@ -1202,11 +1211,15 @@ func (voteState *VoteState) ProcessNextVoteSlot(nextVoteSlot uint64, epoch uint6
 
 	voteState.PopExpiredVotes(nextVoteSlot)
 
-	landedVote := LandedVote{Latency: computeVoteLatency(nextVoteSlot, currentSlot),
-		Lockout: VoteLockout{Slot: nextVoteSlot, ConfirmationCount: 1}}
+	var latency byte
+	if timelyVoteCredits || !deprecateUnusedLegacyVotePlumbing {
+		latency = computeVoteLatency(nextVoteSlot, currentSlot)
+	}
+
+	landedVote := LandedVote{Latency: latency, Lockout: VoteLockout{Slot: nextVoteSlot, ConfirmationCount: 1}}
 
 	if voteState.Votes.Len() == MaxLockoutHistory {
-		credits := voteState.CreditsForVoteAtIndex(0)
+		credits := voteState.CreditsForVoteAtIndex(0, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing)
 		landedVote := voteState.Votes.PopFront()
 		voteState.RootSlot = &landedVote.Lockout.Slot
 

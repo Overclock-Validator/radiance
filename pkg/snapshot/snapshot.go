@@ -100,7 +100,6 @@ type indexEntryCommitterTask struct {
 func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) error {
 	manifest, err := UnmarshalManifestFromSnapshot(snapshotFile, accountsDbDir)
 	if err != nil {
-		fmt.Printf("err: %s\n", err)
 		return err
 	}
 

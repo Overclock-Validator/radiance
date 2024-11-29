@@ -6,6 +6,7 @@ import (
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"go.firedancer.io/radiance/pkg/sealevel"
+	"go.firedancer.io/radiance/pkg/util"
 	"k8s.io/klog/v2"
 )
 
@@ -1117,6 +1118,7 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	var numStorages uint64
 	numStorages, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
@@ -1133,11 +1135,13 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 
 	acctDbFields.Version, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
 	acctDbFields.Slot, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
@@ -1149,6 +1153,7 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	var numHistoricalRoots uint64
 	numHistoricalRoots, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
@@ -1156,7 +1161,8 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 		var historicalRoot uint64
 		historicalRoot, err = decoder.ReadUint64(bin.LE)
 		if err != nil {
-			return err
+			util.VerboseHandleError(err)
+			//return err
 		}
 		acctDbFields.HistoricalRoots = append(acctDbFields.HistoricalRoots, historicalRoot)
 	}
@@ -1164,7 +1170,8 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	var numHistoricalRootsWithHash uint64
 	numHistoricalRootsWithHash, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		return err
+		//util.VerboseHandleError(err)
+		//return err
 	}
 
 	for count := uint64(0); count < numHistoricalRootsWithHash; count++ {
@@ -1286,17 +1293,20 @@ func (snapshot *SnapshotManifest) UnmarshalWithDecoder(decoder *bin.Decoder) err
 
 	err = snapshot.Bank.UnmarshalWithDecoder(decoder)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
 	err = snapshot.AccountsDb.UnmarshalWithDecoder(decoder)
 	if err != nil {
+		util.VerboseHandleError(err)
 		return err
 	}
 
 	snapshot.LamportsPerSignature, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		return err
+		//util.VerboseHandleError(err)
+		//return err
 	}
 
 	if !decoder.HasRemaining() {

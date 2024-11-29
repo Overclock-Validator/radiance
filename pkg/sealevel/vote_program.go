@@ -924,6 +924,7 @@ func VoteProgramExecute(execCtx *ExecutionCtx) error {
 }
 
 func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteInstrVoteInit, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
+	klog.Infof("InitializeAccount")
 	if uint64(len(voteAccount.Data())) != sizeOfVersionedVoteState(f) {
 		return InstrErrInvalidAccountData
 	}
@@ -947,6 +948,7 @@ func VoteProgramInitializeAccount(voteAccount *BorrowedAccount, voteInit VoteIns
 }
 
 func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey, voteAuthorize uint32, signers []solana.PublicKey, clock SysvarClock, f features.Features) error {
+	klog.Infof("VoteAuthorize")
 
 	voteStateVersions, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
@@ -995,6 +997,8 @@ func VoteProgramAuthorize(voteAcct *BorrowedAccount, authorized solana.PublicKey
 }
 
 func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCtx, voteAcct *BorrowedAccount, newAuthority solana.PublicKey, authorizationType uint32, currentAuthorityDerivedKeyOwner solana.PublicKey, currentAuthorityDerivedKeySeed string) error {
+	klog.Infof("AuthorizeWithSeed")
+
 	txCtx := execCtx.TransactionContext
 
 	// TODO: switch to using a sysvar cache
@@ -1036,6 +1040,8 @@ func VoteProgramAuthorizeWithSeed(execCtx *ExecutionCtx, instrCtx *InstructionCt
 }
 
 func VoteProgramUpdateValidatorIdentity(voteAcct *BorrowedAccount, nodePubkey solana.PublicKey, signers []solana.PublicKey, f features.Features) error {
+	klog.Infof("UpdateValidatorIdentity")
+
 	voteStateVersions, err := UnmarshalVersionedVoteState(voteAcct.Data())
 	if err != nil {
 		return err
@@ -1070,6 +1076,8 @@ func isCommissionUpdateAllowed(slot uint64, epochSchedule SysvarEpochSchedule) b
 }
 
 func VoteProgramUpdateCommission(voteAcct *BorrowedAccount, commission byte, signers []solana.PublicKey, epochSchedule SysvarEpochSchedule, clock SysvarClock, f features.Features) error {
+	klog.Infof("UpdateCommission")
+
 	var voteState *VoteState
 
 	enforceCommissionUpdateRule := true
@@ -1193,20 +1201,20 @@ func checkSlotsAreValid(voteState *VoteState, voteSlots []uint64, voteHash [32]b
 	return nil
 }
 
-func processVoteUnfiltered(voteState *VoteState, voteSlots []uint64, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64) error {
+func processVoteUnfiltered(voteState *VoteState, voteSlots []uint64, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing bool) error {
 	err := checkSlotsAreValid(voteState, voteSlots, vote.Hash, slotHashes)
 	if err != nil {
 		return err
 	}
 
 	for _, voteSlot := range voteSlots {
-		voteState.ProcessNextVoteSlot(voteSlot, epoch, currentSlot)
+		voteState.ProcessNextVoteSlot(voteSlot, epoch, currentSlot, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing)
 	}
 
 	return nil
 }
 
-func processVote(voteState *VoteState, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64) error {
+func processVote(voteState *VoteState, vote *VoteInstrVote, slotHashes SysvarSlotHashes, epoch uint64, currentSlot uint64, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing bool) error {
 	if len(vote.Slots) == 0 {
 		return VoteErrEmptySlots
 	}
@@ -1227,16 +1235,21 @@ func processVote(voteState *VoteState, vote *VoteInstrVote, slotHashes SysvarSlo
 		return VoteErrVotesTooOldAllFiltered
 	}
 
-	return processVoteUnfiltered(voteState, voteSlots, vote, slotHashes, epoch, currentSlot)
+	return processVoteUnfiltered(voteState, voteSlots, vote, slotHashes, epoch, currentSlot, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing)
 }
 
 func VoteProgramProcessVote(voteAcct *BorrowedAccount, slotHashes SysvarSlotHashes, clock SysvarClock, vote *VoteInstrVote, signers []solana.PublicKey, f features.Features) error {
+	klog.Infof("Vote / VoteSwitch")
+
 	voteState, err := verifyAndGetVoteState(voteAcct, clock, signers)
 	if err != nil {
 		return err
 	}
 
-	err = processVote(voteState, vote, slotHashes, clock.Epoch, clock.Slot)
+	timelyVoteCredits := f.IsActive(features.TimelyVoteCredits)
+	deprecateUnusedLegacyVotePlumbing := f.IsActive(features.DeprecateUnusedLegacyVotePlumbing)
+
+	err = processVote(voteState, vote, slotHashes, clock.Epoch, clock.Slot, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing)
 	if err != nil {
 		return err
 	}
@@ -1445,6 +1458,11 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 	return nil
 }
 
+type latencyUpdate struct {
+	idx   int
+	state LandedVote
+}
+
 func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote], newRoot *uint64, timestamp *int64, epoch uint64, currentSlot uint64, f features.Features) error {
 	if newState.IsEmpty() {
 		panic("newState should not be empty")
@@ -1504,10 +1522,12 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 	currentVoteStateIndex := uint64(0)
 	newVoteStateIndex := uint64(0)
 
-	timelyVoteCreditsEnabled := f.IsActive(features.TimelyVoteCredits)
+	timelyVoteCredits := f.IsActive(features.TimelyVoteCredits)
+	deprecateUnusedLegacyVotePlumbing := f.IsActive(features.DeprecateUnusedLegacyVotePlumbing)
 
 	var earnedCredits uint64
-	if timelyVoteCreditsEnabled {
+
+	if timelyVoteCredits {
 		earnedCredits = 0
 	} else {
 		earnedCredits = 1
@@ -1517,12 +1537,13 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 		voteState.Votes.Range(func(i int, currentVote LandedVote) bool {
 			var err error
 			if currentVote.Lockout.Slot <= *newRoot {
-				if timelyVoteCreditsEnabled || currentVote.Lockout.Slot != *newRoot {
-					earnedCredits, err = safemath.CheckedAddU64(earnedCredits, voteState.CreditsForVoteAtIndex(currentVoteStateIndex))
+				if timelyVoteCredits || currentVote.Lockout.Slot != *newRoot {
+					earnedCredits, err = safemath.CheckedAddU64(earnedCredits, voteState.CreditsForVoteAtIndex(currentVoteStateIndex, timelyVoteCredits, deprecateUnusedLegacyVotePlumbing))
 					if err != nil {
 						panic("`earned_credits` does not overflow")
 					}
 				}
+
 				currentVoteStateIndex, err = safemath.CheckedAddU64(currentVoteStateIndex, 1)
 				if err != nil {
 					panic("`current_vote_state_index` is bounded by `MAX_LOCKOUT_HISTORY` when processing new root")
@@ -1532,6 +1553,8 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 			return false
 		})
 	}
+
+	var stateUpdates []latencyUpdate
 
 	for currentVoteStateIndex < uint64(voteState.Votes.Len()) && newVoteStateIndex < uint64(newState.Len()) {
 		var err error
@@ -1550,7 +1573,10 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 			if newVote.Lockout.ConfirmationCount < currentVote.Lockout.ConfirmationCount {
 				return VoteErrConfirmationRollback
 			}
+
 			newVote.Latency = voteState.Votes.Peek(int(currentVoteStateIndex)).Latency
+			stateUpdate := latencyUpdate{idx: int(newVoteStateIndex), state: newVote}
+			stateUpdates = append(stateUpdates, stateUpdate)
 
 			currentVoteStateIndex, err = safemath.CheckedAddU64(currentVoteStateIndex, 1)
 			if err != nil {
@@ -1569,24 +1595,29 @@ func processNewVoteState(voteState *VoteState, newState *deque.Deque[LandedVote]
 		}
 	}
 
-	if timelyVoteCreditsEnabled {
-		var indicesToChange []int
-		var landedVotes []LandedVote
+	for _, update := range stateUpdates {
+		newState.Replace(update.idx, update.state)
+	}
+
+	var latencyStateUpdates []latencyUpdate
+
+	if timelyVoteCredits {
 		newState.Range(func(i int, newVote LandedVote) bool {
 			if newVote.Latency == 0 {
 				newLandedVote := newVote
 				newLandedVote.Latency = computeVoteLatency(newVote.Lockout.Slot, currentSlot)
-				landedVotes = append(landedVotes, newLandedVote)
-				indicesToChange = append(indicesToChange, i)
+				lsa := latencyUpdate{idx: i, state: newLandedVote}
+				latencyStateUpdates = append(latencyStateUpdates, lsa)
 			}
 			return true
 		})
-		for i, idx := range indicesToChange {
-			newState.Replace(idx, landedVotes[i])
+
+		for _, update := range latencyStateUpdates {
+			newState.Replace(update.idx, update.state)
 		}
 	}
 
-	if voteState.RootSlot != newRoot {
+	if voteState.RootSlot != nil && newRoot != nil && *voteState.RootSlot != *newRoot {
 		voteState.IncrementCredits(epoch, earnedCredits)
 	}
 
@@ -1639,6 +1670,8 @@ func checkAndFilterProposedVoteState(voteState *VoteState, proposedLockouts *deq
 }
 
 func VoteProgramProcessVoteStateUpdate(voteAcct *BorrowedAccount, slotHashes SysvarSlotHashes, clock SysvarClock, voteStateUpdate *VoteInstrUpdateVoteState, signers []solana.PublicKey, f features.Features) error {
+	klog.Infof("VoteStateUpdate")
+
 	voteState, err := verifyAndGetVoteState(voteAcct, clock, signers)
 	if err != nil {
 		return err

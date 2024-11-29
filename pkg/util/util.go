@@ -3,12 +3,14 @@ package util
 import (
 	"encoding/binary"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/zeebo/blake3"
 	"go.firedancer.io/radiance/pkg/accounts"
+	"k8s.io/klog/v2"
 )
 
 // Got to be a valid hostname as per Let's Encrypt, ie 'localhost' is not valid.
@@ -71,4 +73,15 @@ func CalculateAcctHash(acct accounts.Account) []byte {
 	_, _ = hasher.Write(acct.Key[:])
 
 	return hasher.Sum(nil)
+}
+
+// this logs the function name as well.
+func VerboseHandleError(err error) (b bool) {
+	if err != nil {
+		pc, filename, line, _ := runtime.Caller(1)
+
+		klog.Infof("[error] in %s[%s:%d] %v", runtime.FuncForPC(pc).Name(), filename, line, err)
+		b = true
+	}
+	return
 }

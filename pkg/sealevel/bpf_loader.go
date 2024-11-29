@@ -88,8 +88,18 @@ func (write *UpgradeableLoaderInstrWrite) UnmarshalWithDecoder(decoder *bin.Deco
 		return err
 	}
 
-	write.Bytes, err = decoder.ReadByteSlice()
-	return err
+	bytesLen, err := decoder.ReadUint64(bin.LE)
+	if err != nil {
+		return err
+	}
+
+	bytes, err := decoder.ReadBytes(int(bytesLen))
+	if err != nil {
+		return err
+	}
+
+	write.Bytes = bytes
+	return nil
 }
 
 func (write *UpgradeableLoaderInstrWrite) MarshalWithEncoder(encoder *bin.Encoder) error {
@@ -365,9 +375,9 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 	}
 	defer program.Drop()
 
-	writeOffset := safemath.SaturatingAddU64(programDataOffset, uint64(len(bytes)))
-	if uint64(len(program.Data())) < writeOffset {
-		klog.Infof("write overflow. acct data len = %d, writeOffset = %d", len(program.Data()), writeOffset)
+	writeEnd := safemath.SaturatingAddU64(programDataOffset, uint64(len(bytes)))
+	if uint64(len(program.Data())) < writeEnd {
+		klog.Infof("write overflow. acct data len = %d, writeOffset = %d", len(program.Data()), writeEnd)
 		return InstrErrAccountDataTooSmall
 	}
 
@@ -376,7 +386,7 @@ func writeProgramData(execCtx *ExecutionCtx, programDataOffset uint64, bytes []b
 		return err
 	}
 
-	copy(data[programDataOffset:writeOffset], bytes)
+	copy(data[programDataOffset:writeEnd], bytes)
 	return nil
 }
 
@@ -949,8 +959,6 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 	if err != nil {
 		return err
 	}
-
-	klog.Infof("******** v3: length of program bytes: %d ********", len(program.Text))
 
 	txCtx := execCtx.TransactionContext
 	instrCtx, err := txCtx.CurrentInstructionCtx()
