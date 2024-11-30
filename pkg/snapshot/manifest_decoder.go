@@ -1046,18 +1046,22 @@ func (info *BankHashInfo) UnmarshalWithDecoder(decoder *bin.Decoder) error {
 	var hash []byte
 	hash, err = decoder.ReadBytes(32)
 	if err != nil {
-		return err
+		util.VerboseHandleError(err)
 	}
 	copy(info.Hash[:], hash)
 
 	hash, err = decoder.ReadBytes(32)
 	if err != nil {
-		return err
+		util.VerboseHandleError(err)
 	}
 	copy(info.SnapshotHash[:], hash)
 
 	err = info.Stats.UnmarshalWithDecoder(decoder)
-	return err
+	if err != nil {
+		util.VerboseHandleError(err)
+	}
+
+	return nil
 }
 
 func (pair *SlotMapPair) UnmarshalWithDecoder(decoder *bin.Decoder) error {
@@ -1128,6 +1132,7 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 		var slotAcctVecs SlotAcctVecs
 		err = slotAcctVecs.UnmarshalWithDecoder(decoder)
 		if err != nil {
+			util.VerboseHandleError(err)
 			return err
 		}
 		acctDbFields.Storages[slotAcctVecs.Slot] = slotAcctVecs
@@ -1136,12 +1141,11 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	acctDbFields.Version, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		util.VerboseHandleError(err)
-		return err
+		//return err
 	}
 
 	acctDbFields.Slot, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		util.VerboseHandleError(err)
 		return err
 	}
 
@@ -1154,7 +1158,7 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	numHistoricalRoots, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
 		util.VerboseHandleError(err)
-		return err
+		return nil
 	}
 
 	for count := uint64(0); count < numHistoricalRoots; count++ {
@@ -1162,7 +1166,7 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 		historicalRoot, err = decoder.ReadUint64(bin.LE)
 		if err != nil {
 			util.VerboseHandleError(err)
-			//return err
+			return nil
 		}
 		acctDbFields.HistoricalRoots = append(acctDbFields.HistoricalRoots, historicalRoot)
 	}
@@ -1170,15 +1174,16 @@ func (acctDbFields *AccountsDbFields) UnmarshalWithDecoder(decoder *bin.Decoder)
 	var numHistoricalRootsWithHash uint64
 	numHistoricalRootsWithHash, err = decoder.ReadUint64(bin.LE)
 	if err != nil {
-		//util.VerboseHandleError(err)
-		//return err
+		util.VerboseHandleError(err)
+		return nil
 	}
 
 	for count := uint64(0); count < numHistoricalRootsWithHash; count++ {
 		var pair SlotMapPair
 		err = pair.UnmarshalWithDecoder(decoder)
 		if err != nil {
-			return err
+			util.VerboseHandleError(err)
+			return nil
 		}
 		acctDbFields.HistoricalRootsWithHash = append(acctDbFields.HistoricalRootsWithHash, pair)
 	}
