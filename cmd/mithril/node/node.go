@@ -5,11 +5,9 @@ package node
 import (
 	"fmt"
 
-	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/spf13/cobra"
 	"go.firedancer.io/radiance/pkg/accountsdb"
 	"go.firedancer.io/radiance/pkg/replay"
-	"go.firedancer.io/radiance/pkg/rpcclient"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"k8s.io/klog/v2"
 )
@@ -26,7 +24,8 @@ var (
 	updateAccountsDb   bool
 	path               string
 	outputDir          string
-	slot               int64
+	startSlot          int64
+	endSlot            int64
 )
 
 func init() {
@@ -35,29 +34,8 @@ func init() {
 	Cmd.Flags().BoolVarP(&updateAccountsDb, "update-accounts-db", "u", false, "Update accountsdb after execution")
 	Cmd.Flags().StringVarP(&path, "path", "p", "", "Path of full snapshot or AccountsDB to load from")
 	Cmd.Flags().StringVarP(&outputDir, "out", "o", "", "Output path for writing AccountsDB data to")
-	Cmd.Flags().Int64VarP(&slot, "slot", "b", -1, "Block at which to begin replaying")
-}
-
-func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*replay.Block, error) {
-	block := new(replay.Block)
-
-	for _, tx := range blockResult.Transactions {
-		txParsed, err := tx.GetTransaction()
-		if err != nil {
-			return nil, err
-		}
-		block.Transactions = append(block.Transactions, txParsed)
-		block.TxMetas = append(block.TxMetas, tx.Meta)
-	}
-
-	block.Blockhash = blockResult.Blockhash
-	block.RecentBlockhash = blockResult.PreviousBlockhash
-
-	for _, tx := range block.Transactions {
-		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
-	}
-
-	return block, nil
+	Cmd.Flags().Int64VarP(&startSlot, "startslot", "b", -1, "Block at which to begin replaying")
+	Cmd.Flags().Int64VarP(&endSlot, "endslot", "e", -1, "Block at which to stop replaying, inclusive")
 }
 
 func run(c *cobra.Command, args []string) {
@@ -67,11 +45,27 @@ func run(c *cobra.Command, args []string) {
 		return
 	}
 
-	if slot < 0 {
+	if startSlot < 0 {
 		if loadFromAccountsDb {
 			klog.Errorf("must specify a slot at which to begin replaying")
 			return
 		}
+	}
+
+	if endSlot != -1 && endSlot < startSlot {
+		klog.Errorf("end slot cannot be lower than start block")
+		return
+	}
+
+	if endSlot > 0 && startSlot < 0 {
+		klog.Errorf("specified end block without providing start block")
+		return
+	}
+
+	if startSlot > 0 && endSlot > 0 {
+		updateAccountsDb = true
+	} else if startSlot > 0 && endSlot == -1 {
+		endSlot = startSlot
 	}
 
 	var err error
@@ -94,7 +88,7 @@ func run(c *cobra.Command, args []string) {
 		klog.Infof("successfully created accounts db from snapshot %s", path)
 
 		// just processing the snapshot - not executing blocks.
-		if slot < 0 {
+		if startSlot < 0 {
 			return
 		}
 
@@ -120,32 +114,5 @@ func run(c *cobra.Command, args []string) {
 		klog.Fatalf("unable to open manifest file")
 	}
 
-	rpcc := rpcclient.NewRpcClient("https://api.mainnet-beta.solana.com")
-	blockResult, err := rpcc.GetBlockFinalized(uint64(slot))
-	if err != nil {
-		klog.Fatalf("error fetching block: %s\n", err)
-	}
-
-	block, err := newBlockFromBlockResult(blockResult)
-	if err != nil {
-		klog.Fatalf("error creating block from BlockResult: %s\n", err)
-	}
-
-	leader, err := rpcc.GetLeaderForSlot(uint64(slot))
-	if err != nil {
-		klog.Fatalf("error fetching leader for slot: %s\n", err)
-	}
-
-	block.Slot = uint64(slot)
-	block.ParentBankhash = manifest.Bank.Hash
-	block.Manifest = manifest
-	block.Leader = leader
-	block.Reward = replay.BlockRewardsInfo{Leader: blockResult.Rewards[0].Pubkey, Lamports: uint64(blockResult.Rewards[0].Lamports), PostBalance: blockResult.Rewards[0].PostBalance}
-
-	err = replay.ProcessBlock(accountsDb, block, updateAccountsDb)
-	if err != nil {
-		klog.Errorf("error encountered during block replay: %s\n", err)
-	} else {
-		klog.Infof("block replayed successfully.\n")
-	}
+	replay.ReplayBlocks(accountsDb, manifest, startSlot, endSlot, updateAccountsDb)
 }

@@ -7,7 +7,7 @@ import (
 	"math/big"
 
 	"filippo.io/edwards25519"
-	bn254 "github.com/consensys/gnark-crypto/ecc/bn254"
+	bn254 "github.com/Overclock-Validator/gnark-crypto/ecc/bn254"
 	bn256lib "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/gtank/ristretto255"
 	"github.com/keep-network/keep-core/pkg/altbn128"
@@ -668,6 +668,9 @@ func G2FromInts(x *gfP2, y *gfP2) (*bn256lib.G2, error) {
 	return g2, err
 }
 
+var empty64Bytes [64]byte
+var empty128Bytes [128]byte
+
 func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultAddr uint64) (uint64, error) {
 	klog.Infof("SyscallAltBn128Compression")
 
@@ -781,6 +784,11 @@ func SyscallAltBn128CompressionImpl(vm sbpf.VM, op, inputAddr, inputLen, resultA
 		{
 			if inputLen != Bn128G2CompressedLen {
 				return syscallSuccess(1)
+			}
+
+			if bytes.Compare(inputSlice, empty64Bytes[:]) == 0 {
+				copy(callResult, empty128Bytes[:])
+				return syscallSuccess(0)
 			}
 
 			var point bn254.G2Affine

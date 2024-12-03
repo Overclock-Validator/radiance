@@ -13,6 +13,7 @@ import (
 	"go.firedancer.io/radiance/pkg/features"
 	"go.firedancer.io/radiance/pkg/fees"
 	"go.firedancer.io/radiance/pkg/rent"
+	"go.firedancer.io/radiance/pkg/rpcclient"
 	"go.firedancer.io/radiance/pkg/sealevel"
 	"go.firedancer.io/radiance/pkg/snapshot"
 	"go.firedancer.io/radiance/pkg/util"
@@ -240,12 +241,80 @@ func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *feature
 	return f
 }
 
-func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) error {
+func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*Block, error) {
+	block := new(Block)
+
+	for _, tx := range blockResult.Transactions {
+		txParsed, err := tx.GetTransaction()
+		if err != nil {
+			return nil, err
+		}
+		block.Transactions = append(block.Transactions, txParsed)
+		block.TxMetas = append(block.TxMetas, tx.Meta)
+	}
+
+	block.Blockhash = blockResult.Blockhash
+	block.RecentBlockhash = blockResult.PreviousBlockhash
+
+	for _, tx := range block.Transactions {
+		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)
+	}
+
+	return block, nil
+}
+
+func ReplayBlocks(acctsDb *accountsdb.AccountsDb, snapshotManifest *snapshot.SnapshotManifest, startSlot, endSlot int64, updateAcctsDb bool) error {
+	var bankHash []byte
+
+	rpcc := rpcclient.NewRpcClient("https://api.mainnet-beta.solana.com")
+
+	for slot := int64(startSlot); slot <= endSlot; slot++ {
+
+		blockResult, err := rpcc.GetBlockFinalized(uint64(slot))
+		if err != nil {
+			klog.Fatalf("error fetching block: %s\n", err)
+		}
+
+		block, err := newBlockFromBlockResult(blockResult)
+		if err != nil {
+			klog.Fatalf("error creating block from BlockResult: %s\n", err)
+		}
+
+		leader, err := rpcc.GetLeaderForSlot(uint64(slot))
+		if err != nil {
+			klog.Fatalf("error fetching leader for slot: %s\n", err)
+		}
+
+		block.Slot = uint64(slot)
+
+		if slot == startSlot {
+			block.ParentBankhash = snapshotManifest.Bank.Hash
+		} else {
+			copy(block.ParentBankhash[:], bankHash)
+		}
+
+		block.Manifest = snapshotManifest
+		block.Leader = leader
+		block.Reward = BlockRewardsInfo{Leader: blockResult.Rewards[0].Pubkey, Lamports: uint64(blockResult.Rewards[0].Lamports), PostBalance: blockResult.Rewards[0].PostBalance}
+
+		bankHash, err = ProcessBlock(acctsDb, block, updateAcctsDb)
+		if err != nil {
+			klog.Errorf("error encountered during block replay: %s\n", err)
+			break
+		} else {
+			klog.Infof("block replayed successfully.\n")
+		}
+	}
+
+	return nil
+}
+
+func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bool) ([]byte, error) {
 
 	// gather up all accounts referenced in the block
 	accts, epoch, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	oldAccts := make([]accounts.Account, 0)
@@ -340,7 +409,7 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 
 	// calculate bankhash
 	bankHash := calculateBankHash(slotCtx, acctDeltaHash, block.ParentBankhash, block.NumSignatures, block.Blockhash)
-	klog.Infof("calculated bankhash was %s", base58.Encode(bankHash))
+	klog.Infof("calculated bankhash for slot %d was %s", block.Slot, base58.Encode(bankHash))
 
-	return err
+	return bankHash, err
 }

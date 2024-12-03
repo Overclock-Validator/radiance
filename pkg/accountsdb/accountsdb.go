@@ -142,9 +142,9 @@ func (accountsDb *AccountsDb) StoreAccounts(accts []*accounts.Account, slot uint
 	defer appendVecFile.Close()
 
 	// allocate required memory all at once to avoid constant reallocs
-	marshaledSize := appendVecAcctsMarshaledSize(accts)
+	//marshaledSize := appendVecAcctsMarshaledSize(accts)
 	appendVecAcctsBuf := new(bytes.Buffer)
-	appendVecAcctsBuf.Grow(int(marshaledSize))
+	//appendVecAcctsBuf.Grow(int(marshaledSize))
 
 	indexWriter := new(bytes.Buffer)
 	indexWriter.Grow(24)

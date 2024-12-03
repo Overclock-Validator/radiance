@@ -31,8 +31,9 @@ require (
 require (
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/FiloSottile/powersoftau v0.0.0-20180220134833-e2af11381747 // indirect
+	github.com/Overclock-Validator/gnark-crypto v0.0.0-20241203115807-4a97a7c1b020 // indirect
 	github.com/abcum/lcp v0.0.0-20201209214815-7a3f3840be81 // indirect
-	github.com/bits-and-blooms/bitset v1.7.0 // indirect
+	github.com/bits-and-blooms/bitset v1.14.2 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/cockroachdb/errors v1.11.3 // indirect
@@ -40,7 +41,8 @@ require (
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
-	github.com/consensys/bavard v0.1.13 // indirect
+	github.com/consensys/bavard v0.1.22 // indirect
+	github.com/consensys/gnark-crypto v0.10.0 // indirect
 	github.com/dchest/blake2b v1.0.0 // indirect
 	github.com/decred/base58 v1.0.5 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
@@ -90,7 +92,6 @@ require (
 	github.com/bwesterb/go-ristretto v1.2.3
 	github.com/clearmatics/bn256 v0.0.0-20190516154049-c6c2a2b131e6
 	github.com/cockroachdb/pebble v1.1.2
-	github.com/consensys/gnark-crypto v0.13.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dusk-network/bn256 v0.5.1-lattices
 	github.com/dustinxie/ecc v0.0.0-20210511000915-959544187564

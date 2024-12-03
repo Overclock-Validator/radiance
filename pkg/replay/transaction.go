@@ -14,6 +14,7 @@ import (
 	"go.firedancer.io/radiance/pkg/fees"
 	"go.firedancer.io/radiance/pkg/rent"
 	"go.firedancer.io/radiance/pkg/sealevel"
+	"go.firedancer.io/radiance/pkg/util"
 	"k8s.io/klog/v2"
 )
 
@@ -231,7 +232,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 			panic(fmt.Sprintf("unable to get tx acct %d whilst checking for pre-balances divergences", count))
 		}
 		if txAcct.Lamports != txMeta.PreBalances[count] {
-			klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d (acct slot %d)", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count], txAcct.Slot)
+			klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count], util.PrettyPrintAcct(txAcct))
 		}
 		execCtx.TransactionContext.Accounts.Unlock(count)
 	}
@@ -312,7 +313,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 				panic(fmt.Sprintf("unable to get tx acct %d whilst checking for post-balances divergences", count))
 			}
 			if txAcct.Lamports != txMeta.PostBalances[count] {
-				klog.Infof("tx %s post-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PostBalances[count])
+				klog.Infof("tx %s post-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s\n", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PostBalances[count], util.PrettyPrintAcct(txAcct))
 			}
 			execCtx.TransactionContext.Accounts.Unlock(count)
 		}
