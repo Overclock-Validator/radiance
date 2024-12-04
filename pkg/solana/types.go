@@ -1,6 +1,6 @@
 package solana
 
-import "go.firedancer.io/radiance/pkg/base58"
+import "github.com/Overclock-Validator/mithril/pkg/base58"
 
 type Hash [32]byte
 type Address [32]byte

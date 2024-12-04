@@ -3,8 +3,8 @@ package sealevel
 import (
 	"errors"
 
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/base58"
 )
 
 const BpfLoaderUpgradeableAddrStr = "BPFLoaderUpgradeab1e11111111111111111111111"

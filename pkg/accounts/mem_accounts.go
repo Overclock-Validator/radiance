@@ -3,7 +3,7 @@ package accounts
 import (
 	"fmt"
 
-	"go.firedancer.io/radiance/pkg/base58"
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 )
 
 type MemAccounts struct {

@@ -6,14 +6,14 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/Overclock-Validator/mithril/fixtures"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/cu"
+	"github.com/Overclock-Validator/mithril/pkg/features"
+	"github.com/Overclock-Validator/mithril/pkg/global"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
 	"github.com/stretchr/testify/assert"
-	"go.firedancer.io/radiance/fixtures"
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/cu"
-	"go.firedancer.io/radiance/pkg/features"
-	"go.firedancer.io/radiance/pkg/global"
 )
 
 // BPF loader tests

@@ -3,7 +3,7 @@ package cu
 import (
 	"errors"
 
-	"go.firedancer.io/radiance/pkg/safemath"
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
 )
 
 var ErrComputeExceeded = errors.New("Compute exceeded")

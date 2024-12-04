@@ -1,7 +1,7 @@
 package features
 
 import (
-	"go.firedancer.io/radiance/pkg/base58"
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 )
 
 var StopTruncatingStringsInSyscalls = FeatureGate{Name: "StopTruncatingStringsInSyscalls", Address: base58.MustDecodeFromString("16FMCmgLzCNNz6eTwGanbyN2ZxvTBSLuQ6DZhgeMshg")}

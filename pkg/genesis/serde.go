@@ -4,8 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/Overclock-Validator/mithril/pkg/runtime"
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/runtime"
 )
 
 // Dumping ground for handwritten serialization boilerplate.

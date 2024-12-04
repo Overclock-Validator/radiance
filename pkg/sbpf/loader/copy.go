@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 // The following ELF loading rules seem mostly arbitrary.

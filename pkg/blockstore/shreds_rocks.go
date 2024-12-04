@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/Overclock-Validator/mithril/pkg/shred"
 	"github.com/linxGnu/grocksdb"
-	"go.firedancer.io/radiance/pkg/shred"
 )
 
 func (d *DB) GetEntries(meta *SlotMeta, shredRevision int) ([]Entries, error) {

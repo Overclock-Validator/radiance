@@ -6,8 +6,8 @@ import (
 	"io"
 	"math"
 
+	"github.com/Overclock-Validator/mithril/pkg/features"
 	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
-	"go.firedancer.io/radiance/pkg/features"
 )
 
 const DataStart = (SignatureOffsetsSerializedSize + SignatureOffsetStarts)

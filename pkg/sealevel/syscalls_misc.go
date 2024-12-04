@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 func SyscallAbortImpl(_ sbpf.VM) (uint64, error) {

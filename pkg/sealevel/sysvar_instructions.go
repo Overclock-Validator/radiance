@@ -3,9 +3,9 @@ package sealevel
 import (
 	"encoding/binary"
 
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/solana"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/base58"
+	"github.com/Overclock-Validator/mithril/pkg/solana"
 )
 
 const SysvarInstructionsAddrStr = "Sysvar1nstructions1111111111111111111111111"

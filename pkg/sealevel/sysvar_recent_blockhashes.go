@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/base58"
 )
 
 const SysvarRecentBlockHashesAddrStr = "SysvarRecentB1ockHashes11111111111111111111"

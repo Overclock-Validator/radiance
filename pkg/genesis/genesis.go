@@ -3,8 +3,8 @@ package genesis
 import (
 	"time"
 
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/runtime"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/runtime"
 )
 
 // Genesis contains the genesis state of a Solana ledger.

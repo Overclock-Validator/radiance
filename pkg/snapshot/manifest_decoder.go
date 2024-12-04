@@ -3,10 +3,10 @@ package snapshot
 import (
 	"fmt"
 
+	"github.com/Overclock-Validator/mithril/pkg/sealevel"
+	"github.com/Overclock-Validator/mithril/pkg/util"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/sealevel"
-	"go.firedancer.io/radiance/pkg/util"
 	"k8s.io/klog/v2"
 )
 

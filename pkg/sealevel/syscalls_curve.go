@@ -8,12 +8,12 @@ import (
 
 	"filippo.io/edwards25519"
 	bn254 "github.com/Overclock-Validator/gnark-crypto/ecc/bn254"
+	"github.com/Overclock-Validator/mithril/pkg/features"
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 	bn256lib "github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"github.com/gtank/ristretto255"
 	"github.com/keep-network/keep-core/pkg/altbn128"
-	"go.firedancer.io/radiance/pkg/features"
-	"go.firedancer.io/radiance/pkg/safemath"
-	"go.firedancer.io/radiance/pkg/sbpf"
 	"k8s.io/klog/v2"
 )
 

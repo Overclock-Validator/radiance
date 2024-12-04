@@ -8,10 +8,10 @@ import (
 	"os"
 	"sync/atomic"
 
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
 	"github.com/Overclock-Validator/sniper"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/accounts"
 )
 
 type AccountsDb struct {

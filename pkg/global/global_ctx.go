@@ -1,9 +1,9 @@
 package global
 
 import (
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/bank"
-	"go.firedancer.io/radiance/pkg/features"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/bank"
+	"github.com/Overclock-Validator/mithril/pkg/features"
 )
 
 // WIP

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Overclock-Validator/mithril/pkg/gossip"
 	"github.com/spf13/cobra"
-	"go.firedancer.io/radiance/pkg/gossip"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/klog/v2"
 )

@@ -3,8 +3,8 @@ package sealevel
 import (
 	"bytes"
 
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 func executionCtx(vm sbpf.VM) *ExecutionCtx {

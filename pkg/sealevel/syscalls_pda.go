@@ -3,9 +3,9 @@ package sealevel
 import (
 	"bytes"
 
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/solana"
 	"github.com/ethereum/go-ethereum/common/math"
-	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/solana"
 	"k8s.io/klog/v2"
 )
 

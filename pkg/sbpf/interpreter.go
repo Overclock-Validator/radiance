@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"go.firedancer.io/radiance/pkg/cu"
-	"go.firedancer.io/radiance/pkg/global"
+	"github.com/Overclock-Validator/mithril/pkg/cu"
+	"github.com/Overclock-Validator/mithril/pkg/global"
 )
 
 // Interpreter implements the SBF core in pure Go.

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 // TODO Fuzz

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"go.firedancer.io/radiance/pkg/cu"
-	"go.firedancer.io/radiance/pkg/global"
+	"github.com/Overclock-Validator/mithril/pkg/cu"
+	"github.com/Overclock-Validator/mithril/pkg/global"
 )
 
 // VM is the virtual machine abstraction, implemented by each executor.

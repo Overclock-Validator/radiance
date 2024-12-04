@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/Overclock-Validator/mithril/pkg/features"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/features"
 	"golang.org/x/crypto/sha3"
 )
 

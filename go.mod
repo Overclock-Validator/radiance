@@ -1,4 +1,4 @@
-module go.firedancer.io/radiance
+module github.com/Overclock-Validator/mithril
 
 go 1.23
 

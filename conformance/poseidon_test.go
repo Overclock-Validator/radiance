@@ -3,8 +3,8 @@ package conformance
 import (
 	"testing"
 
+	"github.com/Overclock-Validator/mithril/pkg/sealevel"
 	"github.com/stretchr/testify/assert"
-	"go.firedancer.io/radiance/pkg/sealevel"
 )
 
 func TestConformance_Poseidon_Big_Endian(t *testing.T) {

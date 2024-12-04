@@ -3,9 +3,9 @@ package accounts
 import (
 	"io"
 
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/base58"
 )
 
 type Accounts interface {

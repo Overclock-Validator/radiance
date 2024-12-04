@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/Overclock-Validator/mithril/pkg/shred"
 	"github.com/linxGnu/grocksdb"
-	"go.firedancer.io/radiance/pkg/shred"
 	"k8s.io/klog/v2"
 )
 

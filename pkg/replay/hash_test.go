@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Overclock-Validator/mithril/fixtures"
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/base58"
 	"github.com/stretchr/testify/assert"
-	"go.firedancer.io/radiance/fixtures"
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/base58"
 )
 
 // uses known good values to test if bankhash computes correctly

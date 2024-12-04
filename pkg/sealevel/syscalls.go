@@ -1,8 +1,8 @@
 package sealevel
 
 import (
-	"go.firedancer.io/radiance/pkg/features"
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/features"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 // Syscalls creates a registry of all Sealevel syscalls.

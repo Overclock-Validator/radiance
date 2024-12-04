@@ -6,10 +6,10 @@ import (
 	"math"
 	"math/bits"
 
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/base58"
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/base58"
-	"go.firedancer.io/radiance/pkg/safemath"
 )
 
 const SysvarEpochScheduleAddrStr = "SysvarEpochSchedu1e111111111111111111111111"

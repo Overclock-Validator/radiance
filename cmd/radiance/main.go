@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/Overclock-Validator/mithril/cmd/radiance/blockstore"
+	"github.com/Overclock-Validator/mithril/cmd/radiance/gossip"
+	"github.com/Overclock-Validator/mithril/cmd/radiance/replay"
 	"github.com/spf13/cobra"
-	"go.firedancer.io/radiance/cmd/radiance/blockstore"
-	"go.firedancer.io/radiance/cmd/radiance/gossip"
-	"go.firedancer.io/radiance/cmd/radiance/replay"
 	"k8s.io/klog/v2"
 
 	// Load in instruction pretty-printing

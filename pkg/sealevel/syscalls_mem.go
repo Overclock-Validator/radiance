@@ -3,9 +3,9 @@ package sealevel
 import (
 	"encoding/binary"
 
-	"go.firedancer.io/radiance/pkg/safemath"
-	"go.firedancer.io/radiance/pkg/sbpf"
-	"go.firedancer.io/radiance/pkg/util"
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/util"
 	"k8s.io/klog/v2"
 )
 

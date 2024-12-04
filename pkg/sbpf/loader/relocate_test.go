@@ -3,8 +3,8 @@ package loader
 import (
 	"testing"
 
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 	"github.com/stretchr/testify/assert"
-	"go.firedancer.io/radiance/pkg/sbpf"
 )
 
 func TestSymbolHash_Entrypoint(t *testing.T) {

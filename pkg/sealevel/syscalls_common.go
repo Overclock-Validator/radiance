@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math"
 
-	"go.firedancer.io/radiance/pkg/cu"
+	"github.com/Overclock-Validator/mithril/pkg/cu"
 )
 
 func isNonOverlapping(src, srcLen, dst, dstLen uint64) bool {

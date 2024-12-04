@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"github.com/zeebo/blake3"
-	"go.firedancer.io/radiance/pkg/safemath"
-	"go.firedancer.io/radiance/pkg/sbpf"
 	"golang.org/x/crypto/sha3"
 	"k8s.io/klog/v2"
 )

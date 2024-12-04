@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/util"
 	"github.com/gagliardetto/solana-go"
-	"go.firedancer.io/radiance/pkg/accounts"
-	"go.firedancer.io/radiance/pkg/util"
 )
 
 type AppendVecAccount struct {

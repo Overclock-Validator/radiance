@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"go.firedancer.io/radiance/pkg/sbpf"
+	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 	"k8s.io/klog/v2"
 )
 

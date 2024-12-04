@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/Overclock-Validator/mithril/cmd/mithril/node"
 	"github.com/spf13/cobra"
-	"go.firedancer.io/radiance/cmd/mithril/node"
 	"k8s.io/klog/v2"
 
 	// Load in instruction pretty-printing

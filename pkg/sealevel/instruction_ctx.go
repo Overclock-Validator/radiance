@@ -3,9 +3,9 @@ package sealevel
 import (
 	"fmt"
 
+	"github.com/Overclock-Validator/mithril/pkg/safemath"
 	"github.com/gagliardetto/solana-go"
 	"github.com/ryanavella/wide"
-	"go.firedancer.io/radiance/pkg/safemath"
 	"k8s.io/klog/v2"
 )
 

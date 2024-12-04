@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/Overclock-Validator/mithril/pkg/archiveutil"
 	bin "github.com/gagliardetto/binary"
-	"go.firedancer.io/radiance/pkg/archiveutil"
 )
 
 // ReadGenesisFromFile is a convenience wrapper for ReadGenesisFromArchive.

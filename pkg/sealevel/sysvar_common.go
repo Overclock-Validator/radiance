@@ -1,6 +1,6 @@
 package sealevel
 
-import "go.firedancer.io/radiance/pkg/accounts"
+import "github.com/Overclock-Validator/mithril/pkg/accounts"
 
 func addrObjectForLookup(execCtx *ExecutionCtx) *accounts.Accounts {
 	if execCtx.SlotCtx != nil && execCtx.SlotCtx.Replay {
