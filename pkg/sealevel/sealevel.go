@@ -4,11 +4,16 @@ import (
 	"bytes"
 
 	"github.com/Overclock-Validator/mithril/pkg/accounts"
+	"github.com/Overclock-Validator/mithril/pkg/features"
 	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 )
 
 func executionCtx(vm sbpf.VM) *ExecutionCtx {
 	return vm.VMContext().(*ExecutionCtx)
+}
+
+func getFeatures(vm sbpf.VM) *features.Features {
+	return &executionCtx(vm).GlobalCtx.Features
 }
 
 func transactionCtx(vm sbpf.VM) *TransactionCtx {

@@ -7,6 +7,7 @@ import (
 	"github.com/Overclock-Validator/mithril/pkg/accounts"
 	"github.com/Overclock-Validator/mithril/pkg/base58"
 	bin "github.com/gagliardetto/binary"
+	"k8s.io/klog/v2"
 )
 
 const SysvarSlotHashesAddrStr = "SysvarS1otHashes111111111111111111111111111"
@@ -126,15 +127,19 @@ func (sh *SysvarSlotHashes) Update(slot uint64, hash [32]byte) {
 	var found bool
 
 	for count := 0; count < len(*sh); count++ {
+		klog.Infof("SysvarSlotHashes took path 1 (a)")
 		if (*sh)[count].Slot == slot {
+			klog.Infof("SysvarSlotHashes took path 1 (b)")
 			(*sh)[count].Hash = hash
 			found = true
 		}
 	}
 
 	if !found {
+		klog.Infof("SysvarSlotHashes took path 2 (a)")
 		slotHashEntry := SlotHash{Hash: hash, Slot: slot - 1}
 		if len(*sh) == SlotHashesMaxEntries {
+			klog.Infof("SysvarSlotHashes took path 2 (b)")
 			*sh = (*sh)[:len(*sh)-1]
 		}
 		*sh = append([]SlotHash{slotHashEntry}, (*sh)...)

@@ -46,7 +46,7 @@ const StackDepth = 64
 
 func NewStack() Stack {
 	s := Stack{
-		mem:    make([]byte, StackDepth*StackFrameSize),
+		mem:    make([]byte, (StackDepth+1)*StackFrameSize),
 		sp:     VaddrStack,
 		shadow: make([]Frame, 1, StackDepth),
 	}
@@ -74,7 +74,7 @@ func (s *Stack) GetFrame(addr uint32) []byte {
 	}
 	pos := hi / 2
 	off := pos * StackFrameSize
-	return s.mem[off+lo : off+StackFrameSize]
+	return s.mem[off+lo: /*off+StackFrameSize*/]
 }
 
 // Push allocates a new call frame.

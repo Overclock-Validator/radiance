@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"runtime"
 	"strings"
 	"unsafe"
 
 	"github.com/Overclock-Validator/mithril/pkg/cu"
 	"github.com/Overclock-Validator/mithril/pkg/global"
+	"k8s.io/klog/v2"
 )
 
 // Interpreter implements the SBF core in pure Go.
@@ -597,6 +599,7 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (
 	case VaddrStack >> 32:
 		mem := ip.stack.GetFrame(uint32(addr))
 		if size > uint64(len(mem)) {
+			fmt.Printf("******** size (%d) > len(mem) (%d)\n", size, len(mem))
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds stack access")
 		}
 		return unsafe.Pointer(&mem[0]), nil
@@ -622,6 +625,8 @@ func (ip *Interpreter) Translate(addr uint64, size uint64, write bool) ([]byte, 
 
 	ptr, err := ip.translateInternal(addr, size, write)
 	if err != nil {
+		pc, filename, line, _ := runtime.Caller(1)
+		klog.Infof("[error] in %s[%s:%d] %v", runtime.FuncForPC(pc).Name(), filename, line, err)
 		return nil, err
 	}
 

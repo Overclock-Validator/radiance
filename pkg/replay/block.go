@@ -61,7 +61,7 @@ func resolveAddrTableLookups(accountsDb *accountsdb.AccountsDb, block *Block) er
 
 		var skipLookup bool
 		for _, addrTableKey := range tx.Message.GetAddressTableLookups().GetTableIDs() {
-			acct, err := accountsDb.GetAccount(addrTableKey)
+			acct, err := accountsDb.GetAccount(block.Slot, addrTableKey)
 			if err != nil {
 				klog.Infof("unable to get address lookup table account: %s", addrTableKey)
 				skipLookup = true
@@ -143,9 +143,9 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 	accts := accounts.NewMemAccounts()
 
 	for _, pk := range dedupedAccts {
-		// retrieve account from accountsdb
 
-		acct, err := accountsDb.GetAccount(pk)
+		// retrieve account from accountsdb
+		acct, err := accountsDb.GetAccount(block.Slot, pk)
 
 		// add the account to the slice, add a 'blank' account if the account doesn't exist,
 		// or return an error
@@ -178,10 +178,10 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 	{
 		sysvarAddrs := []solana.PublicKey{sealevel.SysvarClockAddr /*sealevel.SysvarEpochRewardsAddr,*/, sealevel.SysvarEpochScheduleAddr,
 			sealevel.SysvarFeesAddr, sealevel.SysvarRecentBlockHashesAddr, sealevel.SysvarRentAddr, sealevel.SysvarSlotHashesAddr,
-			sealevel.SysvarSlotHistoryAddr, sealevel.SysvarStakeHistoryAddr}
+			sealevel.SysvarSlotHistoryAddr, sealevel.SysvarStakeHistoryAddr, sealevel.SysvarLastRestartSlotAddr}
 
 		for _, sysvarAddr := range sysvarAddrs {
-			sysvarAcct, err := accountsDb.GetAccount(sysvarAddr)
+			sysvarAcct, err := accountsDb.GetAccount(block.Slot, sysvarAddr)
 			if err != nil {
 				panic(fmt.Sprintf("unable to retrieve sysvar %s from accountsdb", sysvarAddr))
 			}
@@ -217,6 +217,8 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 				epoch = clock.Epoch
 			}
 
+			// TODO: update stake history and last restart slot sysvars
+
 			var sysvarPkBytes [32]byte
 			copy(sysvarPkBytes[:], sysvarAddr.Bytes())
 			err = accts.SetAccount(&sysvarPkBytes, sysvarAcct)
@@ -232,7 +234,7 @@ func loadBlockAccountsAndUpdateSysvars(accountsDb *accountsdb.AccountsDb, block 
 func scanAndEnableFeatures(acctsDb *accountsdb.AccountsDb, slot uint64) *features.Features {
 	f := features.NewFeaturesDefault()
 	for _, featureGate := range features.AllFeatureGates {
-		_, err := acctsDb.GetAccount(featureGate.Address)
+		_, err := acctsDb.GetAccount(slot, featureGate.Address)
 		if err == nil {
 			klog.Infof("enabled feature: %s, %s", featureGate.Name, solana.PublicKeyFromBytes(featureGate.Address[:]))
 			f.EnableFeature(featureGate, slot)
@@ -263,13 +265,12 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*Block, error) {
 	return block, nil
 }
 
-func ReplayBlocks(acctsDb *accountsdb.AccountsDb, snapshotManifest *snapshot.SnapshotManifest, startSlot, endSlot int64, updateAcctsDb bool) error {
+func ReplayBlocks(acctsDb *accountsdb.AccountsDb, acctsDbPath string, snapshotManifest *snapshot.SnapshotManifest, startSlot, endSlot int64, updateAcctsDb bool) error {
 	var bankHash []byte
 
 	rpcc := rpcclient.NewRpcClient("https://api.mainnet-beta.solana.com")
 
 	for slot := int64(startSlot); slot <= endSlot; slot++ {
-
 		blockResult, err := rpcc.GetBlockFinalized(uint64(slot))
 		if err != nil {
 			klog.Fatalf("error fetching block: %s\n", err)
@@ -315,11 +316,6 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 	accts, epoch, err := loadBlockAccountsAndUpdateSysvars(acctsDb, block)
 	if err != nil {
 		return nil, err
-	}
-
-	oldAccts := make([]accounts.Account, 0)
-	for _, a := range accts.AllAccounts() {
-		oldAccts = append(oldAccts, *a)
 	}
 
 	f := scanAndEnableFeatures(acctsDb, block.Slot)
@@ -399,6 +395,9 @@ func ProcessBlock(acctsDb *accountsdb.AccountsDb, block *Block, updateAcctsDb bo
 	if len(eligibleAccts) > 0 && updateAcctsDb {
 		klog.Infof("updating accountsdb")
 		err = acctsDb.StoreAccounts(eligibleAccts, slotCtx.Slot)
+		for _, acctToStore := range eligibleAccts {
+			fmt.Printf("updated account: %s\n", util.PrettyPrintAcct(acctToStore))
+		}
 	} else {
 		klog.Infof("accountsdb not updated")
 	}

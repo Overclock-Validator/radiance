@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/Overclock-Validator/mithril/pkg/accounts"
 	"github.com/Overclock-Validator/mithril/pkg/cu"
@@ -42,11 +43,42 @@ func transactionAcctsFromTx(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) (
 		return nil, err
 	}
 
-	for _, acctMeta := range txAcctMetas {
-		acct, err := slotCtx.GetAccount(acctMeta.PublicKey)
+	var programIdIdxs []uint64
+	var instructionAccts []solana.PublicKey
+
+	for _, instr := range tx.Message.Instructions {
+		programIdIdxs = append(programIdIdxs, uint64(instr.ProgramIDIndex))
+		ias, err := instr.ResolveInstructionAccounts(&tx.Message)
 		if err != nil {
-			return nil, err
+			panic("unable to resolve instruction accts")
 		}
+		for _, ia := range ias {
+			instructionAccts = append(instructionAccts, ia.PublicKey)
+		}
+	}
+
+	instructionAccts = util.DedupePubkeys(instructionAccts)
+
+	for idx, acctMeta := range txAcctMetas {
+		var acct *accounts.Account
+
+		// in Agave client, if the account is designated as a program in the tx, then all the other fields
+		// are their nil values instead of the actual values for the account
+		if slices.Contains(programIdIdxs, uint64(idx)) && isNativeProgram(acctMeta.PublicKey) {
+			acct = &accounts.Account{Key: acctMeta.PublicKey, Owner: sealevel.NativeLoaderAddr, Executable: true}
+		} else if slices.Contains(programIdIdxs, uint64(idx)) && !acctMeta.IsWritable && !slices.Contains(instructionAccts, acctMeta.PublicKey) {
+			tmp, err := slotCtx.GetAccount(acctMeta.PublicKey)
+			if err != nil {
+				return nil, err
+			}
+			acct = &accounts.Account{Key: acctMeta.PublicKey, Owner: tmp.Owner, Executable: true, IsDummy: true}
+		} else {
+			acct, err = slotCtx.GetAccount(acctMeta.PublicKey)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		acctsForTx = append(acctsForTx, *acct)
 	}
 
@@ -133,6 +165,21 @@ func isWritable(tx *solana.Transaction, am *solana.AccountMeta) bool {
 	}
 
 	return true
+}
+
+func isProgram(tx *solana.Transaction, am *solana.AccountMeta) bool {
+	programIds, err := tx.GetProgramIDs()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, programId := range programIds {
+		if am.PublicKey == programId {
+			return true
+		}
+	}
+
+	return false
 }
 
 func acctsEqual(acct1 *accounts.Account, acct2 *accounts.Account) bool {
@@ -231,15 +278,19 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		if err != nil {
 			panic(fmt.Sprintf("unable to get tx acct %d whilst checking for pre-balances divergences", count))
 		}
-		if txAcct.Lamports != txMeta.PreBalances[count] {
-			klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count], util.PrettyPrintAcct(txAcct))
+
+		if !isNativeProgram(txAcct.Key) && !txAcct.IsDummy {
+			if txAcct.Lamports != txMeta.PreBalances[count] {
+				klog.Infof("tx %s pre-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PreBalances[count], util.PrettyPrintAcct(txAcct))
+			}
 		}
+
 		execCtx.TransactionContext.Accounts.Unlock(count)
 	}
 
 	totalFee, payerNewLamports, err := fees.ApplyTxFees(tx, instrs, &execCtx.TransactionContext.Accounts, computeBudgetLimits)
 	if err != nil {
-		panic(err)
+		return totalFee, nil, nil
 	}
 
 	// check for fee divergences
@@ -254,6 +305,10 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	rent.MaybeSetRentExemptRentEpochMax(slotCtx, &rentSysvar, &execCtx.GlobalCtx.Features, &execCtx.TransactionContext.Accounts)
 	preTxRentStates := rent.NewRentStateInfo(&rentSysvar, execCtx.TransactionContext, tx)
+
+	for _, txAcct := range transactionAccts.Accounts {
+		fmt.Printf("******** pre-tx acct: %s\n", util.PrettyPrintAcct(txAcct))
+	}
 
 	var instrErr error
 	writablePubkeys := make([]solana.PublicKey, 0)
@@ -273,6 +328,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		for _, am := range resolvedAccountMetas {
 			acctMeta := sealevel.AccountMeta{Pubkey: am.PublicKey, IsSigner: am.IsSigner, IsWritable: isWritable(tx, am)}
 			acctMetas = append(acctMetas, acctMeta)
+			fmt.Printf("instr acct: %+v\n", acctMeta)
 		}
 
 		instructionAccts := sealevel.InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
@@ -312,9 +368,13 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 			if err != nil {
 				panic(fmt.Sprintf("unable to get tx acct %d whilst checking for post-balances divergences", count))
 			}
-			if txAcct.Lamports != txMeta.PostBalances[count] {
-				klog.Infof("tx %s post-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s\n", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PostBalances[count], util.PrettyPrintAcct(txAcct))
+
+			if !isNativeProgram(txAcct.Key) && !txAcct.IsDummy {
+				if txAcct.Lamports != txMeta.PostBalances[count] {
+					klog.Infof("tx %s post-balance divergence: lamport balance for %s was %d but onchain lamport balance was %d\n%s\n", tx.Signatures[0], txAcct.Key, txAcct.Lamports, txMeta.PostBalances[count], util.PrettyPrintAcct(txAcct))
+				}
 			}
+
 			execCtx.TransactionContext.Accounts.Unlock(count)
 		}
 	}

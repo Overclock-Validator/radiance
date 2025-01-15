@@ -120,11 +120,31 @@ func MaybeSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.Sy
 	}
 }
 
+func isNativeProgram(pubkey solana.PublicKey) bool {
+	if pubkey == sealevel.SystemProgramAddr || pubkey == sealevel.BpfLoaderUpgradeableAddr ||
+		pubkey == sealevel.BpfLoader2Addr || pubkey == sealevel.BpfLoaderDeprecatedAddr ||
+		pubkey == sealevel.VoteProgramAddr || pubkey == sealevel.StakeProgramAddr ||
+		pubkey == sealevel.AddressLookupTableAddr || pubkey == sealevel.ConfigProgramAddr ||
+		pubkey == sealevel.ComputeBudgetProgramAddr {
+		return true
+	} else {
+		return false
+	}
+}
+
 func ShouldSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, f *features.Features, acct *accounts.Account) bool {
 	if f.IsActive(features.DisableRentFeesCollection) {
 		if acct.RentEpoch != math.MaxUint64 && acct.Lamports >= rent.MinimumBalance(uint64(len(acct.Data))) {
 			return true
 		}
+		return false
+	}
+
+	if isNativeProgram(acct.Key) {
+		return false
+	}
+
+	if acct.IsDummy {
 		return false
 	}
 
@@ -137,6 +157,10 @@ func ShouldSetRentExemptRentEpochMax(slotCtx *sealevel.SlotCtx, rent *sealevel.S
 	}
 
 	if acct.Lamports != 0 && acct.Lamports < rent.MinimumBalance(uint64(len(acct.Data))) {
+		return false
+	}
+
+	if acct.Key == sealevel.SysvarInstructionsAddr {
 		return false
 	}
 
@@ -194,7 +218,7 @@ func collectRentFromAcct(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, a
 func collectRent(slotCtx *sealevel.SlotCtx, rent *sealevel.SysvarRent, pubkey solana.PublicKey) (*accounts.Account, bool) {
 	acct, err := slotCtx.GetAccount(pubkey)
 	if err != nil {
-		acct, err = slotCtx.AccountsDb.GetAccount(pubkey)
+		acct, err = slotCtx.AccountsDb.GetAccount(slotCtx.Slot, pubkey)
 		if err != nil {
 			panic("unable to find account for rent collection")
 		}

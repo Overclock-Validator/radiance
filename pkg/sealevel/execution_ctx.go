@@ -316,7 +316,7 @@ func (slotCtx *SlotCtx) GetAccount(pubkey solana.PublicKey) (*accounts.Account, 
 }
 
 func (slotCtx *SlotCtx) GetAccountFromAccountsDb(pubkey solana.PublicKey) (*accounts.Account, error) {
-	acct, err := slotCtx.AccountsDb.GetAccount(pubkey)
+	acct, err := slotCtx.AccountsDb.GetAccount(slotCtx.Slot, pubkey)
 	if err != nil {
 		return nil, err
 	} else {

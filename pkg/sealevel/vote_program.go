@@ -1193,8 +1193,9 @@ func checkSlotsAreValid(voteState *VoteState, voteSlots []uint64, voteHash [32]b
 		return VoteErrSlotsMismatch
 	}
 
+	klog.Infof("Slothashes.Hash = %v", slotHashes[j].Hash)
 	if slotHashes[j].Hash != voteHash {
-		klog.Warningf("%s dropped vote slots %#v failed to match hash %#v %#v", voteState.NodePubkey, voteSlots, voteHash, slotHashes[j].Hash)
+		klog.Infof("%s dropped vote slots. failed to match hash %#v vs. %#v (prev slot)", voteState.NodePubkey, voteHash, slotHashes[j].Hash)
 		return VoteErrSlotHashMismatch
 	}
 
@@ -1424,8 +1425,10 @@ func checkUpdateVoteStateAndSlotsAreValid(voteState *VoteState, voteStateUpdate 
 		panic("lastVoteStateUpdateSlot != slotHashes[slotHashesIndex].Slot not true")
 	}
 
+	klog.Infof("Slothashes.Hash = %v", slotHashes[slotHashesIndex].Hash)
+
 	if slotHashes[slotHashesIndex].Hash != voteStateUpdate.Hash {
-		klog.Warningf("%s dropped vote %#v failed to match hash %#v %#v", voteState.NodePubkey, voteStateUpdate, voteStateUpdate.Hash, slotHashes[slotHashesIndex].Slot)
+		klog.Infof("%s dropped vote. failed to match hash %#v vs. %#v (prev slot)", voteState.NodePubkey, voteStateUpdate.Hash, slotHashes[slotHashesIndex].Slot)
 		return VoteErrSlotHashMismatch
 	}
 

@@ -80,7 +80,7 @@ func ApplyTxFees(tx *solana.Transaction, instrs []sealevel.Instruction, transact
 	}
 
 	if feePayerAcct.Lamports < totalTxFee {
-		return 0, 0, sealevel.InstrErrInsufficientFunds
+		return totalTxFee, 0, sealevel.InstrErrInsufficientFunds
 	}
 
 	klog.Infof("tx fee: %d", totalTxFee)
@@ -101,7 +101,7 @@ func DistributeTxFeesToSlotLeader(acctsDb *accountsdb.AccountsDb, slotCtx *seale
 	leaderAcct, err = slotCtx.GetAccount(leader)
 	if err != nil {
 		// if leader didn't appear at all in the block, then retrieve its latest state from accountsdb instead
-		leaderAcct, err = acctsDb.GetAccount(leader)
+		leaderAcct, err = acctsDb.GetAccount(slotCtx.Slot, leader)
 		if err != nil {
 			panic(fmt.Sprintf("unable to get leader acct %s from both slotCtx and accountsdb", leader))
 		}

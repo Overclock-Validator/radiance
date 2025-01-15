@@ -143,6 +143,8 @@ var SyscallMemset = sbpf.SyscallFunc3(SyscallMemsetImpl)
 
 // SyscallMemcmpImpl is the implementation for the memset (sol_memset_) syscall.
 func SyscallAllocFreeImpl(vm sbpf.VM, size, freeAddr uint64) (uint64, error) {
+	klog.Infof("SyscallAllocFreeImpl")
+
 	execCtx := executionCtx(vm)
 
 	// this is a free() call, but this is a bump allocator, so do nothing

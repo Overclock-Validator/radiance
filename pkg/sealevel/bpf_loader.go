@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/Overclock-Validator/mithril/pkg/accounts"
 	"github.com/Overclock-Validator/mithril/pkg/features"
 	"github.com/Overclock-Validator/mithril/pkg/safemath"
 	"github.com/Overclock-Validator/mithril/pkg/sbpf"
@@ -999,13 +1000,16 @@ func executeProgram(execCtx *ExecutionCtx, programData []byte) error {
 		}
 	}
 
+	enableTracing := solana.MustSignatureFromBase58("2mViK88syNCTJBnF28Kt5huf9BCrvCZhwQgRVtjTEydvTMgVXnvaG9oUfPoxaLmtMGCwVV1UTVHeqSEm3xWJMYaV") == execCtx.TransactionContext.Signature
+
 	opts := &sbpf.VMOpts{
-		HeapMax:      int(heapSize),
-		Input:        parameterBytes,
-		Syscalls:     syscallRegistry,
-		MaxCU:        int(execCtx.ComputeMeter.Remaining()),
-		ComputeMeter: &execCtx.ComputeMeter,
-		Context:      execCtx,
+		HeapMax:       int(heapSize),
+		Input:         parameterBytes,
+		Syscalls:      syscallRegistry,
+		MaxCU:         int(execCtx.ComputeMeter.Remaining()),
+		ComputeMeter:  &execCtx.ComputeMeter,
+		Context:       execCtx,
+		EnableTracing: enableTracing,
 	}
 
 	interpreter := sbpf.NewInterpreter(nil, program, opts)
@@ -1103,20 +1107,57 @@ func BpfLoaderProgramExecute(execCtx *ExecutionCtx) error {
 	programOwner := programAcct.Owner()
 
 	if programOwner == BpfLoader2Addr || programOwner == BpfLoaderDeprecatedAddr {
-		programBytes = programAcct.Data()
+		if len(programAcct.Data()) == 0 {
+			var paTmp *accounts.Account
+			paTmp, err = execCtx.SlotCtx.GetAccount(programAcct.Key())
+
+			if err != nil {
+				paTmp, err = execCtx.SlotCtx.GetAccountFromAccountsDb(programAcct.Key())
+				if err != nil {
+					klog.Infof("unable to get account %s from accountsdb", programAcct.Key())
+					return InstrErrUnsupportedProgramId
+				}
+			}
+			programBytes = paTmp.Data
+		} else {
+			programBytes = programAcct.Data()
+		}
 		programAcct.Drop()
+
 	} else if programOwner == BpfLoaderUpgradeableAddr {
-		programAcctState, err := unmarshalUpgradeableLoaderState(programAcct.Data())
-		if err != nil {
-			return err
+		var programAcctState *UpgradeableLoaderState
+
+		if len(programAcct.Data()) == 0 {
+			var paTmp *accounts.Account
+			paTmp, err = execCtx.SlotCtx.GetAccount(programAcct.Key())
+
+			if err != nil {
+				paTmp, err = execCtx.SlotCtx.GetAccountFromAccountsDb(programAcct.Key())
+				if err != nil {
+					klog.Infof("unable to get account %s from accountsdb", programAcct.Key())
+					return InstrErrUnsupportedProgramId
+				}
+			}
+			programAcctState, err = unmarshalUpgradeableLoaderState(paTmp.Data)
+			if err != nil {
+				return err
+			}
+		} else {
+			programAcctState, err = unmarshalUpgradeableLoaderState(programAcct.Data())
+			if err != nil {
+				return err
+			}
 		}
 
 		programAcct.Drop()
 
-		programDataAcct, err := execCtx.SlotCtx.GetAccountFromAccountsDb(programAcctState.Program.ProgramDataAddress)
+		programDataAcct, err := execCtx.SlotCtx.GetAccount(programAcctState.Program.ProgramDataAddress)
 		if err != nil {
-			klog.Infof("unable to get account %s as program data: %s", programAcctState.Program.ProgramDataAddress, err)
-			return InstrErrUnsupportedProgramId
+			programDataAcct, err = execCtx.SlotCtx.GetAccountFromAccountsDb(programAcctState.Program.ProgramDataAddress)
+			if err != nil {
+				klog.Infof("unable to get account %s as program data: %s", programAcctState.Program.ProgramDataAddress, err)
+				return InstrErrUnsupportedProgramId
+			}
 		}
 
 		programDataAcctState, err := unmarshalUpgradeableLoaderState(programDataAcct.Data)

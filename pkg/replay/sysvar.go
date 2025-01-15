@@ -109,7 +109,7 @@ func calculateStakeWeightedTimestamp(clock *sealevel.SysvarClock, epochSchedule 
 }
 
 func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.AccountsDb, block *Block) error {
-	epochScheduleAcct, err := accountsDb.GetAccount(sealevel.SysvarEpochScheduleAddr)
+	epochScheduleAcct, err := accountsDb.GetAccount(block.Slot, sealevel.SysvarEpochScheduleAddr)
 	if err != nil {
 		panic("unable to retrieve epoch schedule sysvar acct when updating clock sysvar")
 	}

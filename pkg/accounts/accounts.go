@@ -22,6 +22,7 @@ type Account struct {
 	Owner      [32]byte
 	Executable bool
 	RentEpoch  uint64
+	IsDummy    bool
 }
 
 // TODO: should probably be somewhere else

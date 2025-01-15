@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,40 +22,39 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/klauspost/compress/zstd"
 	"github.com/panjf2000/ants/v2"
+	"github.com/pierrec/lz4/v4"
 )
 
-func UnmarshalManifestFromSnapshot(filename string, accountsDbDir string) (*SnapshotManifest, error) {
+func UnmarshalManifestFromSnapshot(filename string, accountsDbDir string, snapshotType int) (*SnapshotManifest, *os.File, error) {
 	manifest := new(SnapshotManifest)
 
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer file.Close()
 
 	manifestOutputFile := fmt.Sprintf("%s/manifest", accountsDbDir)
 	if err = os.MkdirAll(accountsDbDir, 0775); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	manifestOut, err := os.Create(manifestOutputFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer manifestOut.Close()
 
-	zstdReader, err := zstd.NewReader(file)
+	reader, err := readerForCompressionType(snapshotType, file)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	defer zstdReader.Close()
 
-	tarReader := tar.NewReader(zstdReader)
+	tarReader := tar.NewReader(reader)
 	writer := new(bytes.Buffer)
 
 	for {
 		header, err := tarReader.Next()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// identify manifest file, whose path is of the form "snapshots/SLOT/SLOT"
@@ -62,12 +62,12 @@ func UnmarshalManifestFromSnapshot(filename string, accountsDbDir string) (*Snap
 			if strings.Count(header.Name, "/") == 2 {
 				_, err := io.Copy(writer, tarReader)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				_, err = io.Copy(manifestOut, bytes.NewBuffer(writer.Bytes()))
 				if err != nil {
 					fmt.Printf("err copying manifest file out: %s\n", err)
-					return nil, err
+					return nil, nil, err
 				}
 				break
 			}
@@ -77,7 +77,7 @@ func UnmarshalManifestFromSnapshot(filename string, accountsDbDir string) (*Snap
 	decoder := bin.NewBinDecoder(writer.Bytes())
 	err = manifest.UnmarshalWithDecoder(decoder)
 
-	return manifest, err
+	return manifest, file, err
 }
 
 type appendVecCopyingTask struct {
@@ -97,25 +97,61 @@ type indexEntryCommitterTask struct {
 	Pubkeys      []solana.PublicKey
 }
 
+const (
+	snapshotTypeZst = iota
+	snapshotTypeLz4
+)
+
+func readerForCompressionType(snapshotType int, file *os.File) (io.Reader, error) {
+	var reader io.Reader
+
+	if snapshotType == snapshotTypeZst {
+		zstdReader, err := zstd.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		reader = zstdReader
+	} else if snapshotType == snapshotTypeLz4 {
+		reader = lz4.NewReader(file)
+	} else {
+		panic(fmt.Sprintf("unknown snapshot type"))
+	}
+
+	return reader, nil
+}
+
+func parseSnapshotType(snapshotFileName string) int {
+	var snapshotType int
+	fileExt := filepath.Ext(snapshotFileName)
+
+	if fileExt == ".zst" {
+		snapshotType = snapshotTypeZst
+	} else if fileExt == ".lz4" {
+		snapshotType = snapshotTypeLz4
+	} else {
+		panic(fmt.Sprintf("unknown snapshot compression type - file ext: %s", fileExt))
+	}
+
+	return snapshotType
+}
+
 func BuildAccountsIndexFromSnapshot(snapshotFile string, accountsDbDir string) error {
-	manifest, err := UnmarshalManifestFromSnapshot(snapshotFile, accountsDbDir)
+	snapshotType := parseSnapshotType(snapshotFile)
+
+	manifest, file, err := UnmarshalManifestFromSnapshot(snapshotFile, accountsDbDir, snapshotType)
 	if err != nil {
 		return err
 	}
 
-	file, err := os.Open(snapshotFile)
-	if err != nil {
-		return err
-	}
 	defer file.Close()
+	file.Seek(0, io.SeekStart)
 
-	zstdReader, err := zstd.NewReader(file)
+	reader, err := readerForCompressionType(snapshotType, file)
 	if err != nil {
-		return err
+		panic(err)
 	}
-	defer zstdReader.Close()
 
-	tarReader := tar.NewReader(zstdReader)
+	tarReader := tar.NewReader(reader)
 
 	start := time.Now()
 

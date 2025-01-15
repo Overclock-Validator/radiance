@@ -10,7 +10,7 @@ import (
 
 // SyscallGetClockSysvarImpl is an implementation of the sol_get_clock_sysvar syscall
 func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
-	klog.Infof("SyscallGetClock")
+	klog.Infof("SyscallGetClock for addr %x, len = %d", addr, SysvarClockStructLen)
 
 	execCtx := executionCtx(vm)
 
@@ -31,6 +31,8 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 	if err != nil {
 		return syscallErr(err)
 	}
+
+	klog.Infof("******** SyscallGetClock returning: %+v", clock)
 
 	binary.LittleEndian.PutUint64(clockDst[:8], clock.Slot)
 	binary.LittleEndian.PutUint64(clockDst[8:16], uint64(clock.EpochStartTimestamp))
@@ -72,11 +74,6 @@ func SyscallGetRentSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 	binary.Write(buf, binary.LittleEndian, rent.BurnPercent)
 
 	copy(rentDst, buf.Bytes())
-
-	/*binary.LittleEndian.PutUint64(rentDst[:8], rent.LamportsPerUint8Year)
-	exemptionThreshold := math.Float64bits(rent.ExemptionThreshold)
-	binary.LittleEndian.PutUint64(rentDst[8:16], exemptionThreshold)
-	rentDst[16] = rent.BurnPercent*/
 
 	return syscallSuccess(0)
 }

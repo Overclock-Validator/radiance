@@ -51,8 +51,10 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 	klog.Infof("SyscallCreateProgramAddress")
 
 	execCtx := executionCtx(vm)
+	origCu := execCtx.ComputeMeter.Remaining()
 	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {
+		klog.Infof("******** ran out of CUs in SyscallCreateProgramAddress")
 		return syscallCuErr()
 	}
 
@@ -76,6 +78,9 @@ func SyscallCreateProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programIdA
 		return syscallErr(err)
 	}
 
+	used := origCu - execCtx.ComputeMeter.Remaining()
+	klog.Infof("******** SyscallCreateProgramAddress used %d CUs", used)
+
 	copy(address, newAddress)
 	return syscallSuccess(0)
 }
@@ -86,6 +91,8 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 	klog.Infof("SyscallTryFindProgramAddress")
 
 	execCtx := executionCtx(vm)
+	origCu := execCtx.ComputeMeter.Remaining()
+
 	err := execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 	if err != nil {
 		return syscallCuErr()
@@ -102,10 +109,9 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 	}
 
 	for bumpSeed := uint8(math.MaxUint8); bumpSeed > 0; bumpSeed-- {
-		seedsWithBump := make([][]byte, len(seeds))
-		for i := range seeds {
-			seedsWithBump[i] = make([]byte, len(seeds[i]))
-			copy(seedsWithBump[i], seeds[i])
+		seedsWithBump := make([][]byte, 0)
+		for _, seed := range seeds {
+			seedsWithBump = append(seedsWithBump, seed)
 		}
 		seedsWithBump = append(seedsWithBump, []byte{bumpSeed})
 
@@ -129,11 +135,15 @@ func SyscallTryFindProgramAddressImpl(vm sbpf.VM, seedsAddr, seedsLen, programId
 			bumpSeedOut[0] = bumpSeed
 			copy(addressOut, newAddress)
 
+			used := origCu - execCtx.ComputeMeter.Remaining()
+			klog.Infof("******** SyscallTryFindProgramAddress used %d CUs. bumpSeed = %d", used, bumpSeed)
+
 			// address found
 			return syscallSuccess(0)
 		}
 		err = execCtx.ComputeMeter.Consume(CUCreateProgramAddressUnits)
 		if err != nil {
+			klog.Infof("******** ran out of CUs in TryFindProgramAddress")
 			return syscallCuErr()
 		}
 	}

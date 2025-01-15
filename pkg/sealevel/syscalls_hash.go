@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/Overclock-Validator/mithril/pkg/safemath"
 	"github.com/Overclock-Validator/mithril/pkg/sbpf"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/iden3/go-iden3-crypto/poseidon"
@@ -63,14 +62,12 @@ func SyscallSha256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint6
 				return syscallErr(err)
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
-			if CUMemOpBaseCost > cost {
-				cost = CUMemOpBaseCost
-			}
+			cost := max(vec.Len/2, CUMemOpBaseCost)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return syscallCuErr()
 			}
+
 			hasher.Write(data)
 		}
 	}
@@ -127,11 +124,7 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (ui
 				return syscallErr(err)
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
-			if CUMemOpBaseCost > cost {
-				cost = CUMemOpBaseCost
-			}
-
+			cost := max(CUMemOpBaseCost, vec.Len)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return syscallCuErr()
@@ -193,11 +186,7 @@ func SyscallBlake3Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (uint6
 				return syscallErr(err)
 			}
 
-			cost := safemath.SaturatingMulU64(CUSha256ByteCost, vec.Len) / 2
-			if CUMemOpBaseCost > cost {
-				cost = CUMemOpBaseCost
-			}
-
+			cost := max(vec.Len/2, CUMemOpBaseCost)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return syscallCuErr()

@@ -80,11 +80,17 @@ func translateInstructionC(vm sbpf.VM, addr uint64) (Instruction, error) {
 		accountMetas = append(accountMetas, am)
 	}
 
-	// TODO: do CU accounting for `loosen_cpi_size_restriction` feature gate
-
 	data, err := vm.Translate(ix.DataAddr, ix.DataLen, false)
 	if err != nil {
 		return Instruction{}, err
+	}
+
+	execCtx := executionCtx(vm)
+	if execCtx.GlobalCtx.Features.IsActive(features.LoosenCpiSizeRestriction) {
+		err = execCtx.ComputeMeter.Consume(ix.DataLen / CUCpiBytesPerUnit)
+		if err != nil {
+			return Instruction{}, err
+		}
 	}
 
 	var accounts []AccountMeta
@@ -154,6 +160,14 @@ func translateInstructionRust(vm sbpf.VM, addr uint64) (Instruction, error) {
 	data, err := vm.Translate(ix.Data.Addr, ix.Data.Len, false)
 	if err != nil {
 		return Instruction{}, err
+	}
+
+	execCtx := executionCtx(vm)
+	if execCtx.GlobalCtx.Features.IsActive(features.LoosenCpiSizeRestriction) {
+		err = execCtx.ComputeMeter.Consume(ix.Data.Len / CUCpiBytesPerUnit)
+		if err != nil {
+			return Instruction{}, err
+		}
 	}
 
 	return Instruction{Accounts: accountMetas, Data: data, ProgramId: ix.Pubkey}, nil

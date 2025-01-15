@@ -114,5 +114,5 @@ func run(c *cobra.Command, args []string) {
 		klog.Fatalf("unable to open manifest file")
 	}
 
-	replay.ReplayBlocks(accountsDb, manifest, startSlot, endSlot, updateAccountsDb)
+	replay.ReplayBlocks(accountsDb, accountsDbDir, manifest, startSlot, endSlot, updateAccountsDb)
 }

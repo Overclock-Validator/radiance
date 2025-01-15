@@ -58,7 +58,7 @@ func Syscalls(f *features.Features, isDeploy bool) sbpf.SyscallRegistry {
 	reg.Register("sol_get_rent_sysvar", SyscallGetRentSysvar)
 	reg.Register("sol_get_epoch_schedule_sysvar", SyscallGetEpochScheduleSysvar)
 
-	if f.IsActive(features.EnablePartitionedEpochReward) {
+	if f.IsActive(features.EnablePartitionedEpochReward) || f.IsActive(features.EnablePartitionedEpochRewardsSuperfeature) {
 		reg.Register("sol_get_epoch_rewards_sysvar", SyscallGetEpochRewardsSysvar)
 	}
 
