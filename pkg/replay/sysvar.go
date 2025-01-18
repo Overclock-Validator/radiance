@@ -121,6 +121,7 @@ func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.Accou
 		panic(fmt.Sprintf("unable to unmarshal epoch schedule sysvar when updating clock sysvar"))
 	}
 
+	ancestorTimestamp := clock.UnixTimestamp
 	clock.UnixTimestamp = block.UnixTimestamp
 	clock.Slot = block.Slot
 
@@ -129,6 +130,12 @@ func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.Accou
 	clock.Epoch = epochNew
 
 	if epochOld != epochNew {
+		timestampEstimate, err := calculateStakeWeightedTimestamp(clock, &epochSchedule, block)
+		if err != nil {
+			return err
+		}
+
+		clock.UnixTimestamp = max(timestampEstimate, ancestorTimestamp)
 		clock.EpochStartTimestamp = clock.UnixTimestamp
 		clock.LeaderScheduleEpoch = epochSchedule.LeaderScheduleEpoch(clock.Slot)
 	}

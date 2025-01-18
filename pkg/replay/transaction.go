@@ -96,6 +96,7 @@ func newExecCtx(slotCtx *sealevel.SlotCtx, transactionAccts *sealevel.Transactio
 	execCtx.Accounts = accounts.NewMemAccounts()
 	execCtx.SlotCtx = slotCtx
 	execCtx.TransactionContext.ComputeBudgetLimits = computeBudgetLimits
+	//execCtx.ComputeMeter.Disable()
 
 	return execCtx
 }
@@ -268,12 +269,6 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 	execCtx := newExecCtx(slotCtx, transactionAccts, computeBudgetLimits, &log)
 	execCtx.TransactionContext.AllInstructions = instrs
 	execCtx.TransactionContext.Signature = tx.Signatures[0]
-
-	defer func() {
-		for _, l := range log.Logs {
-			klog.Infof("%s", l)
-		}
-	}()
 
 	// check for pre-balance divergences
 	for count := uint64(0); count < uint64(len(tx.Message.AccountKeys)); count++ {
