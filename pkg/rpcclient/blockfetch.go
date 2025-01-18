@@ -77,3 +77,11 @@ func (fetcher *RpcClient) GetLeaderForSlot(slot uint64) (solana.PublicKey, error
 	}
 	return leader[0], err
 }
+
+func (fetcher *RpcClient) GetBlockTime(slot uint64) (int64, error) {
+	ts, err := fetcher.client.GetBlockTime(context.TODO(), slot)
+	if err != nil {
+		return 0, rpc.ErrNotConfirmed
+	}
+	return int64(*ts), err
+}

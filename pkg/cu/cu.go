@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Overclock-Validator/mithril/pkg/safemath"
+	"k8s.io/klog/v2"
 )
 
 var ErrComputeExceeded = errors.New("Compute exceeded")
@@ -12,6 +13,7 @@ type ComputeMeter struct {
 	computeMeter    uint64
 	startingBalance uint64
 	exceeded        bool
+	disable         bool
 }
 
 func NewComputeMeter(budget uint64) ComputeMeter {
@@ -27,7 +29,11 @@ func (cm *ComputeMeter) Consume(cost uint64) error {
 	cm.computeMeter = safemath.SaturatingSubU64(cm.computeMeter, cost)
 
 	if cm.exceeded {
-		return ErrComputeExceeded
+		if cm.disable {
+			klog.Infof("CU limit exceeded in Consume, but skipping")
+		} else {
+			return ErrComputeExceeded
+		}
 	}
 
 	return nil
@@ -43,4 +49,8 @@ func (cm *ComputeMeter) Exceeded() bool {
 
 func (cm *ComputeMeter) Remaining() uint64 {
 	return cm.computeMeter
+}
+
+func (cm *ComputeMeter) Disable() {
+	cm.disable = true
 }

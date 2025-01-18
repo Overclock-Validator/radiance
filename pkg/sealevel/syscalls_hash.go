@@ -124,7 +124,7 @@ func SyscallKeccak256Impl(vm sbpf.VM, valsAddr, valsLen, resultsAddr uint64) (ui
 				return syscallErr(err)
 			}
 
-			cost := max(CUMemOpBaseCost, vec.Len)
+			cost := max(CUMemOpBaseCost, vec.Len/2)
 			err = execCtx.ComputeMeter.Consume(cost)
 			if err != nil {
 				return syscallCuErr()

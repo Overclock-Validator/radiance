@@ -43,7 +43,7 @@ func calculateStakeWeightedTimestamp(clock *sealevel.SysvarClock, epochSchedule 
 
 		voteTimestamp := v.Value.LastTimestampTs
 		offset := safemath.SaturatingMulU64(slotDuration, slotDelta)
-		estimate := voteTimestamp + (int64(offset) / nsInSeconds)
+		estimate := voteTimestamp + int64((offset)/nsInSeconds)
 
 		totalStake += v.Stake
 
@@ -121,13 +121,7 @@ func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.Accou
 		panic(fmt.Sprintf("unable to unmarshal epoch schedule sysvar when updating clock sysvar"))
 	}
 
-	ancestorTimestamp := clock.UnixTimestamp
-
-	clock.UnixTimestamp, err = calculateStakeWeightedTimestamp(clock, &epochSchedule, block)
-	if err != nil {
-		return err
-	}
-
+	clock.UnixTimestamp = block.UnixTimestamp
 	clock.Slot = block.Slot
 
 	epochOld := clock.Epoch
@@ -135,12 +129,6 @@ func updateClockSysvar(clock *sealevel.SysvarClock, accountsDb *accountsdb.Accou
 	clock.Epoch = epochNew
 
 	if epochOld != epochNew {
-		timestampEstimate, err := calculateStakeWeightedTimestamp(clock, &epochSchedule, block)
-		if err != nil {
-			return err
-		}
-
-		clock.UnixTimestamp = max(timestampEstimate, ancestorTimestamp)
 		clock.EpochStartTimestamp = clock.UnixTimestamp
 		clock.LeaderScheduleEpoch = epochSchedule.LeaderScheduleEpoch(clock.Slot)
 	}

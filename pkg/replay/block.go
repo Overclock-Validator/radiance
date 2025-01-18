@@ -39,6 +39,7 @@ type Block struct {
 	Leader           solana.PublicKey
 	Reward           BlockRewardsInfo
 	RecentBlockhash  [32]byte
+	UnixTimestamp    int64
 }
 
 func numBlockAccts(block *Block) uint64 {
@@ -257,6 +258,7 @@ func newBlockFromBlockResult(blockResult *rpc.GetBlockResult) (*Block, error) {
 
 	block.Blockhash = blockResult.Blockhash
 	block.RecentBlockhash = blockResult.PreviousBlockhash
+	block.UnixTimestamp = int64(*blockResult.BlockTime)
 
 	for _, tx := range block.Transactions {
 		block.NumSignatures += uint64(tx.Message.Header.NumRequiredSignatures)

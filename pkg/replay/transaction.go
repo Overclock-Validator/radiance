@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/Overclock-Validator/mithril/pkg/accounts"
@@ -62,11 +63,7 @@ func transactionAcctsFromTx(slotCtx *sealevel.SlotCtx, tx *solana.Transaction) (
 	for idx, acctMeta := range txAcctMetas {
 		var acct *accounts.Account
 
-		// in Agave client, if the account is designated as a program in the tx, then all the other fields
-		// are their nil values instead of the actual values for the account
-		if slices.Contains(programIdIdxs, uint64(idx)) && isNativeProgram(acctMeta.PublicKey) {
-			acct = &accounts.Account{Key: acctMeta.PublicKey, Owner: sealevel.NativeLoaderAddr, Executable: true}
-		} else if slices.Contains(programIdIdxs, uint64(idx)) && !acctMeta.IsWritable && !slices.Contains(instructionAccts, acctMeta.PublicKey) {
+		if slices.Contains(programIdIdxs, uint64(idx)) && !acctMeta.IsWritable && !slices.Contains(instructionAccts, acctMeta.PublicKey) {
 			tmp, err := slotCtx.GetAccount(acctMeta.PublicKey)
 			if err != nil {
 				return nil, err
@@ -272,6 +269,12 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 	execCtx.TransactionContext.AllInstructions = instrs
 	execCtx.TransactionContext.Signature = tx.Signatures[0]
 
+	defer func() {
+		for _, l := range log.Logs {
+			klog.Infof("%s", l)
+		}
+	}()
+
 	// check for pre-balance divergences
 	for count := uint64(0); count < uint64(len(tx.Message.AccountKeys)); count++ {
 		txAcct, err := execCtx.TransactionContext.Accounts.GetAccount(count)
@@ -334,10 +337,6 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 		instructionAccts := sealevel.InstructionAcctsFromAccountMetas(acctMetas, *transactionAccts)
 
 		err = execCtx.ProcessInstruction(instr.Data, instructionAccts, programIndices(tx, instrIdx))
-		for _, l := range log.Logs {
-			klog.Infof("%s", l)
-		}
-
 		if err == nil {
 			for _, am := range acctMetas {
 				if am.IsWritable {
@@ -355,7 +354,7 @@ func ProcessTransaction(slotCtx *sealevel.SlotCtx, tx *solana.Transaction, txMet
 
 	// check for CU consumed divergences
 	if instrErr == nil && *txMeta.ComputeUnitsConsumed != execCtx.ComputeMeter.Used() {
-		klog.Infof("tx %s CU divergence: used was %d but onchain CU consumed was %d", tx.Signatures[0], execCtx.ComputeMeter.Used(), *txMeta.ComputeUnitsConsumed)
+		klog.Infof("tx %s CU divergence: used was %d but onchain CU consumed was %d (%d discrepancy)", tx.Signatures[0], execCtx.ComputeMeter.Used(), *txMeta.ComputeUnitsConsumed, uint64(math.Abs(float64(execCtx.ComputeMeter.Used()-*txMeta.ComputeUnitsConsumed))))
 	}
 
 	postTxRentStates := rent.NewRentStateInfo(&rentSysvar, execCtx.TransactionContext, tx)

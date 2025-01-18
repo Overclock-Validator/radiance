@@ -599,7 +599,6 @@ func (ip *Interpreter) translateInternal(addr uint64, size uint64, write bool) (
 	case VaddrStack >> 32:
 		mem := ip.stack.GetFrame(uint32(addr))
 		if size > uint64(len(mem)) {
-			fmt.Printf("******** size (%d) > len(mem) (%d)\n", size, len(mem))
 			return nil, NewExcBadAccess(addr, size, write, "out-of-bounds stack access")
 		}
 		return unsafe.Pointer(&mem[0]), nil

@@ -32,8 +32,6 @@ func SyscallGetClockSysvarImpl(vm sbpf.VM, addr uint64) (uint64, error) {
 		return syscallErr(err)
 	}
 
-	klog.Infof("******** SyscallGetClock returning: %+v", clock)
-
 	binary.LittleEndian.PutUint64(clockDst[:8], clock.Slot)
 	binary.LittleEndian.PutUint64(clockDst[8:16], uint64(clock.EpochStartTimestamp))
 	binary.LittleEndian.PutUint64(clockDst[16:24], clock.Epoch)
